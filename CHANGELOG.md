@@ -16,6 +16,15 @@ documented here, grouped by the implementation milestones in
   so `--dart-define=USE_RUST_ENGINE=true` builds resolve the bare library name
   `libgps_engine.so` through the platform loader. Previously the Android +
   native-engine build had no documented or automated path.
+- Fixed `app/tool/android_integration_test.sh` consuming its first argument as
+  the AVD name unconditionally, which made it impossible to pass any flag
+  through to `flutter test` (for example `--dart-define=USE_RUST_ENGINE=true`).
+  A leading non-flag argument still names the AVD; `ANDROID_AVD` and
+  `ANDROID_SERIAL` now override the AVD and serial.
+- CI: a new `android-engine-lib` matrix job cross-compiles the `cdylib` per
+  Android ABI and fails if any of the eight Dart FFI symbols is missing, and the
+  on-device E2E job now runs against the real Rust engine instead of the fake
+  one.
 
 ### Licensing
 

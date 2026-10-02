@@ -58,8 +58,9 @@ cargo run --example analyze
 
 CI (`/.github/workflows/ci.yml`) runs `cargo fmt --check`, `cargo clippy -D
 warnings`, `cargo test --all-features`, `cargo doc --no-deps`, Flutter's
-`flutter analyze` + `flutter test`, and the on-device E2E suite on a headless
-Android emulator (`flutter test integration_test`).
+`flutter analyze` + `flutter test`, a cross-compile of the engine `cdylib` for
+each Android ABI (asserting the FFI symbols are exported), and the on-device E2E
+suite on a headless Android emulator (`flutter test integration_test`).
 
 ## Using the real Rust engine
 

@@ -12,7 +12,14 @@
 #   avdmanager create avd -n test_phone -k "system-images;android-34;google_apis;x86_64"
 set -euo pipefail
 
-AVD="${1:-test_phone}"
+# A leading non-flag argument names the AVD; anything else is forwarded to
+# `flutter test` (e.g. --dart-define=USE_RUST_ENGINE=true).
+if [ "$#" -gt 0 ] && [ "${1#-}" = "$1" ]; then
+  AVD="$1"
+  shift
+else
+  AVD="${ANDROID_AVD:-test_phone}"
+fi
 SERIAL="${ANDROID_SERIAL:-emulator-5554}"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 

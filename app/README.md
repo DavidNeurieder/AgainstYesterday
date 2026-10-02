@@ -49,6 +49,15 @@ runs the suite against it:
 ./tool/android_integration_test.sh pixel_6  # specific AVD
 ```
 
+A leading non-flag argument names the AVD; anything else is forwarded to
+`flutter test`, so the suite can be run against the real engine:
+
+```bash
+./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true
+```
+
+`ANDROID_AVD` and `ANDROID_SERIAL` override the AVD name and device serial.
+
 ## Real engine
 
 By default the app uses the deterministic `FakeEngineService`. To talk to the
