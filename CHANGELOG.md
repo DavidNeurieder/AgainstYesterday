@@ -8,6 +8,13 @@ documented here, grouped by the implementation milestones in
 
 ## [Unreleased]
 
+### Licensing
+
+- The whole repository (`gps-engine` crate and Flutter app) is relicensed from
+  `MIT OR Apache-2.0` to **`AGPL-3.0-or-later`**: SPDX id in the workspace
+  `Cargo.toml` (inherited by the crate) and in `app/pubspec.yaml`, with the
+  full text added as `LICENSE` at the repository root.
+
 ### M15 — Real-world reliability
 
 **Rust engine (`gps-engine`)** — the raw-GPS quality pipeline and its replay

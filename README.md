@@ -145,5 +145,11 @@ diagnostics route, not just its entry button.
 
 ## License
 
-`MIT OR Apache-2.0` (engine workspace); the Flutter app is private to this
-repository (`publish_to: none`).
+`AGPL-3.0-or-later` for the whole repository — the `gps-engine` crate and the
+Flutter app alike. The full text is in [LICENSE](LICENSE); the Rust workspace
+declares the SPDX id in `Cargo.toml` and the app in `pubspec.yaml`.
+
+Note that AGPL differs from MIT/Apache mainly in section 13: users who interact
+with the software over a network must be offered the corresponding source. The
+app is not published to pub.dev (`publish_to: none`), but the same terms apply
+to it and to any build you distribute.
