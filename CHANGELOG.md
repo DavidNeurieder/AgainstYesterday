@@ -8,6 +8,15 @@ documented here, grouped by the implementation milestones in
 
 ## [Unreleased]
 
+### Tooling
+
+- `app/tool/build_rust_engine_android.sh` cross-compiles the `gps-engine`
+  `cdylib` for Android (arm64-v8a and x86_64 by default, API 24) using the NDK
+  clang linker and installs it into `app/android/app/src/main/jniLibs/<abi>/`,
+  so `--dart-define=USE_RUST_ENGINE=true` builds resolve the bare library name
+  `libgps_engine.so` through the platform loader. Previously the Android +
+  native-engine build had no documented or automated path.
+
 ### Licensing
 
 - The whole repository (`gps-engine` crate and Flutter app) is relicensed from

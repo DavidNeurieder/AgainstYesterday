@@ -9,4 +9,8 @@ Cargo.lock.orig
 /opencode.txt
 testdata/real/*.gpx
 
+# Native engine binaries for Android are build artifacts; app/tool/
+# build_rust_engine_android.sh regenerates them into the jniLibs tree.
+app/android/app/src/main/jniLibs/
+
 ideas/

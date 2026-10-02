@@ -73,6 +73,23 @@ flutter run --dart-define=USE_RUST_ENGINE=true \
 ```
 
 The library is built as a `cdylib` by the `gps-engine` crate for this purpose.
+`GPS_ENGINE_LIB` is optional — when empty the app opens the bare name
+`libgps_engine.so`, so a library bundled inside the app is found by the
+platform loader.
+
+On Android the `cdylib` has to be cross-compiled per ABI and packaged as a
+native library. `app/tool/build_rust_engine_android.sh` builds it with the NDK
+clang linker (API 24) and installs it into
+`app/android/app/src/main/jniLibs/<abi>/`, which is where Gradle picks it up:
+
+```bash
+./app/tool/build_rust_engine_android.sh            # arm64-v8a + x86_64
+cd app && flutter build apk --release --dart-define=USE_RUST_ENGINE=true
+```
+
+Those binaries are gitignored build artifacts; rerun the script after a fresh
+checkout. Add `--dart-define=DEV_TOOLS=true` to any of these builds to expose
+the M15 diagnostics entry point.
 
 ## Developer diagnostics
 
