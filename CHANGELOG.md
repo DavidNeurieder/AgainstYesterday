@@ -82,7 +82,9 @@ safety net:
 - Tests: `test/fixture_export_test.dart` (schema, empty/single/multiple/
   out-of-order traces, absent fields, poor accuracy, large trace) and expanded
   `test/diagnostics_test.dart` (route gate, privacy cancel/confirm, route-less
-  refusal). Flutter suite now 169 tests.
+  refusal). Flutter suite now 169 tests, and it is engine-agnostic: the same
+  169 pass against the real Rust engine
+  (`--dart-define=USE_RUST_ENGINE=true --dart-define=GPS_ENGINE_LIB=…`).
 
 ---
 

@@ -99,7 +99,15 @@ void main() {
 
     expect(find.text('Diagnostics'), findsOneWidget);
     expect(find.text('ENGINE'), findsOneWidget);
-    expect(find.text('fake (deterministic demo)'), findsOneWidget);
+    // The readout must name the engine actually wired in, whichever it is.
+    final engine = ProviderScope.containerOf(
+      tester.element(find.byType(DiagnosticsScreen)),
+    ).read(engineServiceProvider);
+    expect(
+      engine.engineDescription,
+      useRustEngine ? startsWith('rust v') : 'fake (deterministic demo)',
+    );
+    expect(find.text(engine.engineDescription), findsOneWidget);
   });
 
   testWidgets('a live run populates the GPS / TRACK / GHOST readouts', (

@@ -113,6 +113,11 @@ without guessing.
 ```bash
 cd app && flutter analyze && flutter test   # Flutter: 169 tests
 cargo test                                   # Rust: 204 tests + property cases
+
+# the same Flutter suite against the real Rust engine over FFI
+cargo build --release                        # produces target/release/libgps_engine.so
+cd app && flutter test --dart-define=USE_RUST_ENGINE=true \
+  --dart-define=GPS_ENGINE_LIB=../target/release/libgps_engine.so
 ```
 
 The Flutter tests run headlessly with `fake_async`, an in-memory store, and
