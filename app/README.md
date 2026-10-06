@@ -1,6 +1,6 @@
 # app — Flutter client
 
-The Flutter client for `gps_app`. See the repository root
+The Flutter client of Against Yesterday. See the repository root
 [`README.md`](../README.md) for the full picture.
 
 ## Run

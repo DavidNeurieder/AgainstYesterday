@@ -54,7 +54,7 @@ class _GpsAppState extends ConsumerState<GpsApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return ProviderScope(
       child: MaterialApp.router(
-        title: 'GpsApp',
+        title: 'Against Yesterday',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
         routerConfig: buildRouter(),

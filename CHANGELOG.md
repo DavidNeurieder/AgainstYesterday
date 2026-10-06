@@ -1,6 +1,7 @@
 # Changelog
 
-All notable changes to `gps_app` (Flutter client + `gps-engine` Rust crate) are
+All notable changes to the Against Yesterday project (Flutter client +
+`gps-engine` Rust crate) are
 documented here, grouped by the implementation milestones in
 `specification/app_implementation_plan.txt`.
 

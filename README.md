@@ -1,4 +1,4 @@
-# gps_app
+# Against Yesterday
 
 A GPS run/cycling app built around one idea: **every route is a race with your
 own personal best.** You run against a "ghost" of your PB, and the live gap —
