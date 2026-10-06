@@ -9,6 +9,15 @@ documented here, grouped by the implementation milestones in
 
 ## [Unreleased]
 
+### Changed
+
+- The project is now called **Against Yesterday** (previously `gps_app`). This
+  is a rename of the repository and of the user-facing display name seen in the
+  Android launcher, the Flutter window title and the Linux GTK header/text —
+  identifiers (`pubspec name`, `applicationId`, the `GpsApp` widget class, the
+  Linux `BINARY_NAME`/`APPLICATION_ID`) are unchanged, so builds, deep links
+  and the installed app are untouched.
+
 ### Fixes
 
 - Attempt dates were labelled from *elapsed* time rather than calendar days, so
@@ -36,6 +45,13 @@ documented here, grouped by the implementation milestones in
   ("Wrong version in preinstalled sdkmanager"); it relies on the image's
   preinstalled SDK/NDK and logs what it found. The on-device job downloads the
   verified x86_64 `cdylib` from that matrix job instead of rebuilding it.
+- Finishing a run (FINISH, or DONE on the summary) used to complete on the
+  *next* 500 ms timer tick; dismissing in the finishing→complete gap cancelled
+  the timer and re-armed a fresh session, so the finished run was dropped
+  without saving — a race the KVM/software-GPU CI emulator hit reliably
+  ("the finished run never appears as a third Home tile"). `finishRun()`
+  completes synchronously now, so the background save starts the instant the
+  user finishes and no longer depends on a tick surviving until dismissal.
 
 ### Tooling
 
