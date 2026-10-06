@@ -16,7 +16,10 @@ void main() {
   const envPath = String.fromEnvironment('GPS_ENGINE_LIB');
 
   group('RustEngineService (FFI)', () {
-    late RustEngineService? engine;
+    // Deliberately not `late`: reading an unassigned `late` local throws
+    // LateInitializationError, which would turn "library absent" into a
+    // failure instead of the skip below.
+    RustEngineService? engine;
 
     setUpAll(() {
       final candidates = envPath.isNotEmpty

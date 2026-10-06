@@ -277,7 +277,7 @@ class _AttemptRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            _dateLabel(attempt.startedAt.toLocal()),
+            dateLabelFor(attempt.startedAt.toLocal()),
             style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
           ),
           Text(
@@ -292,9 +292,15 @@ class _AttemptRow extends StatelessWidget {
   }
 }
 
-String _dateLabel(DateTime d) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
+/// Renders an attempt timestamp as a relative-or-absolute label.
+///
+/// [now] is injectable so the behaviour can be unit-tested instead of being
+/// pinned to the wall clock — the seeded history sits a fixed 26 hours in the
+/// past, so its label legitimately flips between "Yesterday" and an absolute
+/// date depending on the time of day.
+String dateLabelFor(DateTime d, {DateTime? now}) {
+  final clock = now ?? DateTime.now();
+  final today = DateTime(clock.year, clock.month, clock.day);
   final day = DateTime(d.year, d.month, d.day);
   final diff = today.difference(day).inDays;
   if (diff == 0) {

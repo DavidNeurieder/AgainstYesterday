@@ -8,6 +8,27 @@ documented here, grouped by the implementation milestones in
 
 ## [Unreleased]
 
+### Fixes
+
+- `route_library_test.dart` pinned the attempt list to the label `Yesterday`,
+  but the seeded activity is a fixed 26 hours old, so between 00:00 and 02:00
+  the app correctly renders an absolute date and the test failed — a nightly CI
+  flake. The label formatting is now `dateLabelFor(d, {now})` with an
+  injectable clock, the widget test asserts a valid label shape, and four unit
+  tests cover the relative/absolute branches directly.
+- `rust_engine_test.dart` declared `late RustEngineService? engine`, so when the
+  `cdylib` was absent the intended `markTestSkipped` path instead threw
+  `LateInitializationError` — six hard failures on any machine without a Rust
+  build. The tests now skip cleanly (and CI builds the `cdylib` so they run for
+  real).
+- CI: the `flutter` job now runs `cargo build --release -p gps-engine` before
+  `flutter test`, so the FFI suites execute against the real engine rather than
+  skipping. The `android-engine-lib` job no longer uses
+  `android-actions/setup-android@v3`, which fails on the current runner image
+  ("Wrong version in preinstalled sdkmanager"); it relies on the image's
+  preinstalled SDK/NDK and logs what it found. The on-device job downloads the
+  verified x86_64 `cdylib` from that matrix job instead of rebuilding it.
+
 ### Tooling
 
 - `app/tool/build_rust_engine_android.sh` cross-compiles the `gps-engine`

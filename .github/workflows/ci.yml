@@ -25,6 +25,10 @@ jobs:
         with:
           channel: stable
           cache: true
+      - uses: dtolnay/rust-toolchain@stable
+      # Build the cdylib so rust_engine_test.dart and rust_engine_widget_test.dart
+      # exercise the real engine instead of skipping.
+      - run: cargo build --release -p gps-engine
       - run: flutter pub get
         working-directory: app
       - run: flutter analyze
@@ -34,11 +38,12 @@ jobs:
 
   # Keeps the Android + native-engine build path honest without booting an
   # emulator: cross-compiles the cdylib per ABI and checks the FFI surface.
+  # The runner image already ships the Android SDK and an NDK, and
+  # setup-android@v3 currently fails on it ("Wrong version in preinstalled
+  # sdkmanager"), so the script's own NDK discovery is used instead.
   android-engine-lib:
     name: engine cdylib (${{ matrix.abi }})
     runs-on: ubuntu-latest
-    env:
-      ANDROID_NDK_VERSION: '28.2.13676358'
     strategy:
       fail-fast: false
       matrix:
@@ -49,8 +54,11 @@ jobs:
             rust-target: x86_64-linux-android
     steps:
       - uses: actions/checkout@v4
-      - uses: android-actions/setup-android@v3
-      - run: sdkmanager "ndk;$ANDROID_NDK_VERSION"
+      - name: Show the Android SDK/NDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-<unset>}"
+          ls -d "$ANDROID_HOME"/ndk/*/ 2>/dev/null || ls -d "${ANDROID_NDK_HOME:-/nonexistent}"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust-target }}
@@ -88,17 +96,16 @@ jobs:
         with:
           channel: stable
           cache: true
-      - uses: dtolnay/rust-toolchain@stable
+      # The emulator is x86_64, so reuse the cdylib the matrix job already built
+      # and verified instead of cross-compiling it again here.
+      - uses: actions/download-artifact@v4
         with:
-          targets: x86_64-linux-android
+          name: libgps_engine-x86_64
+          path: app/android/app/src/main/jniLibs/x86_64
+      - name: Verify the native engine was unpacked
+        run: ls -l app/android/app/src/main/jniLibs/x86_64/libgps_engine.so
       - run: flutter pub get
         working-directory: app
-      # The emulator is x86_64, so build that ABI's engine and run the whole
-      # on-device suite against the real Rust engine instead of the fake one.
-      - name: Build the native engine for the emulator ABI
-        env:
-          ABIS: x86_64
-        run: ./app/tool/build_rust_engine_android.sh
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
