@@ -17,6 +17,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:clock/clock.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/dependencies.dart';
@@ -439,9 +440,10 @@ class RecordingController extends Notifier<LiveRunState?> {
           .saveActivity(activity);
       // M13 §28: the run is safely stored — clear the interrupted-run snapshot.
       await ref.read(runSnapshotProvider.notifier).save(null);
-    } catch (_) {
+    } catch (e, st) {
       // Best-effort persistence: degraded storage or a failed route match must
       // keep the completed summary visible, not crash the app (Phase 13).
+      debugPrint('Failed to persist completed run: $e\n$st');
       saved = false;
     }
     if (_session == session) {

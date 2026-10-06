@@ -68,12 +68,14 @@ void main() {
   /// Polls until [probe] holds. Ticks and GPS fixes arrive on the wall clock,
   /// and the CI emulator runs without hardware acceleration, so a fixed sleep
   /// can end before the first fix does — every "must advance" assertion polls
-  /// instead of sleeping.
+  /// instead of sleeping. [diagnostics] (when given) is appended to the
+  /// timeout failure so a red CI run shows the state that never arrived.
   Future<void> waitForCondition(
     WidgetTester tester,
     bool Function() probe,
     String description, {
     Duration timeout = const Duration(seconds: 30),
+    String Function()? diagnostics,
   }) async {
     final end = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(end)) {
@@ -83,7 +85,8 @@ void main() {
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
-    fail('Timed out waiting for $description');
+    fail('Timed out waiting for $description'
+        '${diagnostics == null ? '' : '\n${diagnostics()}'}');
   }
 
   testWidgets('records a run end to end', (tester) async {
@@ -146,10 +149,24 @@ void main() {
     // The save runs in the background on purpose, so poll for the tile rather
     // than assuming it landed while the screens changed underneath.
     await tester.tap(find.text('DONE'));
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp)),
+    );
     await waitForCondition(
       tester,
       () => tester.widgetList(find.byIcon(Icons.directions_run)).length >= 3,
       'the finished run to appear on Home as a third tile',
+      // On timeout, separate "the save never ran" (activities still 2) from
+      // "the save ran but Home never rebuilt" (activities 3, tiles 2), and say
+      // whether the background save reached its final snapshot clear.
+      diagnostics: () {
+        final activities = container.read(activityRepositoryProvider).length;
+        final snapshot = container.read(runSnapshotProvider);
+        return 'tiles='
+            '${tester.widgetList(find.byIcon(Icons.directions_run)).length}, '
+            'activities=$activities, '
+            'run_snapshot=${snapshot == null ? 'null' : 'present'}';
+      },
     );
     expect(find.byIcon(Icons.directions_run), findsNWidgets(3));
     expect(find.text('Run against yesterday'), findsOneWidget);
