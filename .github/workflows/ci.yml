@@ -33,7 +33,9 @@ jobs:
         working-directory: app
       - run: flutter analyze
         working-directory: app
-      - run: flutter test
+      # The job builds the cdylib above, so a missing one is a job failure
+      # rather than something the FFI suites should quietly skip over.
+      - run: flutter test --dart-define=REQUIRE_RUST_ENGINE=true
         working-directory: app
       # The date-label assertions are timezone-independent, so running them in
       # the runner's default UTC would never reproduce a DST transition. This

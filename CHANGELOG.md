@@ -61,6 +61,11 @@ documented here, grouped by the implementation milestones in
   Android ABI and fails if any of the eight Dart FFI symbols is missing, and the
   on-device E2E job now runs against the real Rust engine instead of the fake
   one.
+- **Skips are not a silent fallback in CI.** The Rust FFI suites skip
+  themselves when the `cdylib` is unbuilt, which is right locally but would let
+  a misconfigured CI job go green with less coverage than it advertises. They
+  now take `--dart-define=REQUIRE_RUST_ENGINE=true` (set by the `flutter` job)
+  and fail instead, naming the exact build command to run.
 
 ### Licensing
 

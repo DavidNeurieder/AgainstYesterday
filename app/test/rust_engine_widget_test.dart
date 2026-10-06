@@ -13,6 +13,9 @@ import 'package:gps_app/widgets/route_map.dart';
 /// over FFI — the "swap the implementation, keep the UI unchanged" promise.
 void main() {
   const envPath = String.fromEnvironment('GPS_ENGINE_LIB');
+  // See rust_engine_test.dart: skip locally when the cdylib is unbuilt, but
+  // fail in CI, where building it first is part of the job's own contract.
+  const requireEngine = bool.fromEnvironment('REQUIRE_RUST_ENGINE');
   final candidates = envPath.isNotEmpty
       ? [envPath]
       : [
@@ -24,6 +27,12 @@ void main() {
   testWidgets('record flow runs on the Rust engine', (tester) async {
     final path = candidates.where(FileSystemEntity.isFileSync).firstOrNull;
     if (path == null) {
+      if (requireEngine) {
+        fail(
+            'REQUIRE_RUST_ENGINE is set but no cdylib was found (searched: '
+            '${candidates.join(', ')}). Build it first: '
+            'cargo build --release -p gps-engine');
+      }
       markTestSkipped(
         'libgps_engine.so not found (searched: ${candidates.join(', ')}). '
         'Run `cargo build --release` in the workspace root.',

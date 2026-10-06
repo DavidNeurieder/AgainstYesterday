@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-169 headless tests run with `fake_async`, an in-memory store, and the
+183 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -25,10 +25,21 @@ state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/geometry_invariants_test.dart`), PB/split boundaries
 (`test/splits_boundary_test.dart`), per-phase record UI (`test/ui_state_test.dart`),
 failure injection (`test/failure_injection_test.dart`), lifecycle snapshots
-(`test/lifecycle_test.dart`), the Rust FFI surface
+(`test/lifecycle_test.dart`), calendar-day date labels including DST
+boundaries (`test/route_library_test.dart`), the Rust FFI surface
 (`test/rust_engine_test.dart`, `test/rust_engine_widget_test.dart`) and the
 M15 diagnostics plus fixture export (`test/diagnostics_test.dart`,
 `test/fixture_export_test.dart`).
+
+The two Rust FFI suites skip themselves, with an explanation, when the cdylib
+has not been built — normal on a fresh checkout. CI passes
+`--dart-define=REQUIRE_RUST_ENGINE=true`, which turns that skip into a failure
+so a green job always actually ran them:
+
+```bash
+cargo build --release -p gps-engine          # target/release/libgps_engine.so
+flutter test --dart-define=REQUIRE_RUST_ENGINE=true
+```
 
 ## On-device integration tests
 

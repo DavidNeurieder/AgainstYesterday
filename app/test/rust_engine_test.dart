@@ -8,12 +8,19 @@ import 'package:gps_app/engine/rust_engine_service.dart';
 
 /// M9 host-side integration test: drives the real Rust engine over FFI.
 ///
-/// Skipped when the CDylib isn't available — build it with
-/// `cargo build --release` at the workspace root (produces
+/// Skipped when the cdylib isn't available — build it with
+/// `cargo build --release -p gps-engine` at the workspace root (produces
 /// `target/release/libgps_engine.so`), or point at a build via
-/// `GPS_ENGINE_LIB`.
+/// `GPS_ENGINE_LIB`. CI additionally passes
+/// `--dart-define=REQUIRE_RUST_ENGINE=true` so that a missing cdylib fails
+/// the job rather than quietly skipping.
 void main() {
   const envPath = String.fromEnvironment('GPS_ENGINE_LIB');
+  // Locally, an unbuilt cdylib is normal — the tests skip with an explanation.
+  // In CI the library is built first, so a missing one means the build
+  // misconfigured itself; skipping would turn that into a green job with less
+  // coverage than advertised. CI passes --dart-define=REQUIRE_RUST_ENGINE=true.
+  const requireEngine = bool.fromEnvironment('REQUIRE_RUST_ENGINE');
 
   group('RustEngineService (FFI)', () {
     // Deliberately not `late`: reading an unassigned `late` local throws
@@ -31,6 +38,12 @@ void main() {
             ];
       final path = candidates.where(FileSystemEntity.isFileSync).firstOrNull;
       if (path == null) {
+        if (requireEngine) {
+          fail(
+              'REQUIRE_RUST_ENGINE is set but no cdylib was found (searched: '
+              '${candidates.join(', ')}). Build it first: '
+              'cargo build --release -p gps-engine');
+        }
         markTestSkipped(
           'libgps_engine.so not found (searched: ${candidates.join(', ')}). '
           'Run `cargo build --release` in the workspace root.',
