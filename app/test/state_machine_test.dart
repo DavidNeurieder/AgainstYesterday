@@ -134,7 +134,7 @@ void main() {
         async.elapse(const Duration(seconds: 5));
 
         ctrl.finishRun();
-        expect(state(c)!.status, RunStatus.finishing);
+        expect(state(c)!.status, RunStatus.completed);
         async.elapse(const Duration(milliseconds: 500));
         expect(state(c)!.status, RunStatus.completed);
 
@@ -195,7 +195,7 @@ void main() {
         expect(state(c)!.status, RunStatus.paused);
 
         ctrl.finishRun();
-        expect(state(c)!.status, RunStatus.finishing);
+        expect(state(c)!.status, RunStatus.completed);
         async.elapse(const Duration(milliseconds: 500));
         expect(state(c)!.status, RunStatus.completed);
         expect(state(c)!.ghostGap, isNotNull);

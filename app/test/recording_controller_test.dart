@@ -112,7 +112,7 @@ void main() {
       async.elapse(const Duration(seconds: 30));
 
       notifier.finishRun();
-      expect(state(c)!.status, RunStatus.finishing);
+      expect(state(c)!.status, RunStatus.completed);
       async.elapse(const Duration(milliseconds: 500));
 
       final done = state(c)!;

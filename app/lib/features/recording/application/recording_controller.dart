@@ -156,6 +156,10 @@ class RecordingController extends Notifier<LiveRunState?> {
       return;
     }
     _emit(status: RunStatus.finishing);
+    // Seal the run now, not on the next 500 ms tick: pressing FINISH is a
+    // commitment, and a dismissal in the finishing→complete gap used to cancel
+    // the timer before _complete() ran — silently dropping the save.
+    _complete();
   }
 
   /// Dismiss the completed run and reset the session.
