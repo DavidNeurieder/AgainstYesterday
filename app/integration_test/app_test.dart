@@ -143,10 +143,16 @@ void main() {
     expect(find.textContaining('fastest run'), findsOneWidget);
 
     // DONE → Home now shows the finished run (2 seeds + 1 new = 3 tiles).
+    // The save runs in the background on purpose, so poll for the tile rather
+    // than assuming it landed while the screens changed underneath.
     await tester.tap(find.text('DONE'));
-    await tester.pumpAndSettle();
-    expect(find.text('Run against yesterday'), findsOneWidget);
+    await waitForCondition(
+      tester,
+      () => tester.widgetList(find.byIcon(Icons.directions_run)).length >= 3,
+      'the finished run to appear on Home as a third tile',
+    );
     expect(find.byIcon(Icons.directions_run), findsNWidgets(3));
+    expect(find.text('Run against yesterday'), findsOneWidget);
   });
 
   testWidgets('browses the route library', (tester) async {
@@ -246,11 +252,16 @@ void main() {
       'the restored distance to advance past $restored m',
     );
 
-    // Finishing the restored run clears the interrupted-run snapshot.
+    // Finishing the restored run clears the interrupted-run snapshot — but
+    // only after the background save chain lands, so poll instead of guessing
+    // how long that takes.
     await tester.tap(find.text('FINISH'));
     await waitForText(tester, 'VIEW RESULT');
-    await pumpFor(tester, const Duration(milliseconds: 500));
-    expect(store.read('run_snapshot'), 'null');
+    await waitForCondition(
+      tester,
+      () => store.read('run_snapshot') == 'null',
+      'the interrupted-run snapshot to be cleared',
+    );
 
     // Clean the tree so the binding is left in a good state for any later
     // test in this file/process.
