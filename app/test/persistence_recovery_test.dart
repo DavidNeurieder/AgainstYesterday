@@ -13,12 +13,12 @@ import 'dart:io';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/fake_engine.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/features/recording/application/recording_controller.dart';
-import 'package:gps_app/persistence/persistence.dart';
-import 'package:gps_app/persistence/serialization.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
+import 'package:against_yesterday/persistence/serialization.dart';
 
 const _route = Route(
   id: FakeEngineService.riverLoopId,
@@ -202,7 +202,7 @@ void main() {
     });
 
     test('the repository yields null for corrupt, missing, or null docs', () async {
-      final dir = await Directory.systemTemp.createTemp('gps_app_test');
+      final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
       addTearDown(() => dir.delete(recursive: true));
 
       RunSnapshot? buildWith(String? content) {
@@ -237,7 +237,7 @@ void main() {
 
   group('corrupt history falls back to seeds', () {
     test('a corrupt activities document recovers to the seeded history', () async {
-      final dir = await Directory.systemTemp.createTemp('gps_app_test');
+      final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
       addTearDown(() => dir.delete(recursive: true));
       final store = JsonFileStore(dir);
       File('${dir.path}/activities.json').writeAsStringSync('{oops');

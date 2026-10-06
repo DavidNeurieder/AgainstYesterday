@@ -9,7 +9,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/engine/models.dart';
+import 'package:against_yesterday/engine/models.dart';
 
 void main() {
   const a = GeoPoint(latitude: 52.52, longitude: 13.405);

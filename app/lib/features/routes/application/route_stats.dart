@@ -9,8 +9,8 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/models.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/models.dart';
 
 class RouteStats {
   const RouteStats({

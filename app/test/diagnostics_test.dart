@@ -8,13 +8,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:gps_app/app/dependencies.dart';
-import 'package:gps_app/app/router.dart';
-import 'package:gps_app/core/theme/app_theme.dart';
-import 'package:gps_app/features/dev/application/fixture_export.dart';
-import 'package:gps_app/features/dev/presentation/diagnostics_screen.dart';
-import 'package:gps_app/features/home/presentation/home_screen.dart';
-import 'package:gps_app/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/app/dependencies.dart';
+import 'package:against_yesterday/app/router.dart';
+import 'package:against_yesterday/core/theme/app_theme.dart';
+import 'package:against_yesterday/features/dev/application/fixture_export.dart';
+import 'package:against_yesterday/features/dev/presentation/diagnostics_screen.dart';
+import 'package:against_yesterday/features/home/presentation/home_screen.dart';
+import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 
 /// M15 Phase 10: the developer diagnostics entry point and screen.
 void main() {

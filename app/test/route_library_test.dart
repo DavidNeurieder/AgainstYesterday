@@ -3,15 +3,15 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/app.dart';
-import 'package:gps_app/features/routes/presentation/route_detail_screen.dart';
+import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/features/routes/presentation/route_detail_screen.dart';
 
 void main() {
   Finder tab(String label) =>
       find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
 
   testWidgets('Routes tab lists the route library with stats', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     await tester.tap(tab('Routes'));
@@ -25,7 +25,7 @@ void main() {
   });
 
   testWidgets('tapping a route card opens its detail', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     await tester.tap(tab('Routes'));

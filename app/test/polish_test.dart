@@ -5,16 +5,16 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/app.dart';
-import 'package:gps_app/app/dependencies.dart';
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/fake_engine.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/features/home/presentation/home_screen.dart';
-import 'package:gps_app/features/recording/application/recording_controller.dart';
-import 'package:gps_app/persistence/persistence.dart';
-import 'package:gps_app/widgets/performance_gap.dart';
-import 'package:gps_app/widgets/route_map.dart';
+import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/app/dependencies.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/home/presentation/home_screen.dart';
+import 'package:against_yesterday/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
+import 'package:against_yesterday/widgets/performance_gap.dart';
+import 'package:against_yesterday/widgets/route_map.dart';
 
 const _route = Route(
   id: FakeEngineService.riverLoopId,
@@ -116,7 +116,7 @@ void main() {
     final engine = _FlakyEngine(failures: 1);
     await tester.pumpWidget(ProviderScope(
       overrides: [engineServiceProvider.overrideWithValue(engine)],
-      child: const GpsApp(),
+      child: const AgainstYesterdayApp(),
     ));
     await tester.pumpAndSettle();
 

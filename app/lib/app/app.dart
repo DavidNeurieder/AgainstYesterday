@@ -15,14 +15,14 @@ import '../core/theme/app_theme.dart';
 import '../features/recording/application/recording_controller.dart';
 import 'router.dart';
 
-class GpsApp extends ConsumerStatefulWidget {
-  const GpsApp({super.key});
+class AgainstYesterdayApp extends ConsumerStatefulWidget {
+  const AgainstYesterdayApp({super.key});
 
   @override
-  ConsumerState<GpsApp> createState() => _GpsAppState();
+  ConsumerState<AgainstYesterdayApp> createState() => _AgainstYesterdayAppState();
 }
 
-class _GpsAppState extends ConsumerState<GpsApp> with WidgetsBindingObserver {
+class _AgainstYesterdayAppState extends ConsumerState<AgainstYesterdayApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();

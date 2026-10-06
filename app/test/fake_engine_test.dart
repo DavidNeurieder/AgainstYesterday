@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/fake_engine.dart';
-import 'package:gps_app/engine/models.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
+import 'package:against_yesterday/engine/models.dart';
 
 void main() {
   group('FakeEngineService', () {

@@ -3,11 +3,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/app.dart';
+import 'package:against_yesterday/app/app.dart';
 
 void main() {
   testWidgets('home shows the primary start action and catalogs', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     // Primary action per §43.
@@ -21,7 +21,7 @@ void main() {
   });
 
   testWidgets('shell navigates between tabs', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     Finder tab(String label) =>
@@ -43,7 +43,7 @@ void main() {
   });
 
   testWidgets('start a run routes to pre-run screen', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));

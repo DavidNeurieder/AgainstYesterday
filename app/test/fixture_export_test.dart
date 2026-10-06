@@ -4,8 +4,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/features/dev/application/fixture_export.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/dev/application/fixture_export.dart';
 
 /// M15.10: the exporter's schema contract, independent of any widget.
 void main() {

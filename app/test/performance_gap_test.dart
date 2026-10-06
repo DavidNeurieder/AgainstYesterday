@@ -3,9 +3,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/widgets/performance_gap.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/widgets/performance_gap.dart';
 
 void main() {
   Future<void> pumpGap(

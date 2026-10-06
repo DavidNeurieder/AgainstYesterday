@@ -87,7 +87,7 @@ let result = matcher.compare(&processed, &route)?;
  I'd make the repository:
 
 ```
-gps_app/
+against_yesterday/
 │
 ├── specification/
 │

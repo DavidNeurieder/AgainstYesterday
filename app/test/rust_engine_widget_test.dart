@@ -6,11 +6,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/dependencies.dart';
-import 'package:gps_app/core/theme/app_theme.dart';
-import 'package:gps_app/app/router.dart';
-import 'package:gps_app/engine/rust_engine_service.dart';
-import 'package:gps_app/widgets/route_map.dart';
+import 'package:against_yesterday/app/dependencies.dart';
+import 'package:against_yesterday/core/theme/app_theme.dart';
+import 'package:against_yesterday/app/router.dart';
+import 'package:against_yesterday/engine/rust_engine_service.dart';
+import 'package:against_yesterday/widgets/route_map.dart';
 
 /// M9 end-to-end check: the *record flow UI* against the real Rust engine
 /// over FFI — the "swap the implementation, keep the UI unchanged" promise.

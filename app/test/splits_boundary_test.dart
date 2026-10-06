@@ -9,10 +9,10 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/fake_engine.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/features/result/application/splits.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/result/application/splits.dart';
 
 Route _route({double distanceM = 5000, double? pbSeconds = 1500}) => Route(
       id: FakeEngineService.riverLoopId,

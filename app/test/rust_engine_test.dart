@@ -4,10 +4,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/fake_engine.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/engine/rust_engine_service.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/engine/rust_engine_service.dart';
 
 /// M9 host-side integration test: drives the real Rust engine over FFI.
 ///

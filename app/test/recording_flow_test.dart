@@ -3,9 +3,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/app.dart';
+import 'package:against_yesterday/app/app.dart';
 
-import 'package:gps_app/widgets/performance_gap.dart';
+import 'package:against_yesterday/widgets/performance_gap.dart';
 
 void main() {
   Finder tab(String label) =>
@@ -18,7 +18,7 @@ void main() {
   }
 
   testWidgets('pre-run reaches READY TO RUN with GPS', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     await tester.tap(tab('Record'));
@@ -32,7 +32,7 @@ void main() {
   });
 
   testWidgets('start, live gap, pause, resume, finish, done', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     await tester.tap(tab('Record'));

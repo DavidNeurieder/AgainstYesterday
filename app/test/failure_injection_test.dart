@@ -14,12 +14,12 @@ import 'dart:io';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/dependencies.dart';
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/fake_engine.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/features/recording/application/recording_controller.dart';
-import 'package:gps_app/persistence/persistence.dart';
+import 'package:against_yesterday/app/dependencies.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
 
 const _route = Route(
   id: FakeEngineService.riverLoopId,
@@ -237,7 +237,7 @@ void main() {
   // -------------------------------------------------------------------------
   group('valid JSON with the wrong shape', () {
     test('routes document of the wrong shape falls back to seeds', () async {
-      final dir = await Directory.systemTemp.createTemp('gps_app_test');
+      final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
       addTearDown(() => dir.delete(recursive: true));
       final store = JsonFileStore(dir);
       File('${dir.path}/routes.json').writeAsStringSync('{}'); // object, not list
@@ -249,7 +249,7 @@ void main() {
     });
 
     test('activities document of the wrong shape falls back to seeds', () async {
-      final dir = await Directory.systemTemp.createTemp('gps_app_test');
+      final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
       addTearDown(() => dir.delete(recursive: true));
       final store = JsonFileStore(dir);
       File('${dir.path}/activities.json').writeAsStringSync('"just-a-string"');
@@ -262,7 +262,7 @@ void main() {
 
     test('snapshot document of the wrong shape yields no interrupted run',
         () async {
-      final dir = await Directory.systemTemp.createTemp('gps_app_test');
+      final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
       addTearDown(() => dir.delete(recursive: true));
       final store = JsonFileStore(dir);
       File('${dir.path}/run_snapshot.json').writeAsStringSync('[]');

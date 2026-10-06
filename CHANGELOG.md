@@ -11,12 +11,16 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
-- The project is now called **Against Yesterday** (previously `gps_app`). This
-  is a rename of the repository and of the user-facing display name seen in the
-  Android launcher, the Flutter window title and the Linux GTK header/text —
-  identifiers (`pubspec name`, `applicationId`, the `GpsApp` widget class, the
-  Linux `BINARY_NAME`/`APPLICATION_ID`) are unchanged, so builds, deep links
-  and the installed app are untouched.
+- The project is now called **Against Yesterday** (previously `gps_app`). The
+  repository and every user-visible string — Android launcher label, Flutter
+  and Linux GTK window titles, iOS bundle name — carry the new name. The
+  pubspec package became `against_yesterday`, so all imports moved to
+  `package:against_yesterday/…`; the `GpsApp` widget class became
+  `AgainstYesterdayApp`; and the platform identifiers moved out of the
+  `dev.gpsapp.*` namespace into `dev.neurieder.against_yesterday` (Android
+  applicationId/namespace, Linux `APPLICATION_ID`) and
+  `dev.neurieder.againstyesterday` (iOS bundle IDs), which also re-identifies
+  where the app installs.
 
 ### Fixes
 

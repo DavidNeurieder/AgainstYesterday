@@ -15,10 +15,10 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/app.dart';
-import 'package:gps_app/features/recording/application/recording_controller.dart';
-import 'package:gps_app/features/routes/presentation/routes_screen.dart';
-import 'package:gps_app/persistence/persistence.dart';
+import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/features/routes/presentation/routes_screen.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:integration_test/integration_test.dart';
 
 /// The distance value currently shown on the live screen, in meters.
@@ -91,7 +91,7 @@ void main() {
   }
 
   testWidgets('records a run end to end', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     // Home is the default tab.
@@ -179,7 +179,7 @@ void main() {
   });
 
   testWidgets('browses the route library', (tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
     // Routes tab lists the seeded catalog — scope into the NavigationBar to
@@ -220,7 +220,7 @@ void main() {
     final store = MemoryPersistenceStore();
     Widget app() => ProviderScope(
           overrides: [persistenceStoreProvider.overrideWithValue(store)],
-          child: const GpsApp(),
+          child: const AgainstYesterdayApp(),
         );
 
     // First "process": get to READY and start recording.

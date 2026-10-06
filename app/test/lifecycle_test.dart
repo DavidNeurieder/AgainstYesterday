@@ -5,13 +5,13 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/app.dart';
-import 'package:gps_app/core/units.dart';
-import 'package:gps_app/engine/fake_engine.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/features/recording/application/recording_controller.dart';
-import 'package:gps_app/persistence/persistence.dart';
-import 'package:gps_app/persistence/serialization.dart';
+import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
+import 'package:against_yesterday/persistence/serialization.dart';
 
 const _route = Route(
   id: FakeEngineService.riverLoopId,
@@ -272,7 +272,7 @@ void main() {
     final store = MemoryPersistenceStore();
     await tester.pumpWidget(ProviderScope(
       overrides: [persistenceStoreProvider.overrideWithValue(store)],
-      child: const GpsApp(),
+      child: const AgainstYesterdayApp(),
     ));
     await tester.pumpAndSettle();
 
@@ -293,7 +293,7 @@ void main() {
     expect(find.text('PAUSE'), findsOneWidget);
     expect(store.read('run_snapshot'), isNull);
 
-    // Simulate the app going to background: the GpsApp lifecycle observer
+    // Simulate the app going to background: the AgainstYesterdayApp lifecycle observer
     // forwards this to the controller, which snapshots immediately.
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     await tester.pump();

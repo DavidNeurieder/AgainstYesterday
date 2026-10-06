@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/core/units.dart';
+import 'package:against_yesterday/core/units.dart';
 
 void main() {
   group('Distance', () {

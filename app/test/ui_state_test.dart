@@ -10,9 +10,9 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/app/app.dart';
+import 'package:against_yesterday/app/app.dart';
 
-import 'package:gps_app/widgets/performance_gap.dart';
+import 'package:against_yesterday/widgets/performance_gap.dart';
 
 void main() {
   Finder tab(String label) =>
@@ -20,7 +20,7 @@ void main() {
 
   /// Drives the fake-GPS acquisition tone by tone so each phase is observed.
   Future<void> openRecordTab(WidgetTester tester) async {
-    await tester.pumpWidget(const GpsApp());
+    await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
     await tester.tap(tab('Record'));
     await tester.pump();

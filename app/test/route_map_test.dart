@@ -3,8 +3,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:gps_app/engine/models.dart';
-import 'package:gps_app/widgets/route_map.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/widgets/route_map.dart';
 
 void main() {
   const demo = <GeoPoint>[

@@ -7,7 +7,7 @@
 /// time under the constant-speed model — no engine call needed.
 library;
 
-import 'package:gps_app/engine/models.dart';
+import 'package:against_yesterday/engine/models.dart';
 
 /// One per-kilometer delta versus the PB.
 class SplitDelta {

@@ -136,7 +136,7 @@ EngineService interface
  I'd turn the project into something approximately like:
 
 ```
-gps_app/
+against_yesterday/
 │
 ├── rust/
 │   └── gps-engine/

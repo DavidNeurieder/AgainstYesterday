@@ -150,7 +150,7 @@ User A
  Definitely don't do:
 
 ```
-gps_app/
+against_yesterday/
 └── testdata/
     └── geolife/
         └── 17,621 tracks...
