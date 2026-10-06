@@ -165,7 +165,12 @@ diagnostics route, not just its entry button.
 
 `AGPL-3.0-or-later` for the whole repository — the `gps-engine` crate and the
 Flutter app alike. The full text is in [LICENSE](LICENSE); the Rust workspace
-declares the SPDX id in `Cargo.toml` and the app in `pubspec.yaml`.
+declares the SPDX id in `Cargo.toml` and the app in `pubspec.yaml`, and every
+source file carries a `SPDX-License-Identifier: AGPL-3.0-or-later` header.
+
+`LICENSE` holds the verbatim AGPL-3.0 text, which by itself can only say
+"version 3". The **or (at your option) any later version** half of the grant is
+what the SPDX id above records.
 
 Note that AGPL differs from MIT/Apache mainly in section 13: users who interact
 with the software over a network must be offered the corresponding source. The

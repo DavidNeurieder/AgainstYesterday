@@ -110,3 +110,10 @@ entry point (M15).
 - `lib/persistence/` — stores and repositories.
 - `lib/widgets/` — shared components (`performance_gap`, `route_map`,
   `route_silhouette`).
+
+## License
+
+`AGPL-3.0-or-later` — the whole repository, this app included. The full text is
+in [../LICENSE](../LICENSE), the SPDX id is declared in `pubspec.yaml`, and
+every source file here opens with a
+`SPDX-License-Identifier: AGPL-3.0-or-later` header.

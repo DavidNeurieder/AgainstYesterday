@@ -126,3 +126,10 @@ GPX → Track → validation → filtering → simplification → resampling →
 
 `cargo test` runs 178 tests (plus property cases) with no phone, GPS chip, or
 internet connection — the definition of "engine complete" in §44.
+
+## License
+
+`AGPL-3.0-or-later` — the whole repository, this crate included. The full text
+is in [../../LICENSE](../../LICENSE), the SPDX id comes from the
+workspace `Cargo.toml`, and every source file here opens with a
+`SPDX-License-Identifier: AGPL-3.0-or-later` header.

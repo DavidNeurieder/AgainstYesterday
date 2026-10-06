@@ -73,6 +73,13 @@ documented here, grouped by the implementation milestones in
   `MIT OR Apache-2.0` to **`AGPL-3.0-or-later`**: SPDX id in the workspace
   `Cargo.toml` (inherited by the crate) and in `app/pubspec.yaml`, with the
   full text added as `LICENSE` at the repository root.
+- The grant is now stated everywhere it can be: all 128 hand-written source
+  files (Dart, Rust, Kotlin/Gradle, shell, iOS and Linux runner code) open with
+  `Copyright (C) 2026 David Neurieder` and
+  `SPDX-License-Identifier: AGPL-3.0-or-later`, and `app/README.md` and
+  `rust/gps-engine/README.md` gained the License sections they lacked.
+  `LICENSE` itself stays the verbatim AGPL-3.0 text — it can only say
+  "version 3"; the "or later" is what the SPDX id records.
 
 ### M15 — Real-world reliability
 
