@@ -21,12 +21,20 @@ import 'package:gps_app/persistence/persistence.dart';
 import 'package:integration_test/integration_test.dart';
 
 /// The distance value currently shown on the live screen, in meters.
+///
+/// `Distance.format()` renders "412 m" below one kilometer and "1.05 km"
+/// above it, so the unit has to be honoured — reading only the first digits
+/// would turn "1.05 km" into 1 m and fail comparisons that actually passed.
 int _displayedMeters(WidgetTester tester) {
   final text = tester
       .widget<Text>(find.byKey(const ValueKey('live-distance')))
       .data!;
-  final match = RegExp(r'\d+').firstMatch(text);
-  return match == null ? 0 : int.parse(match.group(0)!);
+  final match = RegExp(r'^(\d+(?:\.\d+)?)\s*(km|m)$').firstMatch(text.trim());
+  if (match == null) {
+    return 0;
+  }
+  final value = double.parse(match.group(1)!);
+  return match.group(2) == 'km' ? (value * 1000).round() : value.round();
 }
 
 void main() {
@@ -57,6 +65,27 @@ void main() {
     fail('Timed out waiting for "$text"');
   }
 
+  /// Polls until [probe] holds. Ticks and GPS fixes arrive on the wall clock,
+  /// and the CI emulator runs without hardware acceleration, so a fixed sleep
+  /// can end before the first fix does — every "must advance" assertion polls
+  /// instead of sleeping.
+  Future<void> waitForCondition(
+    WidgetTester tester,
+    bool Function() probe,
+    String description, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final end = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(end)) {
+      await tester.pump();
+      if (probe()) {
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    fail('Timed out waiting for $description');
+  }
+
   testWidgets('records a run end to end', (tester) async {
     await tester.pumpWidget(const GpsApp());
     await tester.pumpAndSettle();
@@ -80,11 +109,15 @@ void main() {
     expect(find.text('TIME'), findsOneWidget);
     expect(find.text('FINISH'), findsOneWidget);
 
-    // GPS advances the distance on real ticks.
+    // GPS advances the distance on real ticks. Poll rather than sleeping a
+    // fixed two seconds: the CI emulator has no hardware acceleration, and a
+    // cold GPS start can need considerably longer to deliver its first fixes.
     final before = _displayedMeters(tester);
-    await pumpFor(tester, const Duration(seconds: 2));
-    final after = _displayedMeters(tester);
-    expect(after, greaterThan(before));
+    await waitForCondition(
+      tester,
+      () => _displayedMeters(tester) > before,
+      'the distance to advance past $before m',
+    );
 
     // Pause shows the PAUSED overlay and stops the clock.
     await tester.tap(find.text('PAUSE'));
@@ -169,9 +202,12 @@ void main() {
     await waitForText(tester, 'READY TO RUN');
     await tester.tap(find.text('START'));
     await tester.pumpAndSettle();
-    await pumpFor(tester, const Duration(seconds: 2));
+    await waitForCondition(
+      tester,
+      () => _displayedMeters(tester) > 0,
+      'the distance to start moving',
+    );
     final before = _displayedMeters(tester);
-    expect(before, greaterThan(0));
 
     // Background: the app's lifecycle observer snapshots the interrupted run.
     // Post both transitions back-to-back: the live test binding stops
@@ -199,11 +235,16 @@ void main() {
     expect(find.text('TIME'), findsOneWidget);
     expect(find.text('FINISH'), findsOneWidget);
     final restored = _displayedMeters(tester);
+    // Deliberately not polled: the snapshot carries the distance itself, so
+    // this must hold on the first render — a reset here is a real defect.
     expect(restored, greaterThanOrEqualTo(before));
 
     // The restored session is alive, not a static screenshot.
-    await pumpFor(tester, const Duration(seconds: 1));
-    expect(_displayedMeters(tester), greaterThan(restored));
+    await waitForCondition(
+      tester,
+      () => _displayedMeters(tester) > restored,
+      'the restored distance to advance past $restored m',
+    );
 
     // Finishing the restored run clears the interrupted-run snapshot.
     await tester.tap(find.text('FINISH'));
