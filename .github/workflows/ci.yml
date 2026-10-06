@@ -35,6 +35,13 @@ jobs:
         working-directory: app
       - run: flutter test
         working-directory: app
+      # The date-label assertions are timezone-independent, so running them in
+      # the runner's default UTC would never reproduce a DST transition. This
+      # second pass under a DST timezone is what actually exercises the
+      # 23/25-hour calendar days the calendar-day fix exists for.
+      - name: Run date labels under a DST timezone
+        run: TZ=Europe/Berlin flutter test test/route_library_test.dart
+        working-directory: app
 
   # Keeps the Android + native-engine build path honest without booting an
   # emulator: cross-compiles the cdylib per ABI and checks the FFI surface.
