@@ -32,6 +32,20 @@ final recordingControllerProvider =
       RecordingController.new,
     );
 
+/// Last step reached by the background save of a finished run. On-device
+/// tests read this so a red run can tell a hang (phase never advances) from a
+/// throw (phase becomes `error: …`) — the run itself never blocks on storage.
+final saveProgressProvider = NotifierProvider<SaveProgressReporter, String?>(
+  SaveProgressReporter.new,
+);
+
+class SaveProgressReporter extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void report(String phase) => state = phase;
+}
+
 class RecordingController extends Notifier<LiveRunState?> {
   static const Duration _tick = Duration(milliseconds: 500);
 
@@ -421,10 +435,17 @@ class RecordingController extends Notifier<LiveRunState?> {
     final gap = session.ghost != null
         ? _gapAt(session, session.distanceM)
         : null;
+    final progress = ref.read(saveProgressProvider.notifier);
     var saved = true;
     try {
+      progress.report(
+        'synthesize d=${session.distanceM.toStringAsFixed(1)} '
+        'geom=${session.geometry.length} route=${session.route?.id}',
+      );
       final track = _synthesizeTrack(session);
+      progress.report('synthesized ${track.length} pts');
       final routeId = session.route?.id ?? await _recognizeRoute(track);
+      progress.report('route=$routeId');
       final activity = Activity(
         id: 'act-${session.startedAt.millisecondsSinceEpoch}',
         routeId: routeId,
@@ -435,15 +456,18 @@ class RecordingController extends Notifier<LiveRunState?> {
         track: track,
         rawFixes: List.unmodifiable(session.rawFixes),
       );
+      progress.report('activity built (${activity.rawFixes?.length} fixes)');
       await ref
           .read(activityRepositoryProvider.notifier)
           .saveActivity(activity);
-      // M13 §28: the run is safely stored — clear the interrupted-run snapshot.
+      progress.report('activity saved');
       await ref.read(runSnapshotProvider.notifier).save(null);
+      progress.report('snapshot cleared');
     } catch (e, st) {
       // Best-effort persistence: degraded storage or a failed route match must
       // keep the completed summary visible, not crash the app (Phase 13).
       debugPrint('Failed to persist completed run: $e\n$st');
+      progress.report('error: ${e.runtimeType}: $e');
       saved = false;
     }
     if (_session == session) {

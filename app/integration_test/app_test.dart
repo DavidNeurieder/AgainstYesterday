@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gps_app/app/app.dart';
+import 'package:gps_app/features/recording/application/recording_controller.dart';
 import 'package:gps_app/features/routes/presentation/routes_screen.dart';
 import 'package:gps_app/persistence/persistence.dart';
 import 'package:integration_test/integration_test.dart';
@@ -157,15 +158,20 @@ void main() {
       () => tester.widgetList(find.byIcon(Icons.directions_run)).length >= 3,
       'the finished run to appear on Home as a third tile',
       // On timeout, separate "the save never ran" (activities still 2) from
-      // "the save ran but Home never rebuilt" (activities 3, tiles 2), and say
-      // whether the background save reached its final snapshot clear.
+      // "the save ran but Home never rebuilt" (activities 3, tiles 2), report
+      // the live run's status (still recording = the finish tap never landed),
+      // and say how far the background save got / where it broke.
       diagnostics: () {
         final activities = container.read(activityRepositoryProvider).length;
         final snapshot = container.read(runSnapshotProvider);
+        final status =
+            container.read(recordingControllerProvider)?.status.name;
+        final save = container.read(saveProgressProvider);
         return 'tiles='
             '${tester.widgetList(find.byIcon(Icons.directions_run)).length}, '
             'activities=$activities, '
-            'run_snapshot=${snapshot == null ? 'null' : 'present'}';
+            'run_snapshot=${snapshot == null ? 'null' : 'present'}, '
+            'run_status=$status, save=$save';
       },
     );
     expect(find.byIcon(Icons.directions_run), findsNWidgets(3));
