@@ -10,6 +10,13 @@ documented here, grouped by the implementation milestones in
 
 ### Fixes
 
+- Attempt dates were labelled from *elapsed* time rather than calendar days, so
+  on a daylight-saving day — when consecutive local midnights are 23 hours apart
+  — a date that was clearly yesterday came out as "Today". Labelling now
+  compares year/month/day fields in UTC (`calendarDayDifference`), where every
+  day is 24 hours, so the result never depends on the machine's timezone or on
+  a transition falling between the two dates. CI runs the date tests a second
+  time under `TZ=Europe/Berlin` so the 23-hour day is actually exercised.
 - `route_library_test.dart` pinned the attempt list to the label `Yesterday`,
   but the seeded activity is a fixed 26 hours old, so between 00:00 and 02:00
   the app correctly renders an absolute date and the test failed — a nightly CI
@@ -31,6 +38,14 @@ documented here, grouped by the implementation milestones in
 
 ### Tooling
 
+- **Deterministic Android NDK.** `build_rust_engine_android.sh` no longer
+  picks "the newest installed NDK" (which depended on directory order and moved
+  with the runner image). It now resolves, in order: `ANDROID_NDK_HOME`,
+  `ANDROID_NDK_VERSION`, or a single unambiguous install — and fails with
+  guidance when none of those holds. CI installs and exports
+  `ANDROID_NDK_HOME=28.2.13676358`, the version `flutter.ndkVersion`
+  hardcodes and Gradle therefore requires, and reports the Android SDK, NDK and
+  Rust versions before cross-compiling.
 - `app/tool/build_rust_engine_android.sh` cross-compiles the `gps-engine`
   `cdylib` for Android (arm64-v8a and x86_64 by default, API 24) using the NDK
   clang linker and installs it into `app/android/app/src/main/jniLibs/<abi>/`,

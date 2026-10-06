@@ -45,12 +45,16 @@ jobs:
 
   # Keeps the Android + native-engine build path honest without booting an
   # emulator: cross-compiles the cdylib per ABI and checks the FFI surface.
-  # The runner image already ships the Android SDK and an NDK, and
-  # setup-android@v3 currently fails on it ("Wrong version in preinstalled
-  # sdkmanager"), so the script's own NDK discovery is used instead.
+  # The NDK is pinned rather than left to whatever the runner image ships, so an
+  # image update cannot silently change the native toolchain.
   android-engine-lib:
     name: engine cdylib (${{ matrix.abi }})
     runs-on: ubuntu-latest
+    env:
+      # Keep in sync with flutter.ndkVersion — FlutterExtension.kt hardcodes it,
+      # and android/app/build.gradle.kts inherits it via ndkVersion =
+      # flutter.ndkVersion, so Gradle demands exactly this version.
+      ANDROID_NDK_VERSION: '28.2.13676358'
     strategy:
       fail-fast: false
       matrix:
@@ -61,14 +65,43 @@ jobs:
             rust-target: x86_64-linux-android
     steps:
       - uses: actions/checkout@v4
-      - name: Show the Android SDK/NDK
+      - name: Install the pinned Android NDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-<unset>}"
-          ls -d "$ANDROID_HOME"/ndk/*/ 2>/dev/null || ls -d "${ANDROID_NDK_HOME:-/nonexistent}"
+          set -euo pipefail
+          ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          if [ -d "$ndk" ]; then
+            echo ">> NDK $ANDROID_NDK_VERSION already present"
+          else
+            sdkmgr="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            if [ ! -x "$sdkmgr" ]; then
+              echo "::error::sdkmanager not found at $sdkmgr"; exit 1
+            fi
+            echo ">> Installing NDK $ANDROID_NDK_VERSION (this is ~1 GB)..."
+            yes | "$sdkmgr" --licenses > /dev/null || true
+            yes | "$sdkmgr" "ndk;$ANDROID_NDK_VERSION"
+          fi
+          test -d "$ndk" || { echo "::error::NDK missing after install: $ndk"; exit 1; }
+          # Exported for every later step, including the cross-compile script.
+          echo "ANDROID_NDK_HOME=$ndk" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust-target }}
+      - name: Report toolchain versions
+        run: |
+          set -euo pipefail
+          echo "== Android SDK =="
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          sed -n 's/^Pkg.Revision = /cmdline-tools /p' \
+            "$ANDROID_HOME/cmdline-tools/latest/source.properties" 2>/dev/null \
+            || echo "(no cmdline-tools source.properties)"
+          echo "== Android NDK $ANDROID_NDK_VERSION =="
+          grep '^Pkg' "$ANDROID_NDK_HOME/source.properties"
+          # The exact clang wrapper the build invokes: if it is absent, the
+          # cross-compile would fail with a less obvious error further down.
+          ls -l "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/"*/bin/aarch64-linux-android24-clang
+          echo "== Rust =="
+          rustc --version
+          cargo --version
       - name: Cross-compile and install
         env:
           ABIS: ${{ matrix.abi }}

@@ -16,6 +16,13 @@
 #
 # Requires: an Android SDK with an NDK installed, and `rustup target add` for
 # every ABI listed in $ABIS.
+#
+# Selecting the NDK (in order):
+#   ANDROID_NDK_HOME      exact path to an NDK
+#   ANDROID_NDK_VERSION   a version under $ANDROID_HOME/ndk
+#   <one installed NDK>   exactly one, so nothing can pick a winner for you
+# CI pins ANDROID_NDK_HOME to flutter.ndkVersion (28.2.13676358), the version
+# Gradle requires for the app's own native builds — keep the two in sync.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -54,19 +61,45 @@ host_tag() {
   echo "$os-$arch"
 }
 
-NDK="${ANDROID_NDK_HOME:-}"
-if [ -z "$NDK" ]; then
-  # Newest installed NDK wins; any recent one can package a plain cdylib.
-  NDK="$(ls -d "$SDK"/ndk/*/ 2>/dev/null | sort -V | tail -1 | sed 's:/$::')"
-fi
-if [ -z "$NDK" ] || [ ! -d "$NDK" ]; then
-  echo "error: no Android NDK found. Install one via Android Studio, or set" >&2
-  echo "       ANDROID_NDK_HOME=/path/to/ndk/<version>" >&2
+# NDK selection is explicit rather than "whichever sorts last": CI pins a
+# version through ANDROID_NDK_HOME (or ANDROID_NDK_VERSION) so a runner image
+# update cannot silently change the native toolchain. The fallback below only
+# accepts an unambiguous install — directory order never decides the winner.
+resolve_ndk() {
+  if [ -n "${ANDROID_NDK_HOME:-}" ]; then
+    printf '%s\n' "$ANDROID_NDK_HOME"
+    return 0
+  fi
+  if [ -n "${ANDROID_NDK_VERSION:-}" ]; then
+    printf '%s\n' "$SDK/ndk/$ANDROID_NDK_VERSION"
+    return 0
+  fi
+  local candidates=() found
+  for found in "$SDK"/ndk/*; do
+    if [ -d "$found" ]; then candidates+=("$found"); fi
+  done
+  if [ "${#candidates[@]}" -eq 1 ]; then
+    printf '%s\n' "${candidates[0]}"
+    return 0
+  fi
+  return 1
+}
+
+NDK="$(resolve_ndk)" || {
+  echo "error: no unambiguous Android NDK under $SDK/ndk." >&2
+  echo "       Install one, or select it with ANDROID_NDK_HOME=/path/to/ndk/<version>" >&2
+  echo "       (or ANDROID_NDK_VERSION=<version> for one under that SDK)." >&2
+  exit 1
+}
+if [ ! -d "$NDK" ]; then
+  echo "error: Android NDK not found at: $NDK" >&2
+  echo "       (install it, or unset ANDROID_NDK_VERSION / set ANDROID_NDK_HOME)" >&2
   exit 1
 fi
 
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/$(host_tag)/bin"
-echo ">> NDK:  $NDK"
+release="$(sed -n 's/^Pkg.ReleaseName = //p' "$NDK/source.properties" 2>/dev/null || true)"
+echo ">> NDK:  $NDK${release:+ ($release)}"
 echo ">> API:  $API"
 echo ">> ABIs: $ABIS"
 
