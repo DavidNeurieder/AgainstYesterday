@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Synthetic GPS generation (test utility).
 //!
 //! Given a clean route, this module produces test tracks with controlled,

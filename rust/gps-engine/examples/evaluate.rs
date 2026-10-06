@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Labeled-corpus evaluation (§38–§40): measures route-matching quality.
 //!
 //! ```text

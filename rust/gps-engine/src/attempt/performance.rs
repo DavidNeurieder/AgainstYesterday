@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Performance comparison: two attempts over the same route.
 //!
 //! The reference is normally the personal best; the comparison answers "how

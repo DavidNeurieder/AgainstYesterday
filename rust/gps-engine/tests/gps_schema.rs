@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Fixture JSON schema contract (M15.10).
 //!
 //! The raw-GPS fixture is the seam between the Flutter developer exporter and

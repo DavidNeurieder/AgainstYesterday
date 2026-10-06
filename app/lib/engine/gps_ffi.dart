@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// FFI bindings to the Rust engine's CDylib (M9).
 ///
 /// This is the only file in the app that touches raw FFI symbols — every other

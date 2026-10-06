@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Finish experience (§19, M11).
 ///
 /// Brief summary: RUN COMPLETE, distance, clock, PB gap, and VIEW RESULT.

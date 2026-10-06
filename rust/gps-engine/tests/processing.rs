@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Property tests for track processing invariants.
 
 use gps_engine::geo::{Coordinate, distance, polyline_length};

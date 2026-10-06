@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Activity detail screen (§24, M11).
 ///
 /// Reached by tapping an activity in Home's recent list. Shows the same

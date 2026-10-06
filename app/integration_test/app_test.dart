@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// On-device end-to-end tests (§45, M14+).
 ///
 /// These run against the REAL app on an emulator/device — real wall clock,

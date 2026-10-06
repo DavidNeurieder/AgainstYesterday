@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Split boundary & pacing edge cases (test plan Phase 7).
 ///
 /// Complements `splits_test.dart` with the *boundaries* the plan calls out:

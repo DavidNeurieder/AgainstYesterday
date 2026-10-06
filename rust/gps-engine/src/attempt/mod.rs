@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Attempt: a recording reduced to the canonical route axis.
 //!
 //! The route projection turns messy GPS into a one-dimensional curve:

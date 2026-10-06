@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Raw GPS ingestion and per-sample quality (M15).
 //!
 //! The rest of the crate starts from a validated [`Track`] of purely

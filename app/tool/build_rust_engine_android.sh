@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (C) 2026 David Neurieder
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 #
 # Cross-compiles the `gps-engine` cdylib for Android and installs it into the
 # Flutter app's jniLibs tree, so a build with

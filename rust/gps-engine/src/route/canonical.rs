@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Canonical route generation from a cluster of recordings.
 //!
 //! Given several recordings that represent the same route, produce one robust

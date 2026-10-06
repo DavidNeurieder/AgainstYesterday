@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Minimal end-to-end demonstration of the engine on synthetic data.
 
 use gps_engine::geo::{distance, polyline_length, project_to_polyline};

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Detailed result screen (§20, M11).
 ///
 /// Shows performance bar, per-km splits, and ranking after a completed run.

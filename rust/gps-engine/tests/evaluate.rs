@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Labeled-corpus evaluation against the committed synthetic corpus
 //! (§38–§40). Route matching is a measurable engineering problem: precision
 //! is prioritized, so the hard-note is the `outliers.gpx` family, whose

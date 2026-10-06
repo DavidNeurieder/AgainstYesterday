@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! A standalone GPS engine for track processing, route matching, and ghost
 //! racing.
 //!

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Route table for the app (§42): HOME / RECORD / ROUTES.
 library;
 

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// The engine facade — the only thing Flutter features may talk to (§6).
 ///
 /// The rest of the app depends on this abstract interface and never on raw

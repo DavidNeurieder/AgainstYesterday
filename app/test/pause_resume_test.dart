@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Dedicated pause/resume suite (test plan Phase 5).
 ///
 /// The central invariant: **paused time never counts toward moving time or

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use super::coordinate::Coordinate;
 
 /// Linearly interpolates between two coordinates in lat/lon space.

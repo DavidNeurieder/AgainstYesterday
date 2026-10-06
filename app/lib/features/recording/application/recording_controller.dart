@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Recording state machine — M6 (§8, §9).
 ///
 /// Runs the whole flow on a fake GPS timeline:

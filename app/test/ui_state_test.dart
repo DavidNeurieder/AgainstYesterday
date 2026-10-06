@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// UI state coverage for the record flow (test plan Phase 11).
 ///
 /// Pinpoints what the runner actually SEES at every phase and — crucially —

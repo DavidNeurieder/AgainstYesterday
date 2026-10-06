@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// App root: provider scope + theme + router (M1 shell).
 ///
 /// As a [ConsumerStatefulWidget] it also observes app lifecycle changes and

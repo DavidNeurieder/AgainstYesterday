@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Distance & geometry invariants (test plan Phases 3 and 4).
 ///
 /// The fake engine's haversine/polyline helpers are the only geometry the

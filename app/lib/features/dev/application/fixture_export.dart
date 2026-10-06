@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Serializes a recording to the M15 raw-GPS fixture schema (developer
 /// diagnostics, M15 Phase 10 / 12; fixture schema version 1).
 ///

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Minimal route map (§15, §16) — self-contained painter, no map SDK.
 ///
 /// Renders only what a run needs: the route, the travelled portion, the YOU

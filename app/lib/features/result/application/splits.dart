@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Per-km split deltas against the personal best (M11, §20).
 ///
 /// Splits are derived from the activity's persisted track and the route's PB

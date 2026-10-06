@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Standard processing pipeline and labeled-corpus evaluation (§33, §38–§40).
 //!
 //! [`standard_pipeline`] is the single processing recipe used everywhere

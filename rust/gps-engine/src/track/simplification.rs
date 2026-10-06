@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Polyline simplification with Ramer–Douglas–Peucker.
 
 use crate::geo::{Coordinate, project_to_segment};

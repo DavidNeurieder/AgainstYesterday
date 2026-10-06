@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Aggregated diagnostic readout (M15 Phase 10 / 12).
 ///
 /// The diagnostics screen is a pure projection of a single

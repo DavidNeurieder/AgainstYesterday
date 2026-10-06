@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Ghost: race your own best effort.
 //!
 //! A ghost is the reference (PB) attempt replayed against the live runner:

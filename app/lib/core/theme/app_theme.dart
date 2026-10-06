@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// App theme built from the [AppColors] palette and a small spacing scale.
 library;
 

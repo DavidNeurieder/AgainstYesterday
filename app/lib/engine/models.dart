@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Domain models — lightweight Dart representations of Rust engine concepts
 /// (§5 of the app plan). Pure data plus small derived helpers; they never
 /// contain algorithms that duplicate the Rust engine.

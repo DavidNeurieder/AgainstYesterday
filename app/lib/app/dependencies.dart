@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Dependency injection root for the app (§4, §6).
 ///
 /// The rest of the app consumes `EngineService` — never raw FFI. Swapping

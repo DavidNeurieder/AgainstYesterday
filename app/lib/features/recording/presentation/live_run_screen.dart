@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Live run screen — running and paused phases (§12, §13).
 ///
 /// The **gap is the hero metric**: a big ahead/behind readout, then distance,

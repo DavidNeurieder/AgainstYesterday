@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! GPX parsing from embedded fixtures and malformed documents.
 
 use gps_engine::{GpxError, Track, parse_gpx, read_gpx, read_gpx_file};

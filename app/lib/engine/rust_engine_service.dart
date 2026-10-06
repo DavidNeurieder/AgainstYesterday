@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// [`EngineService`] backed by the Rust engine over FFI (M9).
 ///
 /// Mirrors `rust/gps-engine/src/capi.rs` on the Dart side: every method

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Route detail screen (§23, M12).
 ///
 /// Route map, headline stats (PB / Average / Last), a performance chart of

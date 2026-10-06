@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// JSON codec for the persisted domain models (M10, §27).
 ///
 /// Handles the compact blob format for routes and activities. Timestamps are

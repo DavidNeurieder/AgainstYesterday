@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// The record tab — a state-machine driven flow (§8, §9).
 ///
 /// One route, rendered as the right phase: pre-run, live, or complete. The UI

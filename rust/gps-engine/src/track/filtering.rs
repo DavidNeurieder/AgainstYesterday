@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! GPS point filtering.
 //!
 //! Filtering removes obvious junk (bad sensor readings, spikes, impossible

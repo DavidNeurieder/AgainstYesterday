@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Property tests for processing invariants (§32).
 //!
 //! Filtering never *creates* movement: it only removes points. So every

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Pairwise route similarity.
 //!
 //! Given two GPS tracks, answers the MVP question *"do these recordings

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! End-to-end engine pipeline (M15.10): raw GPS fixture in, ghost snapshot out.
 //!
 //! The unit suites each cover one stage; this test wires the *whole* M15

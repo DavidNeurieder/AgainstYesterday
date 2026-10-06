@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! GPX boundary robustness (§41): GPX is user-controlled external data, so
 //! the engine must return errors — never panic — no matter how hostile the
 //! input is. Also directed cases for the shapes listed in the plan.

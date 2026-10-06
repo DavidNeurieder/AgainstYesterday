@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// The most important component: the YOU vs GHOST gap (§45).
 ///
 /// This widget is the visual identity of the app. It takes the live gap and

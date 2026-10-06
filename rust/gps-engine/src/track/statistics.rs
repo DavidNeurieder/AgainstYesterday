@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Aggregate statistics over a [`Track`].
 
 use crate::geo::{distance as geo_distance, polyline_length};

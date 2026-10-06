@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Route library screen (§22, M12).
 ///
 /// The Routes tab is a collection of course cards — name, distance, number of

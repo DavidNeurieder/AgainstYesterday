@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Synthetic GPS generator: determinism, validity, and presets.
 
 use gps_engine::Track;

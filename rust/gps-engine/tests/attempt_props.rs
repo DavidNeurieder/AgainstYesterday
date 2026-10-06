@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Property tests for `Attempt` invariants (§32).
 //!
 //! The coverage curve that `from_track` builds must always be monotonic, and

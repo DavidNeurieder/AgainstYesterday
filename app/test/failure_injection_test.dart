@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Failure injection & regression tests (test plan Phases 13 and 14).
 ///
 /// The contract: dependency failures (storage, engine route matching, broken

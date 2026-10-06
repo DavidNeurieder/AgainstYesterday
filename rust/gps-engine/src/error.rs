@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Typed errors for the engine.
 //!
 //! Constructors validate their input and return explicit errors; the engine

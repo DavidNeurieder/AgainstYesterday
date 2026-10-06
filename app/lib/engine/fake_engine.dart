@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Deterministic [`EngineService`] used before the Rust bridge (M4).
 ///
 /// Generates tracks from a fixed, seeded pseudo-random generator so every run

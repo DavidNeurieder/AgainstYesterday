@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Snapshot & history recovery edge cases (test plan Phase 6).
 ///
 /// Targets: a corrupted or missing store, a snapshot referencing a route that

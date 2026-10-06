@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Property tests for the M15 raw-GPS module: the hand-rolled JSON schema
 //! must round-trip, parse without panicking on arbitrary input, and keep its
 //! audit invariant under `process`.

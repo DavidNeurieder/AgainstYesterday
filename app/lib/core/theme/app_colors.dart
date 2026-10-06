@@ -1,3 +1,6 @@
+// Copyright (C) 2026 David Neurieder
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Color tokens for the app (§44).
 ///
 /// The visual language opposes **YOU** against **GHOST** on a dark neutral
