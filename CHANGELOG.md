@@ -11,6 +11,10 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- The result screen closes the race loop (§29): after a route race, RACE
+  AGAIN drops straight back into that route's pre-race (fresh session, still
+  the 3-2-1-GO countdown), with DONE leaving the loop; route-less results
+  keep DONE alone (M20).
 - Races are now route-bound (§9–§11): Home's hero, every route card's RACE
   button, and a route detail's RACE YOUR BEST open that route's pre-race
   (named screen, GPS-ready gate, big START), and pressing START plays a

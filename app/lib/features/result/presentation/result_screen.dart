@@ -8,6 +8,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -120,13 +121,36 @@ class ResultScreen extends ConsumerWidget {
               ),
             ],
             const SizedBox(height: AppSpacing.xl),
-            PrimaryButton(
-              label: 'DONE',
-              onPressed: () {
-                ref.read(recordingControllerProvider.notifier).dismissRun();
-                context.go('/');
-              },
-            ),
+            // M20 §29: after a route race, RACE AGAIN drops back into that
+            // route's pre-race (fresh session + the 3-2-1-GO countdown); DONE
+            // leaves the loop.
+            if (route != null) ...[
+              PrimaryButton(
+                label: 'RACE AGAIN',
+                icon: Icons.replay,
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  ref.read(recordingControllerProvider.notifier).dismissRun();
+                  context.go('/race/${route.id}');
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextButton(
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  ref.read(recordingControllerProvider.notifier).dismissRun();
+                  context.go('/');
+                },
+                child: const Text('DONE'),
+              ),
+            ] else
+              PrimaryButton(
+                label: 'DONE',
+                onPressed: () {
+                  ref.read(recordingControllerProvider.notifier).dismissRun();
+                  context.go('/');
+                },
+              ),
           ],
         ),
       ),

@@ -127,4 +127,38 @@ void main() {
     expect(find.text('Park 5K'), findsWidgets);
     expect(find.text('River Loop'), findsNothing);
   });
+
+  testWidgets('the result offers RACE AGAIN back into a fresh pre-race',
+      (tester) async {
+    await tester.pumpWidget(app(routes: demoRoutes));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await waitReady(tester);
+    await tester.tap(find.text('START'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.tap(find.text('FINISH'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('VIEW RESULT'));
+    await tester.pumpAndSettle();
+    expect(find.text('RACE AGAIN'), findsOneWidget);
+
+    // RACE AGAIN leaves the finished session and drops into the same route's
+    // pre-race: fresh, headed for READY, countdown still in front of it.
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE AGAIN'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await waitReady(tester);
+    expect(find.text('READY TO RUN'), findsOneWidget);
+    expect(find.text('River Loop'), findsWidgets);
+    expect(find.text('PAUSE'), findsNothing);
+  });
 }

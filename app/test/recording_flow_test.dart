@@ -122,7 +122,10 @@ void main() {
     expect(find.text('Splits'), findsOneWidget);
 
     // M10: the finished run lands in Home's recent history (empty start →
-    // just this one).
+    // just this one). RACE AGAIN pushes DONE down the result list, so bring
+    // it on-screen before tapping.
+    await tester.ensureVisible(find.text('DONE'));
+    await tester.pump();
     await tester.tap(find.text('DONE'));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.directions_run), findsNWidgets(1));
