@@ -280,7 +280,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Start from Home's primary action and reach READY TO RUN.
-    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));

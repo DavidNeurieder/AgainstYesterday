@@ -111,8 +111,8 @@ void main() {
     expect(find.text('Run against yesterday'), findsOneWidget);
     expect(find.text('River Loop'), findsWidgets);
 
-    // Home → Record via the primary action.
-    await tester.tap(find.text('Start a run'));
+    // Home → Record via the hero's race action.
+    await tester.tap(find.text('RACE YOUR BEST'));
     await tester.pumpAndSettle();
     await waitForText(tester, 'READY TO RUN');
     expect(find.text('GPS READY'), findsOneWidget);
@@ -252,7 +252,7 @@ void main() {
     // First "process": get to READY and start recording.
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start a run'));
+    await tester.tap(find.text('RECORD ROUTE'));
     await tester.pumpAndSettle();
     await waitForText(tester, 'READY TO RUN');
     await tester.tap(find.text('START'));
@@ -281,10 +281,10 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    // The snapshot is still there, so Home's Start-a-run resumes it — the
+    // The snapshot is still there, so Home's record entry resumes it — the
     // live screen (not the pre-run/READY screen) must appear, at distance
     // greater-or-equal to where the app died.
-    await tester.tap(find.text('Start a run'));
+    await tester.tap(find.text('RECORD ROUTE'));
     await tester.pumpAndSettle();
     await waitForText(tester, 'PACE');
     expect(find.text('TIME'), findsOneWidget);

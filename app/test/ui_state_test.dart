@@ -34,7 +34,7 @@ void main() {
       child: const AgainstYesterdayApp(),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
     await tester.pump();
     // Let the pushed `/record` page transition finish without crossing the
     // first 500 ms acquisition tone, so the phase assertions stay aligned.

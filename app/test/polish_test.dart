@@ -151,7 +151,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
@@ -181,7 +181,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RECORD ROUTE'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
@@ -202,7 +202,7 @@ void main() {
   // ---------------------------------------------------------------------------
   // M14: empty states on Home
   // ---------------------------------------------------------------------------
-  testWidgets('home shows empty hints when repositories are empty', (tester) async {
+  testWidgets('home shows the empty state when the catalog is empty', (tester) async {
     final store = MemoryPersistenceStore();
     await store.write('routes', '[]');
     await store.write('activities', '[]');
@@ -212,15 +212,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
+    expect(find.text('Your first race awaits.'), findsOneWidget);
     expect(
-      find.text('No runs yet. Your finished runs land here.'),
+      find.text('Record a route and start competing against yourself.'),
       findsOneWidget,
     );
-    expect(
-      find.text('No routes yet. Finish a run to record one.'),
-      findsOneWidget,
-    );
-    expect(find.widgetWithText(FilledButton, 'Start a run'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'RECORD ROUTE'), findsOneWidget);
   });
 
   // ---------------------------------------------------------------------------

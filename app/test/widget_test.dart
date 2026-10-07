@@ -21,18 +21,20 @@ void main() {
         child: const AgainstYesterdayApp(),
       );
 
-  testWidgets('home shows the primary start action and catalogs', (tester) async {
+  testWidgets('home leads into the race loop', (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    // Primary action per §43.
-    expect(find.widgetWithText(FilledButton, 'Start a run'), findsOneWidget);
+    // Primary action per §4: race the featured route.
+    expect(find.widgetWithText(FilledButton, 'RACE YOUR BEST'), findsOneWidget);
 
-    // Section content from the seeded home directory.
-    expect(find.text('River Loop'), findsWidgets);
-    expect(find.text('Park 5K'), findsWidgets);
-    await tester.scrollUntilVisible(find.text('Hügelrunde'), 200);
-    expect(find.text('Hügelrunde'), findsWidgets);
+    // Hero content from the seeded home directory.
+    expect(find.text('READY TO RACE'), findsOneWidget);
+    expect(find.text('River Loop'), findsOneWidget); // featured route
+    expect(find.text('PB'), findsOneWidget);
+
+    // Recent activity stays on Home; the full route catalog lives on Routes.
+    expect(find.byIcon(Icons.directions_run), findsWidgets);
   });
 
   testWidgets('shell navigates between tabs', (tester) async {
@@ -44,7 +46,11 @@ void main() {
 
     await tester.tap(tab('Routes'));
     await tester.pumpAndSettle();
+    // The full catalog lives on the Routes tab (§4 Home features one route).
     expect(find.text('River Loop'), findsWidgets);
+    expect(find.text('Park 5K'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Hügelrunde'), 200);
+    expect(find.text('Hügelrunde'), findsOneWidget);
 
     await tester.tap(tab('History'));
     await tester.pumpAndSettle();
@@ -53,7 +59,7 @@ void main() {
 
     await tester.tap(tab('Home'));
     await tester.pumpAndSettle();
-    expect(find.text('Start a run'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'RACE YOUR BEST'), findsOneWidget);
   });
 
   testWidgets('home gear opens the settings stub', (tester) async {
@@ -66,11 +72,11 @@ void main() {
     expect(find.text('Settings arrive in a later milestone.'), findsOneWidget);
   });
 
-  testWidgets('start a run routes to pre-run screen', (tester) async {
+  testWidgets('race your best opens the pre-run flow', (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));

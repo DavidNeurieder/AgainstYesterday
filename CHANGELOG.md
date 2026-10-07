@@ -11,6 +11,13 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Home is reworked around the race loop (§4–5): with a route catalog it shows
+  a "READY TO RACE" hero — the featured route's name, distance, PB and a big
+  "RACE YOUR BEST" button into the pre-run — above a truncated "Recent"
+  activity list; on a fresh install it shows the "Your first race awaits."
+  empty state whose "RECORD ROUTE" button opens the record flow. The full
+  route catalog lives on the Routes tab, History stays the full activity view
+  (M17).
 - The navigation shell is reworked to **Home / Routes / History** tabs; the
   recording flow is a pushed full-screen route off Home's primary action
   (M16). A settings stub and the History tab take the space the Record tab

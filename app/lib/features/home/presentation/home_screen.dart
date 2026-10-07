@@ -1,7 +1,9 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// Home — the primary screen's job is **start a run** (§43).
+/// Home — the primary screen's job is to answer "What should I race today?"
+/// (§4): a featured route hero that leads into a race, the recent activity
+/// list, and a first-launch empty state that points at recording a route.
 library;
 
 import 'package:flutter/material.dart' hide Route;
@@ -35,55 +37,47 @@ class HomeScreen extends ConsumerWidget {
           children: [
             const SizedBox(height: AppSpacing.md),
             const _Header(),
-            const SizedBox(height: AppSpacing.lg),
-            PrimaryButton(
-              label: 'Start a run',
-              height: 64,
-              icon: Icons.play_arrow_rounded,
-              onPressed: () {
+            const SizedBox(height: AppSpacing.xl),
+            if (routes.isEmpty)
+              EmptyHomeState(onRecord: () {
                 HapticFeedback.mediumImpact();
                 context.go('/record');
-              },
-            ),
+              })
+            else ...[
+              const SectionHeader(title: 'READY TO RACE'),
+              const SizedBox(height: AppSpacing.sm),
+              FeaturedRouteCard(
+                route: routes.first,
+                onRace: () {
+                  HapticFeedback.mediumImpact();
+                  context.go('/record');
+                },
+              ),
+            ],
             const SizedBox(height: AppSpacing.xl),
+            const SectionHeader(title: 'Recent'),
+            const SizedBox(height: AppSpacing.sm),
             if (activities.isEmpty)
               const EmptyState(
                 compact: true,
                 icon: Icons.directions_run,
-                message: 'No runs yet. Your finished runs land here.',
+                message: 'No races yet. Choose a route and start racing.',
               )
             else ...[
-              for (final activity in activities) ...[
+              for (final activity in activities.take(_recentLimit)) ...[
                 _ActivityTile(activity: activity),
                 const SizedBox(height: AppSpacing.sm),
               ],
             ],
-            const SizedBox(height: AppSpacing.lg),
-            const SectionHeader(title: 'Routes'),
-            const SizedBox(height: AppSpacing.sm),
-            if (routes.isEmpty)
-              const EmptyState(
-                compact: true,
-                icon: Icons.route,
-                message: 'No routes yet. Finish a run to record one.',
-              )
-            else
-              for (final route in routes) ...[
-                _RouteCard(
-                  route: route,
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    context.push('/route/${route.id}');
-                  },
-                ),
-                const SizedBox(height: AppSpacing.sm),
-              ],
           ],
         ),
       ),
     );
   }
 }
+
+/// Keep Home's "Recent" list to the freshest handful; History is the full view.
+const int _recentLimit = 5;
 
 class _Header extends StatelessWidget {
   const _Header();
@@ -120,56 +114,122 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _RouteCard extends StatelessWidget {
-  const _RouteCard({required this.route, required this.onTap});
+/// The hero "race today" card (§4): the featured route's distance and PB with
+/// a big [PrimaryButton] leading into the pre-run.
+class FeaturedRouteCard extends StatelessWidget {
+  const FeaturedRouteCard({
+    super.key,
+    required this.route,
+    required this.onRace,
+  });
 
   final Route route;
-  final VoidCallback onTap;
+  final VoidCallback onRace;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final pb = route.personalBest;
     return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
-            children: [
-              Icon(Icons.route, color: AppColors.pb, size: 34),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(route.name, style: textTheme.titleMedium),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${route.distance.format()} · '
-                      '${route.attemptCount} attempts',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              route.name,
+              textAlign: TextAlign.center,
+              style: textTheme.titleLarge,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${route.distance.format()} · '
+              '${route.attemptCount} attempts',
+              textAlign: TextAlign.center,
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            if (pb != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              Text('PB', textAlign: TextAlign.center, style: textTheme.labelSmall),
+              Text(
+                pb.format(),
+                textAlign: TextAlign.center,
+                style: textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.pb,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              if (route.personalBest case final pb?)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('PB', style: textTheme.labelSmall),
-                    Text(
-                      pb.format(),
-                      style: textTheme.titleSmall?.copyWith(color: AppColors.pb),
-                    ),
-                  ],
-                ),
             ],
-          ),
+            const SizedBox(height: AppSpacing.lg),
+            PrimaryButton(
+              label: 'RACE YOUR BEST',
+              height: 64,
+              icon: Icons.play_arrow_rounded,
+              onPressed: onRace,
+            ),
+            if (pb == null)
+              Text(
+                'Your first attempt will become your baseline.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodySmall?.copyWith(
+                  color: AppColors.textMuted,
+                ),
+              ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+/// First-launch Home (§5): no stale tables or zeroed stats, just the promise
+/// and one obvious next step.
+class EmptyHomeState extends StatelessWidget {
+  const EmptyHomeState({super.key, required this.onRecord});
+
+  final VoidCallback onRecord;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final onDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(
+            Icons.directions_run,
+            size: 64,
+            color: onDark ? AppColors.ghost : AppColors.textMuted,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Your first race awaits.',
+            textAlign: TextAlign.center,
+            style: textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Record a route and start competing against yourself.',
+            textAlign: TextAlign.center,
+            style: textTheme.bodyMedium?.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          PrimaryButton(
+            label: 'RECORD ROUTE',
+            height: 64,
+            icon: Icons.add_road,
+            onPressed: onRecord,
+          ),
+        ],
       ),
     );
   }

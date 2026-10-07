@@ -33,7 +33,7 @@ void main() {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
@@ -48,7 +48,7 @@ void main() {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
