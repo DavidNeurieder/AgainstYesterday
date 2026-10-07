@@ -101,10 +101,10 @@ documented here, grouped by the implementation milestones in
 
 ### Licensing
 
-- The whole repository (`gps-engine` crate and Flutter app) is relicensed from
-  `MIT OR Apache-2.0` to **`AGPL-3.0-or-later`**: SPDX id in the workspace
-  `Cargo.toml` (inherited by the crate) and in `app/pubspec.yaml`, with the
-  full text added as `LICENSE` at the repository root.
+- The whole repository (`gps-engine` crate and Flutter app) is licensed under
+  **`AGPL-3.0-or-later`**: SPDX id in the workspace `Cargo.toml` (inherited by
+  the crate) and in `app/pubspec.yaml`, with the full text added as `LICENSE`
+  at the repository root.
 - The grant is now stated everywhere it can be: all 128 hand-written source
   files (Dart, Rust, Kotlin/Gradle, shell, iOS and Linux runner code) open with
   `Copyright (C) 2026 David Neurieder` and
