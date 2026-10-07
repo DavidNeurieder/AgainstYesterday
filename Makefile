@@ -7,16 +7,20 @@
 # engine-android (the Android cdylibs under app/android/app/src/main/jniLibs)
 # is a prerequisite of the targets that produce a device artifact:
 # build-release and install.
+#
+# Device artifacts also read the live run from the phone's real GPS
+# (USE_DEVICE_GPS=true); a plain `flutter build` keeps the deterministic demo
+# timeline for hosts and the E2E.
 
 .PHONY: build build-release install run test test-rust-engine lint tz-test \
         connected-test connected-test-engine engine-build engine-test \
         engine-lint engine-fmt engine-doc engine-android full-test clean
 
 build:
-	cd app && flutter build apk --debug
+	cd app && flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
 
 build-release: engine-android
-	cd app && flutter build apk --release
+	cd app && flutter build apk --release --dart-define=USE_DEVICE_GPS=true
 
 run:
 	cd app && flutter run

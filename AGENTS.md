@@ -30,10 +30,14 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   The engine is auto-selected at build time: the native Rust engine is used
   when its library loads, otherwise the deterministic `FakeEngineService`
   is the fallback.
-- `USE_RUST_ENGINE`, `REQUIRE_RUST_ENGINE`, `GPS_ENGINE_LIB` and `DEV_TOOLS`
-  are compile-time `--dart-define` flags, not environment variables.
-  `USE_RUST_ENGINE` is tri-state: unset (auto), `true` (require, missing
-  library is a startup error), `false` (always the fake).
+- `USE_RUST_ENGINE`, `REQUIRE_RUST_ENGINE`, `GPS_ENGINE_LIB`, `USE_DEVICE_GPS`
+  and `DEV_TOOLS` are compile-time `--dart-define` flags, not environment
+  variables. `USE_RUST_ENGINE` is tri-state: unset (auto), `true` (require,
+  missing library is a startup error), `false` (always the fake).
+  `USE_DEVICE_GPS=true` reads the live run from the phone receiver via
+  geolocator; without it the recording replays the deterministic demo timeline
+  (the host/test/E2E default). `make build`/`install`/`build-release` pass the
+  define so installed phone artifacts record real GPS.
 - Android cdylibs land in `app/android/app/src/main/jniLibs/<abi>/` via
   `app/tool/build_rust_engine_android.sh`; they are gitignored, so rerun the
   script after a clean checkout. `make install` and `make build-release` run

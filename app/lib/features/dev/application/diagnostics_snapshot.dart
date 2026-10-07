@@ -35,6 +35,7 @@ class DiagnosticsSnapshot {
   const DiagnosticsSnapshot({
     required this.engineDescription,
     required this.engineType,
+    required this.gpsSourceDescription,
     required this.runStatus,
     required this.gpsQuality,
     required this.latestFix,
@@ -54,6 +55,10 @@ class DiagnosticsSnapshot {
 
   final String engineDescription;
   final String engineType;
+
+  /// Where the live run gets its fixes: `device GPS`, or the deterministic
+  /// scenario timeline when no device source is wired in.
+  final String gpsSourceDescription;
   final String runStatus;
   final String gpsQuality;
 
@@ -93,6 +98,7 @@ final diagnosticsSnapshotProvider = Provider.autoDispose<DiagnosticsSnapshot>((
   final recovery = ref.watch(runSnapshotProvider);
   final activities = ref.watch(activityRepositoryProvider);
   final routes = ref.watch(routeRepositoryProvider);
+  final gpsSource = ref.watch(deviceGpsProvider);
   final controller = ref.read(recordingControllerProvider.notifier);
 
   final liveFixes = controller.currentFixes();
@@ -108,6 +114,7 @@ final diagnosticsSnapshotProvider = Provider.autoDispose<DiagnosticsSnapshot>((
   return DiagnosticsSnapshot(
     engineDescription: engine.engineDescription,
     engineType: engine.runtimeType.toString(),
+    gpsSourceDescription: gpsSource?.description ?? 'scenario (demo timeline)',
     runStatus: live?.status.name ?? '—',
     gpsQuality: live?.gpsQuality ?? '—',
     latestFix: (liveFixes != null && liveFixes.isNotEmpty)

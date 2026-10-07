@@ -98,6 +98,27 @@ empty the app opens the bare name `libgps_engine.so`. Add
 `--dart-define=DEV_TOOLS=true` to any of these builds to expose the M15
 diagnostics entry point.
 
+## Using the real phone GPS
+
+A plain `flutter run`/`flutter test` replays the deterministic demo timeline
+(the ~4.8 km "River Loop"), so the whole loop is explorable with no phone. To
+record *actual* device fixes, build with `USE_DEVICE_GPS`:
+
+```bash
+cd app && flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
+```
+
+`make build`, `make install` and `make build-release` pass the define for you,
+so the installed app races real GPS while hosts and the emulator E2E keep the
+deterministic timeline. Device mode reads 1 Hz fixes through the geolocator
+plugin (the app requests `ACCESS_FINE_LOCATION` on Android and uses
+`NSLocationWhenInUseUsageDescription` on iOS): live position, distance, pace
+and the raw-fix buffer all come from the receiver, a real run on a recognised
+route snaps onto that route's geometry for the ghost gap, and an unrecognised
+line accumulates ground distance as a new route. Refusals (services off or
+permission denied) surface as the recoverable recording ERROR state. The
+diagnostics screen's GPS section prints which source is live.
+
 ## Developer diagnostics
 
 Build with the diagnostics entry point enabled (`M15`):
@@ -135,7 +156,7 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 169 tests
+cd app && flutter analyze && flutter test   # Flutter: 197 tests
 cargo test                                   # Rust: 204 tests + property cases
 
 # the same Flutter suite against the real Rust engine over FFI
@@ -160,7 +181,8 @@ snapshot.
 
 Milestones M1–M15 are implemented (see [CHANGELOG.md](CHANGELOG.md)). The demo
 ships with a seeded catalog and a deterministic fake GPS timeline (the ~4.8 km
-"River Loop"), so the whole loop is explorable on any device or in tests.
+"River Loop"), so the whole loop is explorable on any device or in tests; a
+`USE_DEVICE_GPS=true` build records the phone receiver's real fixes instead.
 M15 added the raw-GPS quality model, checked-in replay fixtures, ghost
 geometry invariants and continuity-aware matching on the Rust side, plus the
 developer diagnostics screen on the app side. It also retains the raw fixes

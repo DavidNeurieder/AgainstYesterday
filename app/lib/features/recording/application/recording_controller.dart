@@ -3,11 +3,18 @@
 
 /// Recording state machine — M6 (§8, §9).
 ///
-/// Runs the whole flow on a fake GPS timeline:
+/// Runs the whole flow on a GPS timeline:
 ///
 /// ```text
 /// preparing → gpsAcquiring → ready → running ⇄ paused → finishing → completed
 /// ```
+///
+/// The timeline is *either* the deterministic scenario the fixture engine
+/// drives (the default on hosts and in the E2E), *or* the real device
+/// receiver when a [GpsSource] is wired in (`USE_DEVICE_GPS=true`, see
+/// `app/dependencies.dart`). In device mode each fix comes straight from the
+/// phone: position, distance, speed and the raw-fix buffer all reflect the
+/// receiver's own output.
 ///
 /// The controller owns time and points; the UI is a pure projection of the
 /// emitted [`LiveRunState`]. Live state is published at ~2 Hz (§7).
@@ -22,6 +29,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/dependencies.dart';
 import '../../../core/units.dart';
+import '../../../engine/device_gps_source.dart';
 import '../../../engine/fake_engine.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
@@ -56,6 +64,16 @@ class RecordingController extends Notifier<LiveRunState?> {
   _RecSession? _session;
   final math.Random _random = math.Random(7);
 
+  /// The active device GPS source when the run consumes real fixes, else
+  /// `null` (deterministic scenario timeline). Resolved once per session from
+  /// [deviceGpsProvider].
+  GpsSource? _gpsSource;
+  StreamSubscription<GpsFix>? _gpsSub;
+
+  /// Previous raw position, used to accumulate free-run distance between
+  /// fixes when the live position cannot be snapped onto a chosen route.
+  GeoPoint? _prevRawPosition;
+
   /// Wall-clock anchor for the last tick (M13): elapsed time is derived from
   /// the real clock rather than assuming each timer tick is exactly 500 ms,
   /// so throttled/suspended background timers never corrupt the pace.
@@ -70,6 +88,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     ref.onDispose(() {
       _timer?.cancel();
       _timer = null;
+      _stopDeviceStream();
     });
     return null;
   }
@@ -86,6 +105,8 @@ class RecordingController extends Notifier<LiveRunState?> {
           )
         : null;
     _session = _RecSession(preferred, 0);
+    _gpsSource = ref.read(deviceGpsProvider);
+    _prevRawPosition = null;
     _beginAcquisition();
   }
 
@@ -108,12 +129,14 @@ class RecordingController extends Notifier<LiveRunState?> {
     _lastTick = clock.now();
     _throttleAnchor = clock.now();
     _emit(status: RunStatus.running);
+    _startDeviceStream();
   }
 
   void pause() {
     if (state?.status != RunStatus.running) {
       return;
     }
+    _stopDeviceStream();
     _emit(status: RunStatus.paused);
   }
 
@@ -124,6 +147,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     _lastTick = clock.now();
     _throttleAnchor = clock.now();
     _emit(status: RunStatus.running);
+    _startDeviceStream();
   }
 
   /// App lifecycle M13, §28: the run left the foreground. Sync the wall clock
@@ -166,6 +190,7 @@ class RecordingController extends Notifier<LiveRunState?> {
   void dismissRun() {
     _timer?.cancel();
     _timer = null;
+    _stopDeviceStream();
     _session = null;
     state = null;
     ref.read(runSnapshotProvider.notifier).save(null);
@@ -201,14 +226,194 @@ class RecordingController extends Notifier<LiveRunState?> {
       case RunStatus.preparing:
         _emit(status: RunStatus.gpsAcquiring);
       case RunStatus.gpsAcquiring:
-        _emit(status: RunStatus.ready);
+        if (_gpsSource != null) {
+          // Device mode: real acquisition gate — permission/service checks are
+          // async, so this returns before the next tick lands the READY.
+          _acquireDeviceGps();
+        } else {
+          _emit(status: RunStatus.ready);
+        }
       case RunStatus.running:
-        _advance();
+        if (_gpsSource == null) {
+          // Scenario timeline: the world advances on the clock.
+          _advance();
+        }
       case RunStatus.finishing:
         _complete();
       default:
         break;
     }
+  }
+
+  /// Device-mode acquisition: confirm the receiver is usable before READY.
+  ///
+  /// Surfaces a refusal as the recoverable ERROR state (M14) instead of
+  /// pretending a fix is coming.
+  Future<void> _acquireDeviceGps() async {
+    final source = _gpsSource;
+    if (source == null) {
+      return;
+    }
+    String? problem;
+    try {
+      problem = await source.ensureAvailable();
+    } catch (e) {
+      problem = 'GPS unavailable: $e';
+    }
+    if (_session == null) {
+      return; // dismissed while acquiring
+    }
+    if (problem != null) {
+      _emit(status: RunStatus.error);
+      return;
+    }
+    _emit(status: RunStatus.ready);
+  }
+
+  /// Subscribes the live receiver while the run is moving. No-op unless a
+  /// device [GpsSource] is wired in.
+  void _startDeviceStream() {
+    final source = _gpsSource;
+    if (source == null) {
+      return;
+    }
+    _gpsSub?.cancel();
+    _gpsSub = source.fixes().listen(_onDeviceFix, onError: (Object e) {
+      // A dropped receiver (service flipped off mid-run, dongle unplugged)
+      // must not take the recording down: keep the last emitted state.
+      debugPrint('GPS source stream failed: $e');
+    });
+  }
+
+  void _stopDeviceStream() {
+    _gpsSub?.cancel();
+    _gpsSub = null;
+  }
+
+  /// Real-GPS driver: one receiver fix advances the session.
+  void _onDeviceFix(GpsFix fix) {
+    if (state?.status != RunStatus.running) {
+      return; // paused / finishing ignore late fixes
+    }
+    final session = _requireSession();
+    final now = fix.timestamp;
+    final deltaSeconds = now.difference(_lastTick).inMilliseconds / 1000.0;
+    _lastTick = now;
+
+    final position = GeoPoint(
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+    );
+    final projected = _projectOnPolyline(session.geometry, position);
+
+    if (projected != null && session.route != null) {
+      // On a recognised route: the distance axis follows the geometry — the
+      // runner never loses ground to receiver jump, and a loop crossing must
+      // not rewind accumulated progress.
+      if (projected.distanceM > session.distanceM) {
+        session.distanceM = projected.distanceM;
+      }
+    } else {
+      // Free-running (no route, or off the geometry): accumulate the travelled
+      // ground distance between consecutive raw fixes.
+      if (_prevRawPosition != null) {
+        session.distanceM += math.max(
+          0,
+          haversineMeters(_prevRawPosition!, position),
+        );
+      }
+    }
+    _prevRawPosition = position;
+
+    if (deltaSeconds > 0) {
+      session.moving = session.moving + Elapsed.seconds(deltaSeconds);
+    }
+
+    _recordDeviceFix(fix);
+
+    GhostState? gap;
+    GeoPoint? ghostPosition;
+    if (session.ghost != null) {
+      gap = _gapAt(session, session.distanceM);
+      final ghostDistance = _ghostDistanceAt(session, session.moving.seconds);
+      ghostPosition = pointAlongPolyline(session.geometry, ghostDistance);
+    }
+
+    _emit(
+      status: RunStatus.running,
+      position: position,
+      gap: gap,
+      ghostPosition: ghostPosition,
+      pace: _fixPace(fix, projected, deltaSeconds),
+    );
+    _snapshotThrottled();
+  }
+
+  /// Pace for a device fix: the receiver's own speed when reported, else the
+  /// ground covered since the previous fix.
+  Speed _fixPace(GpsFix fix, ({double distanceM, GeoPoint point})? projected,
+      double deltaSeconds) {
+    final speed = fix.speedMetersPerSecond;
+    if (speed != null && speed > 0) {
+      return Speed.metersPerSecond(speed);
+    }
+    if (projected != null && deltaSeconds > 0) {
+      return Speed.metersPerSecond(projected.distanceM / deltaSeconds);
+    }
+    return Speed.metersPerSecond(_baseSpeedMps);
+  }
+
+  /// Returns the arc length (and snapped point) of the polyline position
+  /// nearest to [point], or `null` when the geometry can't map the position.
+  ({double distanceM, GeoPoint point})? _projectOnPolyline(
+    List<GeoPoint> geometry,
+    GeoPoint point,
+  ) {
+    if (geometry.length < 2) {
+      return null;
+    }
+    var bestDistance = double.infinity;
+    var bestArcMeters = 0.0;
+    var bestPoint = point;
+    var walked = 0.0;
+    for (var i = 1; i < geometry.length; i++) {
+      final a = geometry[i - 1];
+      final b = geometry[i];
+      final segment = math.max(1e-9, haversineMeters(a, b));
+      final closest = _closestOnSegment(a, b, point, segment);
+      final d = haversineMeters(point, closest);
+      if (d < bestDistance) {
+        bestDistance = d;
+        bestPoint = closest;
+        bestArcMeters = walked + math.max(0, haversineMeters(a, closest));
+      }
+      walked += segment;
+    }
+    return (distanceM: bestArcMeters, point: bestPoint);
+  }
+
+  /// Orthogonal projection of [p] onto segment [a]–[b] (equal-distance
+  /// latitude/longitude plane, fine for short local segments).
+  GeoPoint _closestOnSegment(
+    GeoPoint a,
+    GeoPoint b,
+    GeoPoint p,
+    double segmentLength,
+  ) {
+    final dx = b.latitude - a.latitude;
+    final dy = b.longitude - a.longitude;
+    final denom = dx * dx + dy * dy;
+    if (denom <= 0) {
+      return a;
+    }
+    final t = (((p.latitude - a.latitude) * dx +
+                (p.longitude - a.longitude) * dy) /
+            denom)
+        .clamp(0.0, 1.0);
+    return GeoPoint(
+      latitude: a.latitude + dx * t,
+      longitude: a.longitude + dy * t,
+    );
   }
 
   void _advance() {
@@ -281,6 +486,35 @@ class RecordingController extends Notifier<LiveRunState?> {
     );
   }
 
+  /// Retains one raw observation from the device receiver verbatim (M15
+  /// Phase 12): the fix keeps its own timestamp, accuracy, altitude, speed and
+  /// bearing. Only a missing bearing is derived from the previous fix — the
+  /// receiver usually reports none for the first sample.
+  void _recordDeviceFix(GpsFix fix) {
+    final session = _requireSession();
+    final previous = session.rawFixes.isEmpty ? null : session.rawFixes.last;
+    final bearing = fix.bearingDegrees ??
+        (previous == null
+            ? null
+            : _forwardBearing(
+                previous.latitude,
+                previous.longitude,
+                fix.latitude,
+                fix.longitude,
+              ));
+    session.rawFixes.add(
+      GpsFix(
+        timestamp: fix.timestamp,
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        accuracyMeters: fix.accuracyMeters,
+        altitudeMeters: fix.altitudeMeters,
+        speedMetersPerSecond: fix.speedMetersPerSecond,
+        bearingDegrees: bearing,
+      ),
+    );
+  }
+
   /// Initial forward azimuth in degrees 0..360 (WGS84 great-circle).
   double _forwardBearing(double lat1, double lon1, double lat2, double lon2) {
     final phi1 = _radians(lat1);
@@ -345,6 +579,8 @@ class RecordingController extends Notifier<LiveRunState?> {
       movingSeconds: snapshot.movingSeconds,
       loopLength: snapshot.loopMeters,
     );
+    _gpsSource = ref.read(deviceGpsProvider);
+    _prevRawPosition = null;
     try {
       await _prepareGhost();
     } catch (_) {
@@ -359,6 +595,9 @@ class RecordingController extends Notifier<LiveRunState?> {
     _emit(status: snapshot.status);
     _timer?.cancel();
     _timer = Timer.periodic(_tick, (_) => _onTick());
+    if (snapshot.status == RunStatus.running) {
+      _startDeviceStream();
+    }
   }
 
   /// Distance the PB ghost has covered by [liveSeconds] of live moving time.
@@ -429,6 +668,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     _emit(status: RunStatus.completed, gap: gap, hasUnsavedData: true);
     _timer?.cancel();
     _timer = null;
+    _stopDeviceStream();
     // Persist in the background; the flag clears when the save lands.
     _persistCompletedRun();
   }
@@ -479,9 +719,24 @@ class RecordingController extends Notifier<LiveRunState?> {
     }
   }
 
-  /// Reconstructs a deterministic GPS timeline from the recorded session:
-  /// points along the geometry every 25 m, timed to match the moving clock.
+  /// Reconstructs the recorded GPS timeline.
+  ///
+  /// Scenario runs resample the geometry every 25 m (deterministic demo data);
+  /// device runs persist the fixes the receiver actually produced, verbatim.
   List<TrackPoint> _synthesizeTrack(_RecSession session) {
+    if (_gpsSource != null) {
+      return [
+        for (final fix in session.rawFixes)
+          TrackPoint(
+            position: GeoPoint(
+              latitude: fix.latitude,
+              longitude: fix.longitude,
+            ),
+            altitudeMeters: fix.altitudeMeters,
+            timestamp: fix.timestamp,
+          ),
+      ];
+    }
     final track = <TrackPoint>[];
     if (session.geometry.length < 2 || session.distanceM <= 0) {
       return track;
@@ -547,6 +802,13 @@ class RecordingController extends Notifier<LiveRunState?> {
     final session = _requireSession();
     final route = session.route;
     if (route == null) {
+      if (_gpsSource != null) {
+        // Device mode, no route: a genuinely new line — no synthetic rug to
+        // race on. Distance accumulates from the real fixes instead.
+        session.geometry = const [];
+        session.loopLength = 0;
+        return;
+      }
       session.geometry = FakeEngineService.riverLoop;
       session.loopLength = polylineMeters(session.geometry);
       return;
@@ -582,6 +844,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     GeoPoint? position,
     GhostState? gap,
     GeoPoint? ghostPosition,
+    Speed? pace,
     bool hasUnsavedData = true,
   }) {
     final session = _requireSession();
@@ -591,7 +854,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       elapsed: session.moving,
       distance: Distance.meters(session.distanceM),
       currentPosition: position ?? state?.currentPosition,
-      pace: Speed.metersPerSecond(_baseSpeedMps),
+      pace: pace ?? Speed.metersPerSecond(_baseSpeedMps),
       ghostGap: keepGap,
       routeProgress: session.loopLength <= 0
           ? 0

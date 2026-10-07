@@ -55,6 +55,7 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
             _Section(
               title: 'GPS',
               rows: [
+                _row('Source', snapshot.gpsSourceDescription),
                 _row('Latitude', _coordinate(snapshot.latestFix?.latitude)),
                 _row('Longitude', _coordinate(snapshot.latestFix?.longitude)),
                 _row('Quality', snapshot.gpsQuality),

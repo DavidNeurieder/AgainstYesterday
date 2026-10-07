@@ -11,6 +11,18 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- The live run can now record the phone's **real GPS**. A build with
+  `USE_DEVICE_GPS=true` streams 1 Hz fixes from the geolocator plugin into the
+  recording controller, so position, distance, pace, the raw-fix buffer and the
+  persisted track all come from the receiver (Android `ACCESS_FINE_LOCATION`,
+  iOS `NSLocationWhenInUseUsageDescription`). On a recognised route the live
+  fix snaps onto that route's geometry for the ghost gap (never rewinding
+  accumulated distance); an unrecognised line accumulates ground distance as a
+  new route. Refused services/permission surface as the recoverable recording
+  ERROR state. Without the define the app keeps the deterministic demo
+  timeline — the host/test/E2E default — and `make build`, `make install` and
+  `make build-release` pass the define so installed phone artifacts record
+  real GPS. The diagnostics GPS section names the live source.
 - The engine is now auto-selected at build time instead of defaulting to the
   fake. A build whose native `libgps_engine.so` loads (the Android cdylibs
   bundled into the APK by `app/tool/build_rust_engine_android.sh`, or a host

@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-183 headless tests run with `fake_async`, an in-memory store, and the
+197 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -27,8 +27,10 @@ state machine (`test/state_machine_test.dart`), pause/resume timing
 failure injection (`test/failure_injection_test.dart`), lifecycle snapshots
 (`test/lifecycle_test.dart`), calendar-day date labels including DST
 boundaries (`test/route_library_test.dart`), the Rust FFI surface
-(`test/rust_engine_test.dart`, `test/rust_engine_widget_test.dart`) and the
-M15 diagnostics plus fixture export (`test/diagnostics_test.dart`,
+(`test/rust_engine_test.dart`, `test/rust_engine_widget_test.dart`), the
+device-GPS source (`test/device_gps_test.dart`), the controller's real-GPS
+mode (`test/recording_controller_device_test.dart`) and the M15 diagnostics
+plus fixture export (`test/diagnostics_test.dart`,
 `test/fixture_export_test.dart`).
 
 The two Rust FFI suites skip themselves, with an explanation, when the cdylib
@@ -103,13 +105,37 @@ keep a lean APK. The binaries are gitignored; rerun the script after a clean
 checkout or a `git clean -xfd`. Add `--dart-define=DEV_TOOLS=true` to any of
 these to expose the diagnostics entry point (M15).
 
+## Real phone GPS
+
+A plain `flutter run`/`flutter test` replays the deterministic demo timeline
+(no receiver needed — deterministic and cheap). A `USE_DEVICE_GPS=true` build
+records the phone's real fixes: the geolocator plugin streams 1 Hz positions
+into the recording controller, and position, distance, pace, the raw-fix
+buffer and the persisted track all come from the receiver.
+
+```bash
+flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
+```
+
+`make build`, `make install` and `make build-release` pass the define for you.
+On a recognised route the live fix snaps onto that route's geometry for the
+ghost gap (never rewinding accumulated distance); an unrecognised line
+accumulates ground distance as a new route. The Android manifest carries
+`ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`, and `Info.plist` declares
+`NSLocationWhenInUseUsageDescription`. Refusals (services off, permission
+denied) surface as the recoverable `RunStatus.error` (M14). Host tests never
+touch the plugin: they either keep the demo timeline or inject a
+deterministic `GpsSource` through `deviceGpsProvider`. The diagnostics GPS
+section names the active source.
+
 ## Layout
 
 - `lib/app/` — root widget, router, shell tabs, dependency injection.
 - `lib/features/` — feature folders: `home`, `recording`, `result`, `routes`,
   `activity` (each `presentation/` + `application/`).
 - `lib/core/` — theme and units.
-- `lib/engine/` — `EngineService` facade, fake + Rust FFI implementations.
+- `lib/engine/` — `EngineService` facade, fake + Rust FFI implementations,
+  and the device `GpsSource`/geolocator bridge.
 - `lib/persistence/` — stores and repositories.
 - `lib/widgets/` — shared components (`performance_gap`, `route_map`,
   `route_silhouette`).

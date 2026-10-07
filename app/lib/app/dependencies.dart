@@ -20,6 +20,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../engine/device_gps_source.dart';
 import '../engine/engine_service.dart';
 import '../engine/fake_engine.dart';
 import '../engine/rust_engine_service.dart';
@@ -55,3 +56,16 @@ final engineServiceProvider = Provider<EngineService>((_) {
     return FakeEngineService();
   }
 });
+
+/// Raw `USE_DEVICE_GPS` — `'true'` reads the live run from the phone receiver
+/// (real GPS); anything else replays the deterministic demo timeline.
+const String _useDeviceGps = String.fromEnvironment('USE_DEVICE_GPS');
+
+/// The live GPS source, or `null` to keep the deterministic scenario timeline.
+///
+/// `USE_DEVICE_GPS=true` installs the real [DeviceGpsSource]; host tests and
+/// the E2E run without the define and override this provider directly when
+/// they want to exercise the device path with a canned fix stream.
+final deviceGpsProvider = Provider<GpsSource?>(
+  (_) => _useDeviceGps == 'true' ? const DeviceGpsSource() : null,
+);
