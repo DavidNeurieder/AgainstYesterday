@@ -249,10 +249,19 @@ void main() {
           child: const AgainstYesterdayApp(),
         );
 
-    // First "process": get to READY and start recording.
+    // "First process": seed a route (a fresh install with no catalog has no
+    // race hero — RECORD ROUTE records a fresh route, it does not resume), get
+    // to READY and start recording.
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('RECORD ROUTE'));
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp)),
+    );
+    await container
+        .read(routeRepositoryProvider.notifier)
+        .saveRoute(riverLoopRoute);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('RACE YOUR BEST'));
     await tester.pumpAndSettle();
     await waitForText(tester, 'READY TO RUN');
     await tester.tap(find.text('START'));
@@ -281,10 +290,10 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    // The snapshot is still there, so Home's record entry resumes it — the
-    // live screen (not the pre-run/READY screen) must appear, at distance
-    // greater-or-equal to where the app died.
-    await tester.tap(find.text('RECORD ROUTE'));
+    // The snapshot is still there (and the seeded route still carries a PB ghost),
+    // so Home's hero resumes it — the live screen (not the pre-run/READY
+    // screen) must appear, at distance greater-or-equal to where the app died.
+    await tester.tap(find.text('RACE YOUR BEST'));
     await tester.pumpAndSettle();
     await waitForText(tester, 'PACE');
     expect(find.text('TIME'), findsOneWidget);

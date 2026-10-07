@@ -41,7 +41,7 @@ class HomeScreen extends ConsumerWidget {
             if (routes.isEmpty)
               EmptyHomeState(onRecord: () {
                 HapticFeedback.mediumImpact();
-                context.go('/record');
+                context.go('/record-route');
               })
             else ...[
               const SectionHeader(title: 'READY TO RACE'),

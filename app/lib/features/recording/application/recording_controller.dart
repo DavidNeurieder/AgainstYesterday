@@ -30,6 +30,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/dependencies.dart';
 import '../../../core/units.dart';
 import '../../../engine/device_gps_source.dart';
+import '../../../engine/fake_engine.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 
@@ -856,10 +857,18 @@ class RecordingController extends Notifier<LiveRunState?> {
     if (route == null) {
       // No route in any mode: a genuinely new line — no synthetic rug to race
       // on. Distance accumulates from the fixes (device) or the scenario
-      // clock (host/E2E) without a geometry to walk along. A loop length
+      // clock (host/E2E) without a route to walk along. A loop length
       // recovered from a resume snapshot is preserved so a restarted run
       // keeps clamping to its recorded loop; fresh free runs stay unbounded.
-      session.geometry = const [];
+      //
+      // Scenario timeline only: a route-less session still walks the demo
+      // loop so position and fixes exist (M18) — that is how a fresh install
+      // records River Loop in the deterministic demo instead of standing on
+      // the start line with no data to save. A real receiver (device mode)
+      // supplies its own line, so such sessions keep no geometry.
+      session.geometry = _gpsSource == null
+          ? FakeEngineService.riverLoop
+          : const [];
       return;
     }
     session.geometry = route.geometry;

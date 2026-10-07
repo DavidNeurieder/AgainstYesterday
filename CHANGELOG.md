@@ -11,6 +11,15 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- A record-a-route flow (§8) reaches the shell from Home's empty state and
+  the Routes tab's permanent "Record Route" action: a pushed full-screen flow
+  that gates on GPS, records distance + time (no ghost — simpler than a
+  race), then asks for a name and saves the route with this first attempt as
+  its baseline PB. The finished activity is tagged to the new route so it
+  appears in History and the route's attempt list (M18). The deterministic
+  scenario timeline now walks the demo loop during route-less recordings so
+  a route can actually be recorded on a fresh demo install; device-GPS
+  recordings keep their own receiver timeline.
 - Home is reworked around the race loop (§4–5): with a route catalog it shows
   a "READY TO RACE" hero — the featured route's name, distance, PB and a big
   "RACE YOUR BEST" button into the pre-run — above a truncated "Recent"

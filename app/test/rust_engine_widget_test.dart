@@ -8,9 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/core/theme/app_theme.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:against_yesterday/app/router.dart';
 import 'package:against_yesterday/engine/rust_engine_service.dart';
 import 'package:against_yesterday/widgets/route_map.dart';
+
+import 'test_catalog.dart';
 
 /// M9 end-to-end check: the *record flow UI* against the real Rust engine
 /// over FFI — the "swap the implementation, keep the UI unchanged" promise.
@@ -48,6 +51,12 @@ void main() {
       ProviderScope(
         overrides: [
           engineServiceProvider.overrideWithValue(engine),
+          // Seed a route so the race flow has a PB ghost for the Rust engine
+          // to prepare: the shipped app starts with an empty catalog, and an
+          // empty Home leads into the record-route flow (M18), not a race.
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: [riverLoopRoute]),
+          ),
         ],
         child: MaterialApp.router(
           debugShowCheckedModeBanner: false,
@@ -58,7 +67,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RECORD ROUTE'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));

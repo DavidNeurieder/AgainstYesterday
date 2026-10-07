@@ -14,6 +14,7 @@ import '../features/dev/presentation/diagnostics_screen.dart';
 import '../features/history/presentation/history_screen.dart';
 import '../features/home/presentation/home_screen.dart';
 import '../features/recording/presentation/record_flow_screen.dart';
+import '../features/recording/presentation/route_record_flow_screen.dart';
 import '../features/result/presentation/result_screen.dart';
 import '../features/routes/presentation/route_detail_screen.dart';
 import '../features/routes/presentation/routes_screen.dart';
@@ -61,6 +62,11 @@ GoRouter buildRouter() {
       GoRoute(
         path: '/record',
         builder: (context, state) => const RecordFlowScreen(),
+      ),
+      // Record-a-route (M18): prep → recording → name-and-save → saved.
+      GoRoute(
+        path: '/record-route',
+        builder: (context, state) => const RouteRecordFlowScreen(),
       ),
       GoRoute(
         path: '/record/result',

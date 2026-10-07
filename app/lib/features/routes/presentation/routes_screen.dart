@@ -34,10 +34,30 @@ class RoutesScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
+          // Record-a-route entry (§6): a brand-new course can be captured
+          // whenever, catalog or not.
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            child: OutlinedButton.icon(
+              onPressed: () {
+                HapticFeedback.selectionClick();
+                context.go('/record-route');
+              },
+              icon: const Icon(Icons.add_road),
+              label: const Text('Record Route'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.you,
+                minimumSize: const Size.fromHeight(56),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          ),
           if (routes.isEmpty)
             const EmptyState(
               icon: Icons.route,
-              message: 'No routes yet. Finish a run to record one.',
+              message: 'No routes yet. Record your first route.',
             ),
           for (final route in routes) ...[
             _RouteCourseCard(
