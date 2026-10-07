@@ -11,6 +11,12 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Races are now route-bound (§9–§11): Home's hero, every route card's RACE
+  button, and a route detail's RACE YOUR BEST open that route's pre-race
+  (named screen, GPS-ready gate, big START), and pressing START plays a
+  full-screen 3-2-1-GO countdown before the timer starts (§11, ~2.6 s total,
+  large animated number, scale/fade per step). Plainer `/record` entries
+  still start on the button press (M19).
 - A record-a-route flow (§8) reaches the shell from Home's empty state and
   the Routes tab's permanent "Record Route" action: a pushed full-screen flow
   that gates on GPS, records distance + time (no ghost — simpler than a

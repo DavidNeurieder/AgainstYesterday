@@ -46,6 +46,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   }
 
+  /// Plays the 3-2-1-GO race countdown (§11) through to the live phase.
+  Future<void> countdown(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
   bool startEnabled(WidgetTester tester) =>
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'START')).enabled;
 
@@ -84,7 +93,7 @@ void main() {
     await waitReady(tester);
 
     await tester.tap(find.text('START'));
-    await tester.pump();
+    await countdown(tester);
     expect(find.text('PAUSE'), findsOneWidget);
     expect(find.text('FINISH'), findsOneWidget);
     expect(find.text('RESUME'), findsNothing);
@@ -105,7 +114,7 @@ void main() {
     await waitReady(tester);
 
     await tester.tap(find.text('START'));
-    await tester.pump();
+    await countdown(tester);
     await tester.pump(const Duration(seconds: 2));
     await tester.tap(find.text('FINISH'));
     await tester.pump(); // AnimatedSwitcher starts the crossfade.
@@ -126,7 +135,7 @@ void main() {
     await waitReady(tester);
 
     await tester.tap(find.text('START'));
-    await tester.pump();
+    await countdown(tester);
     // Two quick pause→resume cycles, one pump apart.
     await tester.tap(find.text('PAUSE'));
     await tester.pump();

@@ -287,10 +287,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('START'), findsOneWidget);
 
-    // Start a run and let it accumulate a little distance (under the 5 s
-    // snapshot throttle, so no snapshot exists yet).
+    // Start a run: the 3-2-1-GO countdown (§11), then let it accumulate a
+    // little distance (under the 5 s snapshot throttle, so no snapshot exists
+    // yet).
     await tester.tap(find.text('START'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(seconds: 3));
     expect(find.text('PAUSE'), findsOneWidget);
     expect(store.read('run_snapshot'), isNull);

@@ -29,6 +29,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   }
 
+  /// Plays the 3-2-1-GO race countdown (§11) through to the live phase.
+  Future<void> countdown(WidgetTester tester) async {
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
+  }
+
   testWidgets('pre-run reaches READY TO RUN with GPS', (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
@@ -40,7 +49,7 @@ void main() {
 
     expect(find.text('READY TO RUN'), findsOneWidget);
     expect(find.text('GPS READY'), findsOneWidget);
-    expect(find.text('River Loop'), findsOneWidget);
+    expect(find.text('River Loop'), findsWidgets); // AppBar title + route card
     expect(find.text('START'), findsOneWidget);
   });
 
@@ -54,7 +63,7 @@ void main() {
     await waitReady(tester);
 
     await tester.tap(find.text('START'));
-    await tester.pump();
+    await countdown(tester);
     expect(find.text('PAUSE'), findsOneWidget);
     expect(find.text('FINISH'), findsOneWidget);
 

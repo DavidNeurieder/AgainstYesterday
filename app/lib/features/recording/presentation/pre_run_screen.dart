@@ -4,7 +4,9 @@
 /// Pre-run experience (§10).
 ///
 /// Primary job: get the runner READY TO RUN. Recording only starts on the
-/// explicit [START] press; route selection stays optional (§11).
+/// explicit [START] press; route selection stays optional (§11). When the flow
+/// wants a countdown before the timer starts (M19 races), it injects an
+/// [onStart] hook that plays 3-2-1-GO instead of calling `beginRun()` directly.
 library;
 
 import 'package:flutter/material.dart' hide Route;
@@ -17,10 +19,22 @@ import '../../../engine/models.dart';
 import '../application/recording_controller.dart';
 
 class PreRunScreen extends ConsumerWidget {
-  const PreRunScreen({super.key, required this.state});
+  const PreRunScreen({
+    super.key,
+    required this.state,
+    this.title = 'New run',
+    this.onStart,
+  });
 
   /// May be null only while the session is booting.
   final LiveRunState? state;
+
+  /// AppBar title — the route name for a race against a specific route.
+  final String title;
+
+  /// When set, the START press plays the countdown instead of recording the
+  /// moment it is tapped (the flow drives `beginRun()` at GO).
+  final VoidCallback? onStart;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,7 +45,7 @@ class PreRunScreen extends ConsumerWidget {
     final ready = status == RunStatus.ready;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('New run')),
+      appBar: AppBar(title: Text(title)),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -67,7 +81,11 @@ class PreRunScreen extends ConsumerWidget {
                               ? () {
                                   // M14: a tactile "go" on START.
                                   HapticFeedback.mediumImpact();
-                                  controller.beginRun();
+                                  if (onStart case final start?) {
+                                    start();
+                                  } else {
+                                    controller.beginRun();
+                                  }
                                 }
                               : null,
                           style: FilledButton.styleFrom(

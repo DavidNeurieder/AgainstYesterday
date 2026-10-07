@@ -25,13 +25,14 @@ import '../test/test_catalog.dart';
 
 /// The distance value currently shown on the live screen, in meters.
 ///
-/// `Distance.format()` renders "412 m" below one kilometer and "1.05 km"
-/// above it, so the unit has to be honoured — reading only the first digits
-/// would turn "1.05 km" into 1 m and fail comparisons that actually passed.
+/// Returns 0 with the live screen not yet mounted (e.g. still on the 3-2-1-GO
+/// countdown), so polling probes just keep waiting.
 int _displayedMeters(WidgetTester tester) {
-  final text = tester
-      .widget<Text>(find.byKey(const ValueKey('live-distance')))
-      .data!;
+  final finder = find.byKey(const ValueKey('live-distance'));
+  if (!tester.any(finder)) {
+    return 0;
+  }
+  final text = tester.widget<Text>(finder).data!;
   final match = RegExp(r'^(\d+(?:\.\d+)?)\s*(km|m)$').firstMatch(text.trim());
   if (match == null) {
     return 0;
@@ -118,10 +119,10 @@ void main() {
     expect(find.text('GPS READY'), findsOneWidget);
     expect(find.textContaining('Personal Best'), findsOneWidget);
 
-    // START → live screen with the hero metrics.
+    // START → the 3-2-1-GO countdown (§11) runs on the wall clock, so poll
+    // for the live screen rather than assuming it after pumpAndSettle.
     await tester.tap(find.text('START'));
-    await tester.pumpAndSettle();
-    expect(find.text('PACE'), findsOneWidget);
+    await waitForText(tester, 'PACE');
     expect(find.text('TIME'), findsOneWidget);
     expect(find.text('FINISH'), findsOneWidget);
 

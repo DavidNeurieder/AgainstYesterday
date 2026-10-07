@@ -70,6 +70,10 @@ class RoutesScreen extends ConsumerWidget {
                 HapticFeedback.lightImpact();
                 context.push('/route/${route.id}');
               },
+              onRace: () {
+                HapticFeedback.mediumImpact();
+                context.go('/race/${route.id}');
+              },
             ),
             const SizedBox(height: AppSpacing.sm),
           ],
@@ -87,11 +91,13 @@ class _RouteCourseCard extends StatelessWidget {
     required this.route,
     required this.stats,
     required this.onTap,
+    required this.onRace,
   });
 
   final Route route;
   final RouteStats stats;
   final VoidCallback onTap;
+  final VoidCallback onRace;
 
   @override
   Widget build(BuildContext context) {
@@ -102,45 +108,65 @@ class _RouteCourseCard extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(
-                width: 56,
-                height: 44,
-                child: Center(
-                  child: RouteSilhouette(geometry: route.geometry),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 56,
+                    height: 44,
+                    child: Center(
+                      child: RouteSilhouette(geometry: route.geometry),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(route.name, style: textTheme.titleMedium),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${route.distance.format()} · '
+                          '${stats.runs} ${stats.runs == 1 ? 'run' : 'runs'}',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  if (stats.pb case final pb?)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('PB', style: textTheme.labelSmall),
+                        Text(
+                          pb.format(),
+                          style: textTheme.titleSmall
+                              ?.copyWith(color: AppColors.pb),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              // M19: every course card races straight into its own pre-race.
+              FilledButton.icon(
+                onPressed: onRace,
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('RACE'),
+                style: FilledButton.styleFrom(
+                  foregroundColor: AppColors.background,
+                  backgroundColor: AppColors.you,
+                  minimumSize: const Size.fromHeight(40),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(route.name, style: textTheme.titleMedium),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${route.distance.format()} · '
-                      '${stats.runs} ${stats.runs == 1 ? 'run' : 'runs'}',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              if (stats.pb case final pb?)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('PB', style: textTheme.labelSmall),
-                    Text(
-                      pb.format(),
-                      style:
-                          textTheme.titleSmall?.copyWith(color: AppColors.pb),
-                    ),
-                  ],
-                ),
             ],
           ),
         ),

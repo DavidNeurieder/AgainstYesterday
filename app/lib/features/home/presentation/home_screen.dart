@@ -50,7 +50,7 @@ class HomeScreen extends ConsumerWidget {
                 route: routes.first,
                 onRace: () {
                   HapticFeedback.mediumImpact();
-                  context.go('/record');
+                  context.go('/race/${routes.first.id}');
                 },
               ),
             ],

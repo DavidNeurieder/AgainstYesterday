@@ -63,6 +63,13 @@ GoRouter buildRouter() {
         path: '/record',
         builder: (context, state) => const RecordFlowScreen(),
       ),
+      // Race a specific route (M19): the same flow bound to one route, with
+      // that route's pre-race and the 3-2-1-GO countdown before the timer.
+      GoRoute(
+        path: '/race/:id',
+        builder: (context, state) =>
+            RecordFlowScreen(routeId: state.pathParameters['id']),
+      ),
       // Record-a-route (M18): prep → recording → name-and-save → saved.
       GoRoute(
         path: '/record-route',

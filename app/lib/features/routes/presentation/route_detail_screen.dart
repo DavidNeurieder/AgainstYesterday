@@ -10,12 +10,14 @@ library;
 
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Route;
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/app_buttons.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
@@ -65,6 +67,16 @@ class RouteDetailScreen extends ConsumerWidget {
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: AppColors.textSecondary,
                 ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          // M19: the detail page races this exact route, never another one.
+          PrimaryButton(
+            label: 'RACE YOUR BEST',
+            icon: Icons.play_arrow_rounded,
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              context.go('/race/${route.id}');
+            },
           ),
           const SizedBox(height: AppSpacing.lg),
           _StatRow(label: 'Personal Best', value: stats.pb),

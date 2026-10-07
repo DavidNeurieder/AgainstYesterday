@@ -75,7 +75,12 @@ void main() {
 
     expect(find.text('READY TO RUN'), findsOneWidget);
     await tester.tap(find.text('START'));
+    // The 3-2-1-GO race countdown (§11) reaches the live phase.
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
 
     // Live phase with the map and its markers.
     expect(find.text('PAUSE'), findsOneWidget);
