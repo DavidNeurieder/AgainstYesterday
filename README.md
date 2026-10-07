@@ -43,6 +43,11 @@ The app consumes the engine only through the `EngineService` abstraction, so
 it never talks to raw FFI. Swap `FakeEngineService` for `RustEngineService` at
 build time without touching UI code.
 
+## Landing page
+
+A static landing page lives in [`docs/`](docs/) and is published at
+<https://davidneurieder.github.io/AgainstYesterday/>.
+
 ## Getting started
 
 ```bash

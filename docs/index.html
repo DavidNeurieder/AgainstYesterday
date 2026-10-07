@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Against Yesterday — Every route is a race with your own best</title>
+  <meta name="description" content="Run or ride against a ghost of your personal best — live AHEAD/BEHIND gap, splits, a self-contained route map, and full history, entirely on your phone. Flutter client, Rust GPS engine, no cloud and no internet permission.">
+  <link rel="canonical" href="https://davidneurieder.github.io/AgainstYesterday/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Against Yesterday">
+  <meta property="og:title" content="Against Yesterday — Every route is a race with your own best">
+  <meta property="og:description" content="Race a ghost of your personal best. Live gap, splits, route library and history — on your phone, with a Rust engine that never sees a network.">
+  <meta property="og:url" content="https://davidneurieder.github.io/AgainstYesterday/">
+  <meta property="og:image" content="https://davidneurieder.github.io/AgainstYesterday/og-banner.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Against Yesterday — Every route is a race with your own best">
+  <meta name="twitter:description" content="Race a ghost of your personal best. Live gap, splits, route library and history — on your phone, no internet permission.">
+  <meta name="twitter:image" content="https://davidneurieder.github.io/AgainstYesterday/og-banner.png">
+  <link rel="stylesheet" href="styles.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Against Yesterday",
+    "operatingSystem": "Android, iOS",
+    "applicationCategory": "HealthAndFitnessApplication",
+    "description": "A GPS running and cycling app where every route is a race against your own personal best: you run against a ghost of your PB, with a live AHEAD/BEHIND gap, splits, and a route library of every attempt — entirely on-device.",
+    "url": "https://davidneurieder.github.io/AgainstYesterday/",
+    "softwareVersion": "1.0.0",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "author": { "@type": "Person", "name": "David Neurieder" }
+  }
+  </script>
+</head>
+<body>
+  <header class="hero">
+    <div class="container">
+      <img class="app-icon" src="icon.png" alt="Against Yesterday app icon" width="104" height="104">
+      <span class="eyebrow">GPS running &amp; cycling · On-device</span>
+      <h1>Against Yesterday</h1>
+      <p class="lead">Every route is a race with your own best. Across Yesterday you run a live &ldquo;ghost&rdquo; of your personal best — and the gap, AHEAD or BEHIND, is the metric that carries every mile.</p>
+      <p class="lead">&ldquo;BEHIND by 5 seconds&rdquo; &middot; &ldquo;AHEAD of yesterday&rdquo; &middot; &ldquo;NEW PERSONAL BEST&rdquo;</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#get">Build from source</a>
+        <a class="btn btn-ghost" href="https://github.com/DavidNeurieder/AgainstYesterday">View source</a>
+      </div>
+      <p class="trust">No cloud · No account · No telemetry · No internet permission</p>
+    </div>
+  </header>
+
+  <main>
+    <section class="section" id="features">
+      <div class="container">
+        <h2>A race, not a logbook</h2>
+        <div class="grid">
+          <div class="card">
+            <div class="icon">🏃</div>
+            <h3>Race your personal best</h3>
+            <p>A recording state machine drives every run — GPS acquiring &rarr; ready &rarr; running &harr; paused &rarr; finishing &rarr; completed — with live distance, pace, elapsed time and the PB gap.</p>
+          </div>
+          <div class="card">
+            <div class="icon">👻</div>
+            <h3>Ghost racing</h3>
+            <p>Every route carries a PB. Run against its ghost live on the map, then finish to see exactly where you were faster or slower — and bank a new time to beat.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🗺️</div>
+            <h3>Self-contained route map</h3>
+            <p>A custom painter with no map SDK: the route, the travelled portion, the YOU and ghost markers, and a follow camera you can recentre at any time.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🏆</div>
+            <h3>Route library &amp; results</h3>
+            <p>Course cards with PB / average / last stats, a performance chart of every attempt, NEW PERSONAL BEST detection, a splits breakdown, and a full history.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🧭</div>
+            <h3>Rust GPS engine</h3>
+            <p>gps-engine, called over FFI, turns raw fixes into track, route and ghost — filtering jitter, dropouts and jumps before any geometry is drawn.</p>
+          </div>
+          <div class="card">
+            <div class="icon">🧰</div>
+            <h3>Developer diagnostics</h3>
+            <p>A gateable readout of the live engine, GPS fix, track, route, ghost and persistence state — plus one-tap export of the current run as raw GPS for regression replay.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-tint" id="how">
+      <div class="container">
+        <h2>How it works on your phone</h2>
+        <div class="steps">
+          <div class="step">
+            <span class="num">1</span>
+            <div>
+              <h3>Raw GPS in</h3>
+              <p>Fixes are taken straight from the receiver before any processing and persisted with the activity, so a completed run always keeps its ground truth.</p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="num">2</span>
+            <div>
+              <h3>The Rust engine</h3>
+              <p>gps-engine filters noise, dropouts and jumps, then builds the track, the route and the PB ghost — referenced by wall-clock time and recovered across process death, so an interrupted run resumes where it left off.</p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="num">3</span>
+            <div>
+              <h3>The race</h3>
+              <p>You against the ghost: AHEAD or BEHIND on every repaint, splits at the finish, and the time banked as the next PB to beat.</p>
+            </div>
+          </div>
+        </div>
+        <p class="privacy-note">Nothing leaves the device. The app declares no internet permission — there is no cloud, no account, no telemetry, and no path for your routes to travel on.</p>
+      </div>
+    </section>
+
+    <section class="section" id="get">
+      <div class="container">
+        <h2>Build from source</h2>
+        <p class="center">Free and open source (AGPL-3.0-or-later). Flutter client, Rust engine — fully reproducible from the repository.</p>
+        <pre><code>cd app
+flutter pub get           # Flutter client (deterministic fake engine by default)
+flutter run
+cargo test                # Rust engine: tests + raw-GPS fixture replays</code></pre>
+        <p class="center">To run against the real Rust engine over FFI:</p>
+        <pre><code>cargo build --release
+cd app && flutter run --dart-define=USE_RUST_ENGINE=true</code></pre>
+        <p>Requires the Flutter SDK (Dart &ge; 3.11), Rust 1.85+, and the Android NDK for the native build of the engine (API 24).</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>Against Yesterday — version 1.0.0. AGPL-3.0-or-later — <a href="https://github.com/DavidNeurieder/AgainstYesterday/blob/main/LICENSE">License</a> · <a href="https://github.com/DavidNeurieder/AgainstYesterday">Source</a></p>
+    </div>
+  </footer>
+</body>
+</html>
