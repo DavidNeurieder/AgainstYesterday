@@ -40,8 +40,9 @@ Flutter app  →  EngineService (facade)  →  Rust engine (FFI)
 | `Cargo.toml`             | Cargo workspace root for the Rust crate                 |
 
 The app consumes the engine only through the `EngineService` abstraction, so
-it never talks to raw FFI. Swap `FakeEngineService` for `RustEngineService` at
-build time without touching UI code.
+it never talks to raw FFI — the native Rust engine is selected automatically
+when its library is present, and the fake is the fallback, without touching
+UI code.
 
 ## Landing page
 
@@ -69,33 +70,33 @@ suite on a headless Android emulator (`flutter test integration_test`).
 
 ## Using the real Rust engine
 
-The app defaults to the deterministic `FakeEngineService` (also used in
-tests). To build against the native FFI engine instead:
+The engine is selected at build time from `USE_RUST_ENGINE`:
 
-```bash
-flutter run --dart-define=USE_RUST_ENGINE=true
-flutter run --dart-define=USE_RUST_ENGINE=true \
-            --dart-define=GPS_ENGINE_LIB=/path/to/libgps_engine.so
-```
+- **not set (default)** — auto: the native Rust engine is used when its
+  library loads, otherwise the deterministic `FakeEngineService` (the
+  dev/demo fallback, also used in tests);
+- `=true` — require the Rust engine (a missing library becomes a startup
+  error);
+- `=false` — always the fake.
 
-The library is built as a `cdylib` by the `gps-engine` crate for this purpose.
-`GPS_ENGINE_LIB` is optional — when empty the app opens the bare name
-`libgps_engine.so`, so a library bundled inside the app is found by the
-platform loader.
-
-On Android the `cdylib` has to be cross-compiled per ABI and packaged as a
-native library. `app/tool/build_rust_engine_android.sh` builds it with the NDK
-clang linker (API 24) and installs it into
-`app/android/app/src/main/jniLibs/<abi>/`, which is where Gradle picks it up:
+The Android cdylib is cross-compiled per ABI and packaged as a native library
+by `app/tool/build_rust_engine_android.sh` (NDK clang linker, API 24), which
+installs it into `app/android/app/src/main/jniLibs/<abi>/` — where Gradle
+picks it up and the bare name `libgps_engine.so` resolves on the device. That
+is also why `make install` and `make build-release` run it first:
 
 ```bash
 ./app/tool/build_rust_engine_android.sh            # arm64-v8a + x86_64
-cd app && flutter build apk --release --dart-define=USE_RUST_ENGINE=true
+cd app && flutter build apk --release
 ```
 
-Those binaries are gitignored build artifacts; rerun the script after a fresh
-checkout. Add `--dart-define=DEV_TOOLS=true` to any of these builds to expose
-the M15 diagnostics entry point.
+The binaries are gitignored build artifacts; rerun the script after a fresh
+checkout. To force the fake (demonstration/test builds), use
+`--dart-define=USE_RUST_ENGINE=false`. On host workloads point the build at a
+library with `--dart-define=GPS_ENGINE_LIB=/path/to/libgps_engine.so`; when
+empty the app opens the bare name `libgps_engine.so`. Add
+`--dart-define=DEV_TOOLS=true` to any of these builds to expose the M15
+diagnostics entry point.
 
 ## Developer diagnostics
 

@@ -102,13 +102,15 @@ void main() {
 
     expect(find.text('Diagnostics'), findsOneWidget);
     expect(find.text('ENGINE'), findsOneWidget);
-    // The readout must name the engine actually wired in, whichever it is.
+    // The readout must name the engine actually wired in, whichever it is —
+    // the native Rust engine when its library loaded, else the deterministic
+    // demo fallback.
     final engine = ProviderScope.containerOf(
       tester.element(find.byType(DiagnosticsScreen)),
     ).read(engineServiceProvider);
     expect(
       engine.engineDescription,
-      useRustEngine ? startsWith('rust v') : 'fake (deterministic demo)',
+      anyOf('fake (deterministic demo)', startsWith('rust v')),
     );
     expect(find.text(engine.engineDescription), findsOneWidget);
   });

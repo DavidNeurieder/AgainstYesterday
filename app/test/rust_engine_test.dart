@@ -3,7 +3,9 @@
 
 import 'dart:io';
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
@@ -177,6 +179,36 @@ void main() {
       expect(track.outputPoints, greaterThan(0));
       expect(track.originalDistance.meters, closeTo(
           polylineMeters(FakeEngineService.riverLoop), 40));
+    });
+  });
+
+  group('auto-selection (§6)', () {
+    const envPath = String.fromEnvironment('GPS_ENGINE_LIB');
+
+    test('uses the Rust engine when its library is available', () {
+      if (envPath.isEmpty || !FileSystemEntity.isFileSync(envPath)) {
+        // The load branch only exists at compile time when a library is
+        // pointed at or bundled, so exercising it needs GPS_ENGINE_LIB.
+        markTestSkipped('GPS_ENGINE_LIB not set to an existing cdylib');
+        return;
+      }
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final engine = container.read(engineServiceProvider);
+      expect(engine.engineDescription, startsWith('rust v'));
+    });
+
+    test('falls back to the fake when no library loads', () {
+      if (envPath.isNotEmpty) {
+        // With a library explicitly provided the provider is guaranteed to
+        // load it, so the fallback branch is not the compiled-in behavior.
+        markTestSkipped('GPS_ENGINE_LIB is set; the fallback is not exercised');
+        return;
+      }
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final engine = container.read(engineServiceProvider);
+      expect(engine.engineDescription, 'fake (deterministic demo)');
     });
   });
 }

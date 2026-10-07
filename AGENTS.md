@@ -26,13 +26,18 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
 
 ## Engine notes
 
-- The app talks to the engine only through the `EngineService` abstraction;
-  builds default to the deterministic `FakeEngineService`.
-- `USE_RUST_ENGINE` and `REQUIRE_RUST_ENGINE` are compile-time `--dart-define`
-  flags, not environment variables.
+- The app talks to the engine only through the `EngineService` abstraction.
+  The engine is auto-selected at build time: the native Rust engine is used
+  when its library loads, otherwise the deterministic `FakeEngineService`
+  is the fallback.
+- `USE_RUST_ENGINE`, `REQUIRE_RUST_ENGINE`, `GPS_ENGINE_LIB` and `DEV_TOOLS`
+  are compile-time `--dart-define` flags, not environment variables.
+  `USE_RUST_ENGINE` is tri-state: unset (auto), `true` (require, missing
+  library is a startup error), `false` (always the fake).
 - Android cdylibs land in `app/android/app/src/main/jniLibs/<abi>/` via
   `app/tool/build_rust_engine_android.sh`; they are gitignored, so rerun the
-  script after a clean checkout before building with `USE_RUST_ENGINE=true`.
+  script after a clean checkout. `make install` and `make build-release` run
+  it for you so the device artifact carries the real engine.
 
 ## Licensing
 

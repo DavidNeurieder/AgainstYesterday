@@ -11,6 +11,17 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- The engine is now auto-selected at build time instead of defaulting to the
+  fake. A build whose native `libgps_engine.so` loads (the Android cdylibs
+  bundled into the APK by `app/tool/build_rust_engine_android.sh`, or a host
+  library pointed at with `GPS_ENGINE_LIB`) runs the real `gps-engine`
+  pipeline; a build without it falls back to the deterministic
+  `FakeEngineService` demo. `USE_RUST_ENGINE` stays meaningful as a tri-state
+  flag — unset means auto, `true` requires the Rust engine (a missing library
+  becomes a startup error, as CI uses for the FFI suites), `false` always uses
+  the fake. `make install` and `make build-release` now run the Android
+  cross-compile first, so a device artifact carries the real engine by
+  default.
 - The project is now called **Against Yesterday** (previously `gps_app`). The
   repository and every user-visible string — Android launcher label, Flutter
   and Linux GTK window titles, iOS bundle name — carry the new name. The

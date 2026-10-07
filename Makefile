@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Flutter commands run in app/; Cargo commands use the workspace at the repo
-# root. The Rust FFI suites (test-rust-engine) need the host cdylib, and the
-# on-device tests against the real engine (connected-test-engine) need the
-# Android cdylibs installed under app/android/app/src/main/jniLibs — which
-# engine-android produces and both connected-test-engine and full-test build
-# for you.
+# root. The Rust FFI suites (test-rust-engine) need the host cdylib. The app
+# auto-selects the real engine when its native library is present, so
+# engine-android (the Android cdylibs under app/android/app/src/main/jniLibs)
+# is a prerequisite of the targets that produce a device artifact:
+# build-release and install.
 
 .PHONY: build build-release install run test test-rust-engine lint tz-test \
         connected-test connected-test-engine engine-build engine-test \
@@ -15,15 +15,15 @@
 build:
 	cd app && flutter build apk --debug
 
-build-release:
+build-release: engine-android
 	cd app && flutter build apk --release
 
 run:
 	cd app && flutter run
 
-# Builds the debug APK and sideloads it into the connected device/emulator.
-# The debug build ships the deterministic fake engine by default.
-install: build
+# Builds the debug APK (with Android cdylibs bundled, so the app auto-selects
+# the native Rust engine) and sideloads it into the connected device/emulator.
+install: engine-android build
 	adb install -r app/build/app/outputs/flutter-apk/app-debug.apk
 
 test:

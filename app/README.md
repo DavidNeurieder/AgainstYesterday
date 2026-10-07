@@ -71,20 +71,22 @@ A leading non-flag argument names the AVD; anything else is forwarded to
 
 ## Real engine
 
-By default the app uses the deterministic `FakeEngineService`. To talk to the
-Rust engine over FFI:
+The engine is auto-selected: when its native library loads, the app talks to
+the Rust engine over FFI; otherwise it falls back to the deterministic
+`FakeEngineService`. Force either side with `USE_RUST_ENGINE`:
 
 ```bash
+flutter run --dart-define=USE_RUST_ENGINE=true    # require the Rust engine
+flutter run --dart-define=USE_RUST_ENGINE=false   # always the fake
 flutter run --dart-define=USE_RUST_ENGINE=true \
             --dart-define=GPS_ENGINE_LIB=/path/to/libgps_engine.so
 ```
 
 `GPS_ENGINE_LIB` is optional: when it is empty the app opens the bare name
 `libgps_engine.so`, which is what the platform loader resolves for a library
-bundled inside the app.
-
-On Android the engine must be cross-compiled per ABI and bundled as a native
-library, which `tool/build_rust_engine_android.sh` does:
+bundled inside the app. On Android the engine must be cross-compiled per ABI
+and bundled as a native library, which `tool/build_rust_engine_android.sh`
+does:
 
 ```bash
 ./tool/build_rust_engine_android.sh          # arm64-v8a + x86_64
@@ -93,12 +95,13 @@ ABIS=arm64-v8a ./tool/build_rust_engine_android.sh   # a single ABI
 
 It builds `gps-engine` with the NDK clang linker for API 24 (Flutter's default
 `minSdkVersion`) and installs the result into
-`android/app/src/main/jniLibs/<abi>/libgps_engine.so`. Gradle packages every ABI
-present in that directory — `--target-platform` only filters Flutter's own
-libraries — so use `ABIS=` to keep a lean APK. The binaries are gitignored;
-rerun the script after a clean checkout or a `git clean -xfd`. Add
-`--dart-define=DEV_TOOLS=true` to any of these to expose the diagnostics
-entry point (M15).
+`android/app/src/main/jniLibs/<abi>/libgps_engine.so`, so the next
+`flutter build apk` (debug or release) auto-selects the Rust engine on the
+device. Gradle packages every ABI present in that directory —
+`--target-platform` only filters Flutter's own libraries — so use `ABIS=` to
+keep a lean APK. The binaries are gitignored; rerun the script after a clean
+checkout or a `git clean -xfd`. Add `--dart-define=DEV_TOOLS=true` to any of
+these to expose the diagnostics entry point (M15).
 
 ## Layout
 
