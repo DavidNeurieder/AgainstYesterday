@@ -79,8 +79,12 @@ jobs:
               echo "::error::sdkmanager not found at $sdkmgr"; exit 1
             fi
             echo ">> Installing NDK $ANDROID_NDK_VERSION (this is ~1 GB)..."
-            yes | "$sdkmgr" --licenses > /dev/null || true
-            yes | "$sdkmgr" "ndk;$ANDROID_NDK_VERSION"
+            # sdkmanager closes stdin as soon as it has an answer, so a bare
+            # `yes |` pipeline can fail with SIGPIPE after a successful
+            # install under `set -o pipefail`. Swallow yes's exit inside the
+            # subshell so only sdkmanager's status determines the outcome.
+            (yes || true) | "$sdkmgr" --licenses > /dev/null
+            (yes || true) | "$sdkmgr" "ndk;$ANDROID_NDK_VERSION"
           fi
           test -d "$ndk" || { echo "::error::NDK missing after install: $ndk"; exit 1; }
           # Exported for every later step, including the cross-compile script.
