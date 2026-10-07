@@ -202,7 +202,12 @@ class RecordingController extends Notifier<LiveRunState?> {
     } catch (_) {
       // M14: surface engine/preparation failures instead of hanging forever.
       if (_session != null) {
-        _emit(status: RunStatus.error);
+        _emit(
+          status: RunStatus.error,
+          error: const RunError(
+            message: 'The engine failed to prepare the ghost. Try again.',
+          ),
+        );
       }
       return;
     }
@@ -247,8 +252,9 @@ class RecordingController extends Notifier<LiveRunState?> {
 
   /// Device-mode acquisition: confirm the receiver is usable before READY.
   ///
-  /// Surfaces a refusal as the recoverable ERROR state (M14) instead of
-  /// pretending a fix is coming.
+  /// Surfaces a refusal as the recoverable ERROR state (M14) — naming the
+  /// activation problem (services off / permission denied) instead of blaming
+  /// the engine, and offering to open the matching system settings.
   Future<void> _acquireDeviceGps() async {
     final source = _gpsSource;
     if (source == null) {
@@ -258,17 +264,25 @@ class RecordingController extends Notifier<LiveRunState?> {
     try {
       problem = await source.ensureAvailable();
     } catch (e) {
-      problem = 'GPS unavailable: $e';
+      problem = 'The GPS receiver did not answer: $e';
     }
     if (_session == null) {
       return; // dismissed while acquiring
     }
     if (problem != null) {
-      _emit(status: RunStatus.error);
+      _emit(
+        status: RunStatus.error,
+        error: RunError(message: problem, gpsSettingsAction: true),
+      );
       return;
     }
     _emit(status: RunStatus.ready);
   }
+
+  /// Opens the system screen that can put the receiver back in service
+  /// (location settings, or app settings for a denied permission).
+  Future<void> openSettings() =>
+      _gpsSource?.openSettings() ?? Future<void>.value();
 
   /// Subscribes the live receiver while the run is moving. No-op unless a
   /// device [GpsSource] is wired in.
@@ -584,7 +598,12 @@ class RecordingController extends Notifier<LiveRunState?> {
     try {
       await _prepareGhost();
     } catch (_) {
-      _emit(status: RunStatus.error);
+      _emit(
+        status: RunStatus.error,
+        error: const RunError(
+          message: 'The engine failed to prepare the ghost. Try again.',
+        ),
+      );
       return;
     }
     if (_session == null) {
@@ -845,6 +864,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     GhostState? gap,
     GeoPoint? ghostPosition,
     Speed? pace,
+    RunError? error,
     bool hasUnsavedData = true,
   }) {
     final session = _requireSession();
@@ -855,6 +875,9 @@ class RecordingController extends Notifier<LiveRunState?> {
       distance: Distance.meters(session.distanceM),
       currentPosition: position ?? state?.currentPosition,
       pace: pace ?? Speed.metersPerSecond(_baseSpeedMps),
+      // The error reason lives only while the run sits in ERROR: as soon as
+      // it moves on, the readout must not keep a stale "why it failed".
+      error: status == RunStatus.error ? (error ?? state?.error) : null,
       ghostGap: keepGap,
       routeProgress: session.loopLength <= 0
           ? 0

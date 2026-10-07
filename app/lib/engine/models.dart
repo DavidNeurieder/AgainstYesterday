@@ -261,6 +261,19 @@ class RunSnapshot {
   final String? routeId;
 }
 
+/// Why a run failed to start (M14), rendered on the error screen.
+class RunError {
+  const RunError({required this.message, this.gpsSettingsAction = false});
+
+  /// Human-readable reason; the error screen shows it verbatim.
+  final String message;
+
+  /// Set when the failure is a device-GPS activation problem (services off or
+  /// permission denied), so the error screen can offer to open the matching
+  /// system settings.
+  final bool gpsSettingsAction;
+}
+
 /// Live recording state delivered to the UI at roughly 1–2 Hz (§7).
 ///
 /// The UI is a pure projection of this state (§9): every screen reads it and
@@ -279,6 +292,7 @@ class LiveRunState {
     this.route,
     this.ghostPosition,
     this.startedAt,
+    this.error,
   });
 
   final RunStatus status;
@@ -310,6 +324,10 @@ class LiveRunState {
   /// Wall-clock start of the run session — exposed for diagnostics
   /// (M15 Phase 10), e.g. to compute sample ages or fixture timestamps.
   final DateTime? startedAt;
+
+  /// Why the run failed to start, when the status is [RunStatus.error]. Lives
+  /// only while the error state is live — cleared as soon as the run moves on.
+  final RunError? error;
 }
 
 /// Position along a polyline at [distanceMeters] from its start (linear

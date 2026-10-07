@@ -48,13 +48,18 @@ abstract interface class GpsSource {
 
   /// Confirms the receiver is usable: service enabled and permission granted
   /// (requesting it when needed). Returns `null` when fixes can flow,
-  /// otherwise a short reason the recording surfaces as an error state.
+  /// otherwise the failure reason the recording surfaces on the error screen.
   Future<String?> ensureAvailable();
 
   /// Unprocessed fixes from the receiver. The app is expected to remain
   /// subscribed for the whole session and ignore anything arriving while the
   /// run is paused or finishing.
   Stream<GpsFix> fixes();
+
+  /// Opens the system screen that can put the receiver back in service:
+  /// the location-services settings when they are off, otherwise the app's
+  /// own settings (for a denied permission).
+  Future<void> openSettings();
 }
 
 /// The real device receiver backed by the geolocator plugin.
@@ -67,7 +72,7 @@ class DeviceGpsSource implements GpsSource {
   @override
   Future<String?> ensureAvailable() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      return 'location services are off';
+      return 'Location services are off. Turn on GPS, then try again.';
     }
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -75,7 +80,8 @@ class DeviceGpsSource implements GpsSource {
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      return 'location permission denied';
+      return 'Location permission is denied. Allow location access for '
+          'Against Yesterday, then try again.';
     }
     return null;
   }
@@ -90,5 +96,14 @@ class DeviceGpsSource implements GpsSource {
         timeLimit: null,
       ),
     ).map(gpsFixFromPosition);
+  }
+
+  @override
+  Future<void> openSettings() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      await Geolocator.openLocationSettings();
+      return;
+    }
+    await Geolocator.openAppSettings();
   }
 }

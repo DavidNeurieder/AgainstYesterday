@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/device_gps_source.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/home/presentation/home_screen.dart';
@@ -49,6 +50,28 @@ class _FlakyEngine extends FakeEngineService {
       points: points,
       routeGeometry: routeGeometry,
     );
+  }
+}
+
+/// A device GPS source that refuses acquisition, for the M14 activation tests.
+class _RefusingGpsSource implements GpsSource {
+  _RefusingGpsSource(this.reason);
+
+  final String reason;
+  int settingsOpened = 0;
+
+  @override
+  String get description => 'test device GPS';
+
+  @override
+  Future<String?> ensureAvailable() async => reason;
+
+  @override
+  Stream<GpsFix> fixes() => const Stream.empty();
+
+  @override
+  Future<void> openSettings() async {
+    settingsOpened++;
   }
 }
 
@@ -134,6 +157,40 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('READY TO RUN'), findsOneWidget);
+  });
+
+  // ---------------------------------------------------------------------------
+  // M14: a device-GPS activation refusal surfaces the real reason and points
+  // at the matching settings, instead of blaming the engine.
+  // ---------------------------------------------------------------------------
+  testWidgets('GPS activation refusal names the problem and opens settings',
+      (tester) async {
+    final refusal = _RefusingGpsSource(
+      'Location services are off. Turn on GPS, then try again.',
+    );
+    await tester.pumpWidget(ProviderScope(
+      overrides: [deviceGpsProvider.overrideWithValue(refusal)],
+      child: const AgainstYesterdayApp(),
+    ));
+    await tester.pumpAndSettle();
+
+    Finder tab(String label) =>
+        find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+    await tester.tap(tab('Record'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('Could not start a run'), findsOneWidget);
+    expect(
+      find.textContaining('Location services are off.'),
+      findsOneWidget,
+    );
+    expect(find.text('Open location settings'), findsOneWidget);
+
+    await tester.tap(find.text('Open location settings'));
+    await tester.pump();
+    expect(refusal.settingsOpened, 1);
   });
 
   // ---------------------------------------------------------------------------

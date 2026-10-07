@@ -26,6 +26,8 @@ class _FakeGeolocatorPlatform extends GeolocatorPlatform {
   LocationPermission permission;
   final Stream<Position> positions;
   int requests = 0;
+  int appSettingsOpened = 0;
+  int locationSettingsOpened = 0;
 
   @override
   Future<bool> isLocationServiceEnabled() async => serviceEnabled;
@@ -43,6 +45,18 @@ class _FakeGeolocatorPlatform extends GeolocatorPlatform {
   @override
   Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
       positions;
+
+  @override
+  Future<bool> openAppSettings() async {
+    appSettingsOpened++;
+    return true;
+  }
+
+  @override
+  Future<bool> openLocationSettings() async {
+    locationSettingsOpened++;
+    return true;
+  }
 }
 
 Position _position({
@@ -137,7 +151,10 @@ void main() {
       );
       GeolocatorPlatform.instance = platform;
 
-      expect(await source.ensureAvailable(), 'location permission denied');
+      expect(
+        await source.ensureAvailable(),
+        startsWith('Location permission is denied.'),
+      );
     });
 
     test('reports a reason when location services are off', () async {
@@ -146,7 +163,38 @@ void main() {
         permission: LocationPermission.whileInUse,
       );
 
-      expect(await source.ensureAvailable(), 'location services are off');
+      expect(
+        await source.ensureAvailable(),
+        startsWith('Location services are off.'),
+      );
+    });
+  });
+
+  group('DeviceGpsSource.openSettings', () {
+    test('routes to the location-services settings when GPS is off', () async {
+      final platform = _FakeGeolocatorPlatform(
+        serviceEnabled: false,
+        permission: LocationPermission.whileInUse,
+      );
+      GeolocatorPlatform.instance = platform;
+
+      await const DeviceGpsSource().openSettings();
+
+      expect(platform.locationSettingsOpened, 1);
+      expect(platform.appSettingsOpened, 0);
+    });
+
+    test('routes to the app settings otherwise (permission denied)', () async {
+      final platform = _FakeGeolocatorPlatform(
+        serviceEnabled: true,
+        permission: LocationPermission.deniedForever,
+      );
+      GeolocatorPlatform.instance = platform;
+
+      await const DeviceGpsSource().openSettings();
+
+      expect(platform.appSettingsOpened, 1);
+      expect(platform.locationSettingsOpened, 0);
     });
   });
 

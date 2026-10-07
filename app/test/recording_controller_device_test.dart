@@ -38,6 +38,7 @@ class _FakeGpsSource implements GpsSource {
 
   final Stream<GpsFix> stream;
   final String? acquisition;
+  int settingsOpened = 0;
 
   @override
   String get description => 'test device GPS';
@@ -47,6 +48,11 @@ class _FakeGpsSource implements GpsSource {
 
   @override
   Stream<GpsFix> fixes() => stream;
+
+  @override
+  Future<void> openSettings() async {
+    settingsOpened++;
+  }
 }
 
 GpsFix _fix(double latitude, double longitude, {double? speed}) => GpsFix(
@@ -239,27 +245,42 @@ void main() {
       });
     });
 
-    test('acquisition refusal lands ERROR and is recoverable via retry', () {
+test('acquisition refusal lands ERROR with the GPS reason surfaced', () {
       fakeAsync((async) {
         final stream = StreamController<GpsFix>.broadcast();
+        final source = _FakeGpsSource(
+          stream.stream,
+          acquisition: 'Location services are off. Turn on GPS, then try '
+              'again.',
+        );
         final c = ProviderContainer(
           overrides: [
-            deviceGpsProvider.overrideWithValue(
-              _FakeGpsSource(stream.stream, acquisition: 'denied'),
-            ),
+            deviceGpsProvider.overrideWithValue(source),
           ],
         );
         addTearDown(c.dispose);
         keepAlive(c);
 
-        c.read(recordingControllerProvider.notifier).ensureSession([_route]);
+        final ctrl = c.read(recordingControllerProvider.notifier);
+        ctrl.ensureSession([_route]);
         async.flushMicrotasks();
         async.elapse(const Duration(milliseconds: 1000));
 
         expect(state(c)!.status, RunStatus.error);
+        // The error screen shows the GPS activation problem, not an engine
+        // excuse, and offers to open the matching settings.
+        expect(
+          state(c)!.error?.message,
+          startsWith('Location services are off.'),
+        );
+        expect(state(c)!.error?.gpsSettingsAction, isTrue);
 
-        // M14: retry re-runs acquisition; the denial persists.
-        c.read(recordingControllerProvider.notifier).retry();
+        ctrl.openSettings();
+        async.flushMicrotasks();
+        expect(source.settingsOpened, 1);
+
+        // M14: retry re-runs acquisition; the refusal persists.
+        ctrl.retry();
         async.flushMicrotasks();
         async.elapse(const Duration(milliseconds: 1000));
         expect(state(c)!.status, RunStatus.error);

@@ -71,7 +71,13 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
       RunStatus.running || RunStatus.paused => LiveRunScreen(state: state!),
       RunStatus.finishing || RunStatus.completed =>
         RunCompleteScreen(state: state!),
-      RunStatus.error => _RunErrorScreen(onRetry: controller.retry),
+      RunStatus.error => _RunErrorScreen(
+        error: state?.error,
+        onRetry: controller.retry,
+        onOpenSettings: state?.error?.gpsSettingsAction == true
+            ? controller.openSettings
+            : null,
+      ),
       _ => PreRunScreen(state: state),
     };
     return AnimatedSwitcher(
@@ -93,40 +99,61 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
   }
 }
 
-/// Destination for an unrecoverable acquisition error (M14): message + retry.
+/// Destination for an unrecoverable acquisition error (M14): the reason (when
+/// known), an optional jump to the matching system settings, and retry.
 class _RunErrorScreen extends StatelessWidget {
-  const _RunErrorScreen({required this.onRetry});
+  const _RunErrorScreen({
+    required this.error,
+    required this.onRetry,
+    this.onOpenSettings,
+  });
 
+  final RunError? error;
   final VoidCallback onRetry;
+  final VoidCallback? onOpenSettings;
+
+  static const String _fallback = 'The engine failed to prepare the ghost. '
+      'Try again.';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('New run')),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              'Could not start a run',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'The engine failed to prepare the ghost. Try again.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            FilledButton(
-              onPressed: onRetry,
-              child: const Text('Try again'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                'Could not start a run',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                error?.message ?? _fallback,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+              ),
+              if (onOpenSettings != null) ...[
+                const SizedBox(height: AppSpacing.lg),
+                OutlinedButton.icon(
+                  onPressed: onOpenSettings,
+                  icon: const Icon(Icons.location_on_outlined),
+                  label: const Text('Open location settings'),
+                ),
+              ],
+              const SizedBox(height: AppSpacing.lg),
+              FilledButton(
+                onPressed: onRetry,
+                child: const Text('Try again'),
+              ),
+            ],
+          ),
         ),
       ),
     );
