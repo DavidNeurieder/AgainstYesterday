@@ -22,6 +22,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
 import 'live_run_screen.dart';
 import 'pre_run_screen.dart';
@@ -86,6 +87,12 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
         controller.ensureSession(ref.read(routeRepositoryProvider));
       }
     }
+  }
+
+  /// Countdown disabled (Settings → Race), so START begins immediately, just
+  /// like a free `/record` run.
+  void _beginNow() {
+    ref.read(recordingControllerProvider.notifier).beginRun();
   }
 
   void _startCountdown() {
@@ -153,7 +160,11 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
                 title: widget.routeId == null
                     ? 'New run'
                     : (state?.route?.name ?? 'New run'),
-                onStart: widget.routeId == null ? null : _startCountdown,
+                onStart: widget.routeId == null
+                    ? null
+                    : ref.watch(countdownEnabledProvider)
+                        ? _startCountdown
+                        : _beginNow,
               ),
           };
     return AnimatedSwitcher(

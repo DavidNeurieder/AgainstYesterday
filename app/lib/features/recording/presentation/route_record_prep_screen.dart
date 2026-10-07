@@ -7,12 +7,12 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
+import '../../settings/application/haptics.dart';
 import '../application/recording_controller.dart';
 
 class RouteRecordPrepScreen extends ConsumerWidget {
@@ -76,7 +76,7 @@ class RouteRecordPrepScreen extends ConsumerWidget {
                         FilledButton(
                           onPressed: ready
                               ? () {
-                                  HapticFeedback.mediumImpact();
+                                  AppHaptics.medium(ref);
                                   controller.beginRun();
                                 }
                               : null,

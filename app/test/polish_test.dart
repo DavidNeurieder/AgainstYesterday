@@ -225,12 +225,14 @@ void main() {
   // ---------------------------------------------------------------------------
   testWidgets('PerformanceGap exposes a spoken gap label', (tester) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(
-        body: PerformanceGap(
-          difference: Elapsed.seconds(12),
-          distance: Distance.meters(1200),
-          state: AheadBehind.ahead,
+    await tester.pumpWidget(const ProviderScope(
+      child: MaterialApp(
+        home: Scaffold(
+          body: PerformanceGap(
+            difference: Elapsed.seconds(12),
+            distance: Distance.meters(1200),
+            state: AheadBehind.ahead,
+          ),
         ),
       ),
     ));

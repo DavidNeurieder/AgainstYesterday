@@ -8,7 +8,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -16,6 +15,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
 import '../../../widgets/performance_gap.dart';
 import '../../../widgets/route_map.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
 
 class LiveRunScreen extends ConsumerWidget {
@@ -27,6 +28,7 @@ class LiveRunScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final paused = state.status == RunStatus.paused;
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final controller = ref.read(recordingControllerProvider.notifier);
 
     final gapState = switch (state.ghostGap) {
@@ -74,7 +76,7 @@ class LiveRunScreen extends ConsumerWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      state.distance.format(),
+                      state.distance.formatWith(units),
                       key: const ValueKey('live-distance'),
                       style: textTheme.displayMedium?.copyWith(
                         fontWeight: FontWeight.w700,
@@ -116,7 +118,7 @@ class LiveRunScreen extends ConsumerWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _Metric(label: 'PACE', value: state.pace.formatPace()),
+                    _Metric(label: 'PACE', value: state.pace.formatPaceWith(units)),
                     _Metric(
                       label: 'TIME',
                       value: state.elapsed.format(),
@@ -134,7 +136,7 @@ class LiveRunScreen extends ConsumerWidget {
                       icon: paused ? Icons.play_arrow : Icons.pause,
                       onPressed: () {
                         // M14 haptics: light tick for pause/resume.
-                        HapticFeedback.selectionClick();
+                        AppHaptics.selection(ref);
                         paused ? controller.resume() : controller.pause();
                       },
                     ),
@@ -146,7 +148,7 @@ class LiveRunScreen extends ConsumerWidget {
                       icon: Icons.stop,
                       onPressed: () {
                         // M14 haptics: firm confirm when the run ends.
-                        HapticFeedback.heavyImpact();
+                        AppHaptics.heavy(ref);
                         controller.finishRun();
                       },
                       foreground: AppColors.background,

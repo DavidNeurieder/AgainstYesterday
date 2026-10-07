@@ -35,6 +35,9 @@ abstract class PersistenceStore {
 
   /// Stores [value] under [key], atomically when the backend supports it.
   Future<void> write(String key, String value);
+
+  /// Removes the document at [key]. No-op when no such document exists.
+  void remove(String key);
 }
 
 /// In-memory, stateless store — nothing is persisted to disk.
@@ -46,6 +49,9 @@ class NoopPersistenceStore implements PersistenceStore {
 
   @override
   Future<void> write(String key, String value) async {}
+
+  @override
+  void remove(String key) {}
 }
 
 /// In-memory store that keeps documents for the app's lifetime. Useful for
@@ -60,11 +66,14 @@ class MemoryPersistenceStore implements PersistenceStore {
 
   @override
   Future<void> write(String key, String value) async => _docs[key] = value;
+
+  @override
+  void remove(String key) => _docs.remove(key);
 }
 
 /// Best-effort storage reads: a device with flaky storage degrades to the
 /// seeded defaults instead of crashing the UI (failure injection, Phase 13).
-String? _readBestEffort(PersistenceStore store, String key) {
+String? readBestEffort(PersistenceStore store, String key) {
   try {
     return store.read(key);
   } catch (_) {
@@ -74,7 +83,7 @@ String? _readBestEffort(PersistenceStore store, String key) {
 
 /// Best-effort storage writes: the in-memory repositories stay authoritative,
 /// so a failed disk write never produces an unhandled async exception.
-Future<void> _writeBestEffort(
+Future<void> writeBestEffort(
   PersistenceStore store,
   String key,
   String value,
@@ -109,6 +118,14 @@ class JsonFileStore implements PersistenceStore {
     await tmp.writeAsString(value, flush: true);
     await tmp.rename(file.path);
   }
+/// Removes a document by deleting its file.
+  @override
+  void remove(String key) {
+    final file = File('${directory.path}/$key.json');
+    if (file.existsSync()) {
+      file.deleteSync();
+    }
+  }
 }
 
 /// The backing store for every repository. Defaults to in-memory.
@@ -136,7 +153,7 @@ class RouteRepository extends Notifier<List<Route>> {
   @override
   List<Route> build() {
     ref.watch(persistenceStoreProvider);
-    final raw = _readBestEffort(ref.read(persistenceStoreProvider), _routesKey);
+    final raw = readBestEffort(ref.read(persistenceStoreProvider), _routesKey);
     if (raw != null) {
       try {
         return parseRouteList(raw);
@@ -167,8 +184,11 @@ class RouteRepository extends Notifier<List<Route>> {
     if (store is NoopPersistenceStore) {
       return;
     }
-    await _writeBestEffort(store, _routesKey, routeListToJson(state));
+    await writeBestEffort(store, _routesKey, routeListToJson(state));
   }
+
+  /// Drops every route from the catalog (Settings → Delete all data, M21).
+  void clear() => state = const [];
 
   static const _routesKey = 'routes';
 }
@@ -179,7 +199,7 @@ class ActivityRepository extends Notifier<List<Activity>> {
   List<Activity> build() {
     ref.watch(persistenceStoreProvider);
     final raw =
-        _readBestEffort(ref.read(persistenceStoreProvider), _activitiesKey);
+        readBestEffort(ref.read(persistenceStoreProvider), _activitiesKey);
     if (raw != null) {
       try {
         return parseActivityList(raw);
@@ -203,8 +223,11 @@ class ActivityRepository extends Notifier<List<Activity>> {
     if (store is NoopPersistenceStore) {
       return;
     }
-    await _writeBestEffort(store, _activitiesKey, activityListToJson(state));
+    await writeBestEffort(store, _activitiesKey, activityListToJson(state));
   }
+
+  /// Drops every activity from history (Settings → Delete all data, M21).
+  void clear() => state = const [];
 
   static const _activitiesKey = 'activities';
 }
@@ -215,7 +238,7 @@ class RunSnapshotRepository extends Notifier<RunSnapshot?> {
   @override
   RunSnapshot? build() {
     ref.watch(persistenceStoreProvider);
-    final raw = _readBestEffort(ref.read(persistenceStoreProvider), _key);
+    final raw = readBestEffort(ref.read(persistenceStoreProvider), _key);
     if (raw == null || raw.trim() == 'null') {
       return null;
     }
@@ -241,7 +264,7 @@ class RunSnapshotRepository extends Notifier<RunSnapshot?> {
     if (store is NoopPersistenceStore) {
       return;
     }
-    await _writeBestEffort(store, _key, runSnapshotToJson(snapshot));
+    await writeBestEffort(store, _key, runSnapshotToJson(snapshot));
   }
 
   Future<void> _clear() async {
@@ -249,7 +272,7 @@ class RunSnapshotRepository extends Notifier<RunSnapshot?> {
     if (store is NoopPersistenceStore) {
       return;
     }
-    await _writeBestEffort(store, _key, 'null');
+    await writeBestEffort(store, _key, 'null');
   }
 
   static const _key = 'run_snapshot';

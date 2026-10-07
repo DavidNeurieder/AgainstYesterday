@@ -9,7 +9,6 @@
 library;
 
 import 'package:flutter/material.dart' hide Route;
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -19,6 +18,8 @@ import '../../../core/ui/app_states.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../../widgets/route_silhouette.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/route_stats.dart';
 
 class RoutesScreen extends ConsumerWidget {
@@ -40,7 +41,7 @@ class RoutesScreen extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: AppSpacing.md),
             child: OutlinedButton.icon(
               onPressed: () {
-                HapticFeedback.selectionClick();
+                AppHaptics.selection(ref);
                 context.go('/record-route');
               },
               icon: const Icon(Icons.add_road),
@@ -67,11 +68,11 @@ class RoutesScreen extends ConsumerWidget {
                 attempts: _attemptsFor(route, activities),
               ),
               onTap: () {
-                HapticFeedback.lightImpact();
+                AppHaptics.light(ref);
                 context.push('/route/${route.id}');
               },
               onRace: () {
-                HapticFeedback.mediumImpact();
+                AppHaptics.medium(ref);
                 context.go('/race/${route.id}');
               },
             ),
@@ -86,7 +87,7 @@ class RoutesScreen extends ConsumerWidget {
       [for (final a in activities) if (a.routeId == route.id) a];
 }
 
-class _RouteCourseCard extends StatelessWidget {
+class _RouteCourseCard extends ConsumerWidget {
   const _RouteCourseCard({
     required this.route,
     required this.stats,
@@ -100,8 +101,9 @@ class _RouteCourseCard extends StatelessWidget {
   final VoidCallback onRace;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -128,7 +130,7 @@ class _RouteCourseCard extends StatelessWidget {
                         Text(route.name, style: textTheme.titleMedium),
                         const SizedBox(height: 2),
                         Text(
-                          '${route.distance.format()} · '
+                          '${route.distance.formatWith(units)} · '
                           '${stats.runs} ${stats.runs == 1 ? 'run' : 'runs'}',
                           style: textTheme.bodySmall?.copyWith(
                             color: AppColors.textSecondary,

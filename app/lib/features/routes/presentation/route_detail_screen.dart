@@ -11,7 +11,6 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Route;
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -22,6 +21,8 @@ import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../../widgets/route_map.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/route_stats.dart';
 
 class RouteDetailScreen extends ConsumerWidget {
@@ -38,6 +39,7 @@ class RouteDetailScreen extends ConsumerWidget {
     }
 
     final activities = ref.watch(activityRepositoryProvider);
+    final units = ref.watch(displayUnitProvider);
     final attempts = <Activity>[
       for (final a in activities)
         if (a.routeId == route.id && a.duration != null) a,
@@ -60,7 +62,7 @@ class RouteDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
-            '${route.distance.format()} · '
+            '${route.distance.formatWith(units)} · '
             '${stats.runs} ${stats.runs == 1 ? 'run' : 'runs'} · '
             '${stats.pb?.format() ?? 'no PB'} PB',
             textAlign: TextAlign.center,
@@ -74,7 +76,7 @@ class RouteDetailScreen extends ConsumerWidget {
             label: 'RACE YOUR BEST',
             icon: Icons.play_arrow_rounded,
             onPressed: () {
-              HapticFeedback.mediumImpact();
+              AppHaptics.medium(ref);
               context.go('/race/${route.id}');
             },
           ),

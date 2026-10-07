@@ -7,7 +7,6 @@
 library;
 
 import 'package:flutter/material.dart' hide Route;
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -18,6 +17,8 @@ import '../../../core/ui/app_sections.dart';
 import '../../../core/ui/app_states.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -40,7 +41,7 @@ class HomeScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.xl),
             if (routes.isEmpty)
               EmptyHomeState(onRecord: () {
-                HapticFeedback.mediumImpact();
+                AppHaptics.medium(ref);
                 context.go('/record-route');
               })
             else ...[
@@ -49,7 +50,7 @@ class HomeScreen extends ConsumerWidget {
               FeaturedRouteCard(
                 route: routes.first,
                 onRace: () {
-                  HapticFeedback.mediumImpact();
+                  AppHaptics.medium(ref);
                   context.go('/race/${routes.first.id}');
                 },
               ),
@@ -116,7 +117,7 @@ class _Header extends StatelessWidget {
 
 /// The hero "race today" card (§4): the featured route's distance and PB with
 /// a big [PrimaryButton] leading into the pre-run.
-class FeaturedRouteCard extends StatelessWidget {
+class FeaturedRouteCard extends ConsumerWidget {
   const FeaturedRouteCard({
     super.key,
     required this.route,
@@ -127,8 +128,9 @@ class FeaturedRouteCard extends StatelessWidget {
   final VoidCallback onRace;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final pb = route.personalBest;
     return Card(
       child: Padding(
@@ -143,7 +145,7 @@ class FeaturedRouteCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${route.distance.format()} · '
+              '${route.distance.formatWith(units)} · '
               '${route.attemptCount} attempts',
               textAlign: TextAlign.center,
               style: textTheme.bodyMedium?.copyWith(
@@ -235,21 +237,22 @@ class EmptyHomeState extends StatelessWidget {
   }
 }
 
-class _ActivityTile extends StatelessWidget {
+class _ActivityTile extends ConsumerWidget {
   const _ActivityTile({required this.activity});
 
   final Activity activity;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final started = activity.startedAt.toLocal();
     final date = '${started.day}/${started.month}';
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () {
-          HapticFeedback.lightImpact();
+          AppHaptics.light(ref);
           context.push('/activity/${activity.id}');
         },
         child: Padding(
@@ -267,7 +270,7 @@ class _ActivityTile extends StatelessWidget {
                       style: textTheme.titleMedium,
                     ),
                     Text(
-                      '${activity.distance?.format() ?? '—'} '
+                      '${activity.distance?.formatWith(units) ?? '—'} '
                       '· started $date',
                       style: textTheme.bodySmall?.copyWith(
                         color: AppColors.textSecondary,

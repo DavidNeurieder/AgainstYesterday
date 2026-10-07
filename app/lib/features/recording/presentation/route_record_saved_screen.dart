@@ -7,21 +7,24 @@
 library;
 
 import 'package:flutter/material.dart' hide Route;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_buttons.dart';
 import '../../../engine/models.dart';
+import '../../settings/application/settings_controller.dart';
 
-class RouteRecordSavedScreen extends StatelessWidget {
+class RouteRecordSavedScreen extends ConsumerWidget {
   const RouteRecordSavedScreen({super.key, required this.route});
 
   final Route route;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Route saved')),
       body: SafeArea(
@@ -56,8 +59,8 @@ class RouteRecordSavedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${route.distance.format()} · your first attempt is the '
-                'baseline to race.',
+                '${route.distance.formatWith(units)} · '
+                'your first attempt is the baseline to race.',
                 textAlign: TextAlign.center,
                 style: textTheme.bodyMedium?.copyWith(
                   color: AppColors.textSecondary,

@@ -10,12 +10,13 @@
 library;
 
 import 'package:flutter/material.dart' hide Route;
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
 
 class PreRunScreen extends ConsumerWidget {
@@ -80,7 +81,7 @@ class PreRunScreen extends ConsumerWidget {
                           onPressed: ready
                               ? () {
                                   // M14: a tactile "go" on START.
-                                  HapticFeedback.mediumImpact();
+                                  AppHaptics.medium(ref);
                                   if (onStart case final start?) {
                                     start();
                                   } else {
@@ -145,14 +146,15 @@ class _GpsChip extends StatelessWidget {
   }
 }
 
-class _DetectedRoute extends StatelessWidget {
+class _DetectedRoute extends ConsumerWidget {
   const _DetectedRoute({required this.route});
 
   final Route route;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
@@ -171,7 +173,7 @@ class _DetectedRoute extends StatelessWidget {
             Text(route.name, style: textTheme.titleLarge),
             const SizedBox(height: 2),
             Text(
-              route.distance.format(),
+              route.distance.formatWith(units),
               style: textTheme.bodyMedium?.copyWith(
                 color: AppColors.textSecondary,
               ),

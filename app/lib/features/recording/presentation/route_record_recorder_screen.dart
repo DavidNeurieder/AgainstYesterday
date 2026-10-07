@@ -7,12 +7,13 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
 
 class RouteRecordRecorderScreen extends ConsumerWidget {
@@ -24,6 +25,7 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final paused = state.status == RunStatus.paused;
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final controller = ref.read(recordingControllerProvider.notifier);
 
     return Scaffold(
@@ -61,7 +63,7 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               Text(
-                state.distance.format(),
+                state.distance.formatWith(units),
                 key: const ValueKey('record-distance'),
                 textAlign: TextAlign.center,
                 style: textTheme.displayMedium?.copyWith(
@@ -73,7 +75,10 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _Metric(label: 'DISTANCE', value: state.distance.format()),
+                  _Metric(
+                    label: 'DISTANCE',
+                    value: state.distance.formatWith(units),
+                  ),
                   const SizedBox(width: AppSpacing.xl),
                   _Metric(
                     label: 'TIME',
@@ -90,7 +95,7 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
                       label: paused ? 'RESUME' : 'PAUSE',
                       icon: paused ? Icons.play_arrow : Icons.pause,
                       onPressed: () {
-                        HapticFeedback.selectionClick();
+                        AppHaptics.selection(ref);
                         paused ? controller.resume() : controller.pause();
                       },
                     ),
@@ -101,7 +106,7 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
                       label: 'FINISH',
                       icon: Icons.stop,
                       onPressed: () {
-                        HapticFeedback.heavyImpact();
+                        AppHaptics.heavy(ref);
                         controller.finishRun();
                       },
                       foreground: AppColors.background,

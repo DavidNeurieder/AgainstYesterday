@@ -8,6 +8,24 @@
 /// `flutter test`.
 library;
 
+/// Distance units for display (M21, §26). The engine works in meters and
+/// seconds regardless; unit choice is purely presentational.
+enum Units {
+  kilometers,
+  miles;
+
+  /// The short suffix used after pace values, e.g. "5:23 /km".
+  String get paceSuffix => switch (this) {
+        Units.kilometers => '/km',
+        Units.miles => '/mi',
+      };
+
+  String get label => switch (this) {
+        Units.kilometers => 'Kilometers',
+        Units.miles => 'Miles',
+      };
+}
+
 /// A distance in meters.
 class Distance {
   const Distance._(this.meters);
@@ -35,11 +53,25 @@ class Distance {
   double get miles => meters / 1609.344;
 
   /// "412 m" below one thousand meters, otherwise "4.12 km".
-  String format() {
-    if (meters.abs() < 1000.0) {
-      return '${meters.round()} m';
+  String format() => formatWith(Units.kilometers);
+
+  /// Formats for the chosen display unit (M21, §26).
+  ///
+  /// Kilometers fall back to meters under one thousand; miles fall back to
+  /// meters under 161 m (0.1 mi). E.g. "6.21 mi" for ten kilometers.
+  String formatWith(Units units) {
+    switch (units) {
+      case Units.kilometers:
+        if (meters.abs() < 1000.0) {
+          return '${meters.round()} m';
+        }
+        return '${kilometers.toStringAsFixed(2)} km';
+      case Units.miles:
+        if (meters.abs() < 160.9344) {
+          return '${meters.round()} m';
+        }
+        return '${miles.toStringAsFixed(2)} mi';
     }
-    return '${kilometers.toStringAsFixed(2)} km';
   }
 }
 
@@ -110,19 +142,39 @@ class Speed {
       metersPerSecond > 0 ? 1000.0 / metersPerSecond : 0;
 
   /// "5:23 /km" pace format; "— /km" when stationary.
-  String formatPace() {
-    final seconds = paceSecondsPerKm;
-    if (seconds <= 0) {
-      return '— /km';
+  String formatPace() => formatPaceWith(Units.kilometers);
+
+  /// Pace formatted for the chosen display unit (M21, §26): seconds per km or
+  /// per mile. "— /mi" when stationary.
+  String formatPaceWith(Units units) {
+    final perUnit = switch (units) {
+      Units.kilometers => paceSecondsPerKm,
+      Units.miles => metersPerSecond > 0 ? 1609.344 / metersPerSecond : 0,
+    };
+    if (perUnit <= 0) {
+      return '— ${units.paceSuffix}';
     }
-    final whole = seconds.round();
+    final whole = perUnit.round();
     final m = whole ~/ 60;
     final s = whole % 60;
-    return '$m:${s.toString().padLeft(2, '0')} /km';
+    return '$m:${s.toString().padLeft(2, '0')} ${units.paceSuffix}';
   }
 
   /// "9.4 km/h".
-  String format() => '${kilometersPerHour.toStringAsFixed(1)} km/h';
+  String format() => formatWith(Units.kilometers);
+
+  /// Speed formatted for the chosen display unit (M21, §26): km/h or mph.
+  String formatWith(Units units) {
+    final value = switch (units) {
+      Units.kilometers => kilometersPerHour,
+      Units.miles => metersPerSecond * 2.2369362921,
+    };
+    final unit = switch (units) {
+      Units.kilometers => 'km/h',
+      Units.miles => 'mph',
+    };
+    return '${value.toStringAsFixed(1)} $unit';
+  }
 }
 
 /// Small integer clamp helper so unit types stay dependency-free.

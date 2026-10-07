@@ -8,7 +8,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -17,6 +16,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_states.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 
 class HistoryScreen extends ConsumerWidget {
   const HistoryScreen({super.key});
@@ -44,21 +45,22 @@ class HistoryScreen extends ConsumerWidget {
   }
 }
 
-class _ActivityRow extends StatelessWidget {
+class _ActivityRow extends ConsumerWidget {
   const _ActivityRow({required this.activity});
 
   final Activity activity;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final started = activity.startedAt.toLocal();
     final date = '${started.day}/${started.month}';
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: () {
-          HapticFeedback.lightImpact();
+          AppHaptics.light(ref);
           context.push('/activity/${activity.id}');
         },
         child: Padding(
@@ -77,7 +79,8 @@ class _ActivityRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${activity.distance?.format() ?? '—'} · started $date',
+                      '${activity.distance?.formatWith(units) ?? '—'} '
+                      '· started $date',
                       style: textTheme.bodySmall?.copyWith(
                         color: AppColors.textSecondary,
                       ),

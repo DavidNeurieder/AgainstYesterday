@@ -8,7 +8,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -17,6 +16,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_buttons.dart';
 import '../../../core/ui/gap_line.dart';
 import '../../../engine/models.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
 
 final _kScaleIn = Tween<double>(begin: 0.9, end: 1.0);
@@ -29,6 +30,7 @@ class RunCompleteScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final controller = ref.read(recordingControllerProvider.notifier);
     final routeName = state.route?.name ?? 'New route';
     final gap = state.ghostGap;
@@ -69,7 +71,7 @@ class RunCompleteScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.xl),
               Text(
-                state.distance.format(),
+                state.distance.formatWith(units),
                 textAlign: TextAlign.center,
                 style: textTheme.displayMedium?.copyWith(
                   fontWeight: FontWeight.w700,
@@ -91,14 +93,14 @@ class RunCompleteScreen extends ConsumerWidget {
               PrimaryButton(
                 label: 'VIEW RESULT',
                 onPressed: () {
-                  HapticFeedback.selectionClick();
+                  AppHaptics.selection(ref);
                   context.push('/record/result');
                 },
               ),
               const SizedBox(height: AppSpacing.sm),
               TextButton(
                 onPressed: () {
-                  HapticFeedback.lightImpact();
+                  AppHaptics.light(ref);
                   controller.dismissRun();
                   context.go('/');
                 },

@@ -8,7 +8,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,6 +20,8 @@ import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../recording/application/recording_controller.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/splits.dart';
 
 class ResultScreen extends ConsumerWidget {
@@ -29,6 +30,7 @@ class ResultScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final live = ref.read(recordingControllerProvider);
     if (live == null) {
       return const _EmptyResult();
@@ -81,7 +83,7 @@ class ResultScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              live.distance.format(),
+              live.distance.formatWith(units),
               textAlign: TextAlign.center,
               style: textTheme.headlineSmall?.copyWith(
                 color: AppColors.textSecondary,
@@ -97,6 +99,7 @@ class ResultScreen extends ConsumerWidget {
                 youTime: live.elapsed,
                 totalDistance: route.distance,
                 yourDistance: live.distance,
+                units: units,
               ),
             if (splits.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.xl),
@@ -129,7 +132,7 @@ class ResultScreen extends ConsumerWidget {
                 label: 'RACE AGAIN',
                 icon: Icons.replay,
                 onPressed: () {
-                  HapticFeedback.mediumImpact();
+                  AppHaptics.medium(ref);
                   ref.read(recordingControllerProvider.notifier).dismissRun();
                   context.go('/race/${route.id}');
                 },
@@ -137,7 +140,7 @@ class ResultScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.sm),
               TextButton(
                 onPressed: () {
-                  HapticFeedback.lightImpact();
+                  AppHaptics.light(ref);
                   ref.read(recordingControllerProvider.notifier).dismissRun();
                   context.go('/');
                 },
@@ -205,12 +208,14 @@ class _PerformanceBar extends StatelessWidget {
     required this.youTime,
     required this.totalDistance,
     required this.yourDistance,
+    required this.units,
   });
 
   final Elapsed? pbTime;
   final Elapsed youTime;
   final Distance totalDistance;
   final Distance yourDistance;
+  final Units units;
 
   @override
   Widget build(BuildContext context) {
@@ -234,7 +239,7 @@ class _PerformanceBar extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          totalDistance.format(),
+          totalDistance.formatWith(units),
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: AppColors.textMuted,

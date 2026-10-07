@@ -16,6 +16,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/split_row.dart';
 import '../../../persistence/persistence.dart';
 import '../../result/application/splits.dart';
+import '../../settings/application/settings_controller.dart';
 
 class ActivityDetailScreen extends ConsumerWidget {
   const ActivityDetailScreen({super.key, required this.activityId});
@@ -32,6 +33,7 @@ class ActivityDetailScreen extends ConsumerWidget {
     final activity = matches.first;
 
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final routeId = activity.routeId;
     final routes = ref.watch(routeRepositoryProvider);
     final route = routeId != null
@@ -83,7 +85,7 @@ class ActivityDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            distance?.format() ?? '—',
+            distance?.formatWith(units) ?? '—',
             textAlign: TextAlign.center,
             style: textTheme.headlineSmall?.copyWith(
               color: AppColors.textSecondary,

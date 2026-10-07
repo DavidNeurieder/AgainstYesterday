@@ -9,11 +9,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/units.dart';
 import '../engine/models.dart';
+import '../features/settings/application/settings_controller.dart';
 
 /// Stable, human-facing label for each state.
 const Map<AheadBehind, String> _states = <AheadBehind, String>{
@@ -23,7 +25,7 @@ const Map<AheadBehind, String> _states = <AheadBehind, String>{
   AheadBehind.unknown: '—',
 };
 
-class PerformanceGap extends StatelessWidget {
+class PerformanceGap extends ConsumerWidget {
   const PerformanceGap({
     super.key,
     required this.difference,
@@ -54,14 +56,15 @@ class PerformanceGap extends StatelessWidget {
       };
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final label = switch (state) {
       AheadBehind.ahead =>
-        'Ahead of PB by ${difference.format()} at ${distance.format()}',
+        'Ahead of PB by ${difference.format()} at ${distance.formatWith(units)}',
       AheadBehind.behind =>
-        'Behind PB by ${difference.format()} at ${distance.format()}',
-      AheadBehind.tied => 'Tied with PB at ${distance.format()}',
+        'Behind PB by ${difference.format()} at ${distance.formatWith(units)}',
+      AheadBehind.tied => 'Tied with PB at ${distance.formatWith(units)}',
       AheadBehind.unknown => 'Gap to PB not available',
     };
     // A curated spoken description replaces the raw digits so screen readers
@@ -89,7 +92,7 @@ class PerformanceGap extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${_states[state]} · at ${distance.format()}',
+              '${_states[state]} · at ${distance.formatWith(units)}',
               style: textTheme.labelMedium?.copyWith(
                 color: AppColors.textSecondary,
               ),

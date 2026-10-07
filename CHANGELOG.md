@@ -11,6 +11,18 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Settings (§26) replace the M16 stub: Race (Haptics, Countdown), Display
+  (Units), Data (Export GPX, Delete all data) and About (version, privacy,
+  licenses). Both toggles are wired for real — every tick in the app now goes
+  through one haptics gate, and turning Countdown off makes a route race START
+  jump straight into the run the way a plain `/record` does. Units switches
+  between kilometers and miles for distance, pace and speed on every readout
+  (hero, cards, live, complete, result, history, details); the engine keeps
+  meters and seconds, only the display changes. Export GPX copies the route
+  catalog and recorded tracks as a GPX 1.1 document to the clipboard; Delete
+  all data wipes the store behind a confirm. The app is still a dark-only,
+  running-only design, so there is no theme or default-activity row yet
+  (M21).
 - The result screen closes the race loop (§29): after a route race, RACE
   AGAIN drops straight back into that route's pre-race (fresh session, still
   the 3-2-1-GO countdown), with DONE leaving the loop; route-less results

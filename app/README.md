@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-219 headless tests run with `fake_async`, an in-memory store, and the
+227 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -33,14 +33,16 @@ mode (`test/recording_controller_device_test.dart`) and the M15 diagnostics
 plus fixture export (`test/diagnostics_test.dart`,
 `test/fixture_export_test.dart`). The M16 design system
 (`test/ui_kit_test.dart`) pins the shared `core/ui` building blocks and the
-shell restructure (Home / Routes / History tabs, pushed record flow, settings
-stub) is covered in `test/widget_test.dart`, and the M17 Home rework — the
+shell restructure (Home / Routes / History tabs, pushed record flow) is
+covered in `test/widget_test.dart`, and the M17 Home rework — the
 "READY TO RACE" featured-route hero plus the first-launch "Your first race
 awaits." empty state — in `test/widget_test.dart` and `test/ui_state_test.dart`,
 the M18 record-a-route flow (prep → recording → name-and-save → saved) in
-`test/record_route_test.dart`, and the M19 route-bound pre-race with its
+`test/record_route_test.dart`, the M19 route-bound pre-race with its
 3-2-1-GO countdown (plus the M20 RACE AGAIN loop) in
-`test/race_flow_test.dart`.
+`test/race_flow_test.dart`, and the M21 settings — the countdown gate, the
+unit switch over the readouts, GPX export, delete-all and the model
+round-trip — in `test/settings_test.dart`.
 
 The two Rust FFI suites skip themselves, with an explanation, when the cdylib
 has not been built — normal on a fresh checkout. CI passes

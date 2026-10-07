@@ -62,14 +62,43 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'RACE YOUR BEST'), findsOneWidget);
   });
 
-  testWidgets('home gear opens the settings stub', (tester) async {
+  testWidgets('home gear opens the settings screen', (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
+    // M21: the gear lands on the real settings table (§26), not a stub.
     expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Settings arrive in a later milestone.'), findsOneWidget);
+    expect(find.text('Haptics'), findsOneWidget);
+    expect(find.text('Countdown'), findsOneWidget);
+    expect(find.text('Units'), findsOneWidget);
+    expect(find.text('Delete all data'), findsOneWidget);
+    expect(
+      tester
+          .widget<Switch>(
+            find.descendant(
+              of: find.byKey(const ValueKey('haptics-switch')),
+              matching: find.byType(Switch),
+            ),
+          )
+          .value,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<Switch>(
+            find.descendant(
+              of: find.byKey(const ValueKey('countdown-switch')),
+              matching: find.byType(Switch),
+            ),
+          )
+          .value,
+      isTrue,
+    );
+    // About sits below the fold in the scrollable list.
+    await tester.scrollUntilVisible(find.text('Version'), 200);
+    expect(find.text('Version'), findsOneWidget);
   });
 
   testWidgets('race your best opens the pre-run flow', (tester) async {

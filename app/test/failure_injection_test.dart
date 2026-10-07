@@ -43,6 +43,9 @@ class _ThrowingStore implements PersistenceStore {
   @override
   Future<void> write(String key, String value) async =>
       throw StateError('storage write failed');
+
+  @override
+  void remove(String key) => throw StateError('storage write failed');
 }
 
 /// Engine whose route matching always fails (and so would `_recognizeRoute`).

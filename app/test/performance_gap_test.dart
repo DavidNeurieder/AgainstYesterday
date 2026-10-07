@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/models.dart';
@@ -14,14 +15,16 @@ void main() {
     Elapsed difference = const Elapsed.seconds(12),
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(brightness: Brightness.dark),
-        home: Scaffold(
-          body: Center(
-            child: PerformanceGap(
-              difference: difference,
-              distance: const Distance.meters(500),
-              state: state,
+      ProviderScope(
+        child: MaterialApp(
+          theme: ThemeData(brightness: Brightness.dark),
+          home: Scaffold(
+            body: Center(
+              child: PerformanceGap(
+                difference: difference,
+                distance: const Distance.meters(500),
+                state: state,
+              ),
             ),
           ),
         ),

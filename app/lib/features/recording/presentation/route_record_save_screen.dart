@@ -9,13 +9,14 @@
 library;
 
 import 'package:flutter/material.dart' hide Route;
-import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import '../../settings/application/haptics.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
 
 class RouteRecordSaveScreen extends ConsumerStatefulWidget {
@@ -48,6 +49,7 @@ class _RouteRecordSaveScreenState extends ConsumerState<RouteRecordSaveScreen> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final units = ref.watch(displayUnitProvider);
     final track = _capturedTrack;
     final hasGeometry = track.length >= 2;
     final canSave = !_saving && _name.text.trim().isNotEmpty && hasGeometry;
@@ -70,7 +72,7 @@ class _RouteRecordSaveScreenState extends ConsumerState<RouteRecordSaveScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               Text(
-                widget.state.distance.format(),
+                widget.state.distance.formatWith(units),
                 textAlign: TextAlign.center,
                 style: textTheme.displayMedium?.copyWith(
                   fontWeight: FontWeight.w700,
@@ -158,7 +160,7 @@ class _RouteRecordSaveScreenState extends ConsumerState<RouteRecordSaveScreen> {
       rawFixes: controller.currentFixes(),
     );
     setState(() => _saving = true);
-    HapticFeedback.mediumImpact();
+    AppHaptics.medium(ref);
     try {
       await ref.read(routeRepositoryProvider.notifier).saveRoute(route);
       // The controller already saved the raw run; upserting the same id with
