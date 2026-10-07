@@ -11,6 +11,13 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- Real-GPS recordings now gate movement on the ground the receiver actually
+  covered. A fix must clear a 0.5 m/s motion floor (measured between fixes, or
+  a receiver-reported speed corroborated by matching displacement) before it
+  adds moving time, distance or pace. A parked phone — even one serving a
+  stale cached speed — freezes moving time, keeps distance at zero and shows
+  "— /km" instead of a phantom cruise pace, while still buffering the raw
+  fixes for the persisted track.
 - The app no longer ships pre-recorded demo data. The route catalog and
   activity history start empty on a fresh install — users build both by
   finishing runs. Recording without a route is always a free run (no synthetic

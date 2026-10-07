@@ -116,7 +116,11 @@ plugin (the app requests `ACCESS_FINE_LOCATION` on Android and uses
 `NSLocationWhenInUseUsageDescription` on iOS): live position, distance, pace
 and the raw-fix buffer all come from the receiver, a real run on a recognised
 route snaps onto that route's geometry for the ghost gap, and an unrecognised
-line accumulates ground distance as a new route. Refusals (services off or
+line accumulates ground distance as a new route. Movement is gated on the
+ground actually covered — a running fix must clear a 0.5 m/s floor (measured
+between fixes, or a receiver speed backed by matching displacement), so a
+parked phone doesn't count moving time, drift distance, or show a phantom
+cruise pace ("— /km") from a stale cached speed. Refusals (services off or
 permission denied) surface as the recoverable recording ERROR state. The
 diagnostics screen's GPS section prints which source is live.
 
@@ -157,7 +161,7 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 197 tests
+cd app && flutter analyze && flutter test   # Flutter: 201 tests
 cargo test                                   # Rust: 204 tests + property cases
 
 # the same Flutter suite against the real Rust engine over FFI

@@ -123,7 +123,9 @@ void main() {
         final live = state(c)!;
         expect(live.status, RunStatus.running);
         expect(live.distance.meters, closeTo(haversineMeters(a, b), 1e-6));
-        expect(live.elapsed.seconds, greaterThan(2));
+        // Only the second fix can prove motion (the first is the anchor), so
+        // exactly the one 1.2 s interval counts as moving time.
+        expect(live.elapsed.seconds, closeTo(1.2, 1e-9));
         expect(live.currentPosition, b);
 
         // The raw-fix buffer keeps the receiver's own sensor fields.
@@ -155,6 +157,66 @@ void main() {
         expect(saved.rawFixes, hasLength(2));
         expect(saved.track, hasLength(2));
         expect(saved.track!.last.position, b);
+      });
+    });
+
+    test('stationary fixes do not move the run, distance or pace', () {
+      fakeAsync((async) {
+        final stream = StreamController<GpsFix>.broadcast();
+        final c = ProviderContainer(
+          overrides: [
+            deviceGpsProvider.overrideWithValue(
+              _FakeGpsSource(stream.stream),
+            ),
+            persistenceStoreProvider.overrideWithValue(
+              MemoryPersistenceStore(),
+            ),
+          ],
+        );
+        addTearDown(c.dispose);
+        keepAlive(c);
+
+        c.read(recordingControllerProvider.notifier).ensureSession(const []);
+        async.flushMicrotasks();
+        async.elapse(const Duration(milliseconds: 1000));
+        expect(state(c)!.status, RunStatus.ready);
+
+        c.read(recordingControllerProvider.notifier).beginRun();
+        async.flushMicrotasks();
+
+        // A parked phone: identical fixes that keep quiet while the receiver
+        // insists on a stale cached running speed — the phantom 4:47/km pace.
+        const still = GeoPoint(latitude: 52.5000, longitude: 13.3700);
+        for (var i = 0; i < 3; i++) {
+          async.elapse(const Duration(milliseconds: 1200));
+          stream.add(_fix(still.latitude, still.longitude, speed: 3.5));
+          async.flushMicrotasks();
+        }
+
+        final live = state(c)!;
+        expect(live.status, RunStatus.running);
+        expect(live.distance.meters, 0);
+        // Moving time never starts on a still phone.
+        expect(live.elapsed.seconds, 0);
+        // The cached speed must not surface as a cruise pace.
+        expect(live.pace.metersPerSecond, 0);
+        expect(live.pace.formatPace(), '— /km');
+
+        // The still fixes still reach the raw buffer, so the persisted track
+        // keeps the receiver's full output even while standing.
+        final fixes = c
+            .read(recordingControllerProvider.notifier)
+            .currentFixes()!;
+        expect(fixes, hasLength(3));
+
+        // A genuine step afterwards resumes the run from the last heard fix.
+        async.elapse(const Duration(milliseconds: 1200));
+        stream.add(_fix(52.5003, 13.3700));
+        async.flushMicrotasks();
+
+        final moved = state(c)!;
+        expect(moved.distance.meters, greaterThan(0));
+        expect(moved.elapsed.seconds, greaterThan(0));
       });
     });
 

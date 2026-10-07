@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-200 headless tests run with `fake_async`, an in-memory store, and the
+201 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery

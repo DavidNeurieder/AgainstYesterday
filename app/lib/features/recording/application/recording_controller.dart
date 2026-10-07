@@ -59,6 +59,12 @@ class RecordingController extends Notifier<LiveRunState?> {
   /// Demo cruise speed: 4:57/km.
   static const double _baseSpeedMps = 1000.0 / 297.0;
 
+  /// Slowest true motion (m/s) that advances a device-mode run. A fix must
+  /// clear this floor on the ground it actually covered: a stopped phone's
+  /// jitter — or a receiver serving a stale cached speed — never moves the
+  /// run, adds moving time, or shows a phantom pace.
+  static const double _motionFloorMps = 0.5;
+
   Timer? _timer;
   _RecSession? _session;
   final math.Random _random = math.Random(7);
@@ -69,8 +75,10 @@ class RecordingController extends Notifier<LiveRunState?> {
   GpsSource? _gpsSource;
   StreamSubscription<GpsFix>? _gpsSub;
 
-  /// Previous raw position, used to accumulate free-run distance between
-  /// fixes when the live position cannot be snapped onto a chosen route.
+  /// Previous raw position, used to measure the ground travelled between
+  /// consecutive fixes. Anchored on every observation so a later move always
+  /// measures from the last heard fix; free-run distance accumulates only for
+  /// fixes that clear the motion floor.
   GeoPoint? _prevRawPosition;
 
   /// Wall-clock anchor for the last tick (M13): elapsed time is derived from
@@ -301,6 +309,11 @@ class RecordingController extends Notifier<LiveRunState?> {
   }
 
   /// Real-GPS driver: one receiver fix advances the session.
+  ///
+  /// Only fixes that actually clear the motion floor move the run: while a
+  /// phone sits still — even when the receiver serves a stale cached speed —
+  /// the fix lands in the raw buffer and tracks the map position, but never
+  /// adds moving time, distance, or a phantom cruise pace.
   void _onDeviceFix(GpsFix fix) {
     if (state?.status != RunStatus.running) {
       return; // paused / finishing ignore late fixes
@@ -315,8 +328,22 @@ class RecordingController extends Notifier<LiveRunState?> {
       longitude: fix.longitude,
     );
     final projected = _projectOnPolyline(session.geometry, position);
+    final onRoute = projected != null && session.route != null;
 
-    if (projected != null && session.route != null) {
+    // Ground covered since the previous fix (0 for the very first).
+    final groundMeters = _prevRawPosition == null
+        ? 0.0
+        : haversineMeters(_prevRawPosition!, position);
+    _prevRawPosition = position;
+
+    if (!_isMoving(fix, groundMeters, deltaSeconds)) {
+      _recordDeviceFix(fix);
+      _emit(status: RunStatus.running, position: position, pace: Speed.zero());
+      _snapshotThrottled();
+      return;
+    }
+
+    if (onRoute) {
       // On a recognised route: the distance axis follows the geometry — the
       // runner never loses ground to receiver jump, and a loop crossing must
       // not rewind accumulated progress.
@@ -326,14 +353,8 @@ class RecordingController extends Notifier<LiveRunState?> {
     } else {
       // Free-running (no route, or off the geometry): accumulate the travelled
       // ground distance between consecutive raw fixes.
-      if (_prevRawPosition != null) {
-        session.distanceM += math.max(
-          0,
-          haversineMeters(_prevRawPosition!, position),
-        );
-      }
+      session.distanceM += groundMeters;
     }
-    _prevRawPosition = position;
 
     if (deltaSeconds > 0) {
       session.moving = session.moving + Elapsed.seconds(deltaSeconds);
@@ -354,23 +375,39 @@ class RecordingController extends Notifier<LiveRunState?> {
       position: position,
       gap: gap,
       ghostPosition: ghostPosition,
-      pace: _fixPace(fix, projected, deltaSeconds),
+      pace: _fixPace(fix, groundMeters, deltaSeconds),
     );
     _snapshotThrottled();
   }
 
+  /// Whether a fix plausibly moved the runner. The ground covered between
+  /// fixes must clear [_motionFloorMps]; a receiver-reported speed only counts
+  /// when the ground corroborates it — a stopped phone keeps a stale cached
+  /// speed, but its fixes barely displace.
+  bool _isMoving(GpsFix fix, double groundMeters, double deltaSeconds) {
+    if (deltaSeconds <= 0) {
+      return false;
+    }
+    final speed = fix.speedMetersPerSecond;
+    if (speed != null) {
+      return speed >= _motionFloorMps &&
+          groundMeters >= _motionFloorMps * deltaSeconds * 0.5;
+    }
+    return groundMeters / deltaSeconds >= _motionFloorMps;
+  }
+
   /// Pace for a device fix: the receiver's own speed when reported, else the
-  /// ground covered since the previous fix.
-  Speed _fixPace(GpsFix fix, ({double distanceM, GeoPoint point})? projected,
-      double deltaSeconds) {
+  /// ground covered since the previous fix. Only invoked for moving fixes, so
+  /// "— /km" is never manufactured out of a still correction.
+  Speed _fixPace(GpsFix fix, double groundMeters, double deltaSeconds) {
     final speed = fix.speedMetersPerSecond;
     if (speed != null && speed > 0) {
       return Speed.metersPerSecond(speed);
     }
-    if (projected != null && deltaSeconds > 0) {
-      return Speed.metersPerSecond(projected.distanceM / deltaSeconds);
+    if (deltaSeconds > 0 && groundMeters > 0) {
+      return Speed.metersPerSecond(groundMeters / deltaSeconds);
     }
-    return Speed.metersPerSecond(_baseSpeedMps);
+    return Speed.zero();
   }
 
   /// Returns the arc length (and snapped point) of the polyline position
