@@ -8,7 +8,7 @@
 # engine-android produces and both connected-test-engine and full-test build
 # for you.
 
-.PHONY: build build-release run test test-rust-engine lint tz-test \
+.PHONY: build build-release install run test test-rust-engine lint tz-test \
         connected-test connected-test-engine engine-build engine-test \
         engine-lint engine-fmt engine-doc engine-android full-test clean
 
@@ -20,6 +20,11 @@ build-release:
 
 run:
 	cd app && flutter run
+
+# Builds the debug APK and sideloads it into the connected device/emulator.
+# The debug build ships the deterministic fake engine by default.
+install: build
+	adb install -r app/build/app/outputs/flutter-apk/app-debug.apk
 
 test:
 	cd app && flutter test
