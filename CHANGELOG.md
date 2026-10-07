@@ -9,6 +9,19 @@ documented here, grouped by the implementation milestones in
 
 ## [Unreleased]
 
+### Added
+
+- The navigation shell is reworked to **Home / Routes / History** tabs; the
+  recording flow is a pushed full-screen route off Home's primary action
+  (M16). A settings stub and the History tab take the space the Record tab
+  used; the gear on Home opens Settings.
+- A shared design system under `app/lib/core/ui/` — `PrimaryButton`,
+  `EmptyState` (full + inline), `LoadingState`, `ErrorState`, `SectionHeader`,
+  `StatRow`, `MetricDisplay`, `GapLine`, `SplitRow` and `tabular()` figures —
+  replaces the per-screen re-implementations that had drifted (10/12/18/20 px
+  button radii, duplicated gap lines and split rows across the complete /
+  result / activity screens).
+
 ### Changed
 
 - Real-GPS recordings now gate movement on the ground the receiver actually

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// App shell: bottom navigation across Home / Record / Routes (§42).
+/// App shell: bottom navigation across Home / Routes / History (§42).
 library;
 
 import 'package:flutter/material.dart';
@@ -53,14 +53,14 @@ class AppShell extends ConsumerWidget {
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.play_arrow_outlined),
-            selectedIcon: Icon(Icons.play_arrow),
-            label: 'Record',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.route_outlined),
             selectedIcon: Icon(Icons.route),
             label: 'Routes',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'History',
           ),
         ],
       ),

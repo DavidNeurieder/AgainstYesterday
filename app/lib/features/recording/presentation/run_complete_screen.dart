@@ -14,7 +14,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/units.dart';
+import '../../../core/ui/app_buttons.dart';
+import '../../../core/ui/gap_line.dart';
 import '../../../engine/models.dart';
 import '../application/recording_controller.dart';
 
@@ -85,22 +86,14 @@ class RunCompleteScreen extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
-              _GapLine(gap: gap),
+              GapLine(gap: gap),
               const Spacer(),
-              FilledButton(
+              PrimaryButton(
+                label: 'VIEW RESULT',
                 onPressed: () {
                   HapticFeedback.selectionClick();
                   context.push('/record/result');
                 },
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.you,
-                  foregroundColor: AppColors.background,
-                  minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                child: const Text('VIEW RESULT'),
               ),
               const SizedBox(height: AppSpacing.sm),
               TextButton(
@@ -114,38 +107,6 @@ class RunCompleteScreen extends ConsumerWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _GapLine extends StatelessWidget {
-  const _GapLine({required this.gap});
-
-  final GhostState? gap;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final gap = this.gap;
-    if (gap == null) {
-      return Text(
-        'First time on this route',
-        textAlign: TextAlign.center,
-        style: textTheme.bodyMedium,
-      );
-    }
-    final delta = gap.timeDifference.seconds.abs();
-    final offset = Elapsed.seconds(delta).format();
-    final ahead = gap.ahead;
-    final color = ahead ? AppColors.ahead : AppColors.behind;
-    final wording = ahead ? 'ahead of PB' : 'behind PB';
-    return Text(
-      delta == 0 ? 'Tied with PB' : '$offset $wording',
-      textAlign: TextAlign.center,
-      style: textTheme.titleLarge?.copyWith(
-        color: color,
-        fontWeight: FontWeight.w600,
       ),
     );
   }

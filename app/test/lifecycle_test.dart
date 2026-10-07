@@ -271,7 +271,7 @@ void main() {
   // Widget: lifecycle observer triggers snapshot on backgrounding
   // ---------------------------------------------------------------------------
   testWidgets('app backgrounding triggers lifecycle snapshot', (tester) async {
-    // A seeded catalog so the Record tab picks a route to race.
+    // A seeded catalog so the record flow picks a route to race.
     final store = seededStore(routes: [riverLoopRoute]);
     await tester.pumpWidget(ProviderScope(
       overrides: [persistenceStoreProvider.overrideWithValue(store)],
@@ -279,11 +279,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Open the Record tab and reach READY TO RUN.
-    Finder tab(String label) =>
-        find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
-    await tester.tap(tab('Record'));
+    // Start from Home's primary action and reach READY TO RUN.
+    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('START'), findsOneWidget);

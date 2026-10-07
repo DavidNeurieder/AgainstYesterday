@@ -11,6 +11,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/app_buttons.dart';
+import '../../../core/ui/app_sections.dart';
+import '../../../core/ui/app_states.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 
@@ -31,15 +34,21 @@ class HomeScreen extends ConsumerWidget {
           ),
           children: [
             const SizedBox(height: AppSpacing.md),
-            const _Greeting(),
+            const _Header(),
             const SizedBox(height: AppSpacing.lg),
-            _StartRunButton(onPressed: () {
-      HapticFeedback.mediumImpact();
-      context.go('/record');
-    }),
+            PrimaryButton(
+              label: 'Start a run',
+              height: 64,
+              icon: Icons.play_arrow_rounded,
+              onPressed: () {
+                HapticFeedback.mediumImpact();
+                context.go('/record');
+              },
+            ),
             const SizedBox(height: AppSpacing.xl),
             if (activities.isEmpty)
-              const _EmptyHint(
+              const EmptyState(
+                compact: true,
                 icon: Icons.directions_run,
                 message: 'No runs yet. Your finished runs land here.',
               )
@@ -50,10 +59,11 @@ class HomeScreen extends ConsumerWidget {
               ],
             ],
             const SizedBox(height: AppSpacing.lg),
-            const _SectionHeader(title: 'Routes'),
+            const SectionHeader(title: 'Routes'),
             const SizedBox(height: AppSpacing.sm),
             if (routes.isEmpty)
-              const _EmptyHint(
+              const EmptyState(
+                compact: true,
                 icon: Icons.route,
                 message: 'No routes yet. Finish a run to record one.',
               )
@@ -75,96 +85,37 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-class _Greeting extends StatelessWidget {
-  const _Greeting();
+class _Header extends StatelessWidget {
+  const _Header();
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return Column(
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Run against yesterday', style: textTheme.titleMedium),
-        const SizedBox(height: 2),
-        Text(
-          'Every route is a race with your PB.',
-          style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Run against yesterday', style: textTheme.titleMedium),
+              const SizedBox(height: 2),
+              Text(
+                'Every route is a race with your PB.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          tooltip: 'Settings',
+          onPressed: () => context.push('/settings'),
+          icon: const Icon(Icons.settings_outlined),
+          color: AppColors.textSecondary,
         ),
       ],
-    );
-  }
-}
-
-class _StartRunButton extends StatelessWidget {
-  const _StartRunButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 64,
-      child: FilledButton.icon(
-        onPressed: onPressed,
-        icon: const Icon(Icons.play_arrow_rounded, size: 28),
-        label: Text('Start a run',
-            style: Theme.of(context).textTheme.titleMedium),
-        style: FilledButton.styleFrom(
-          backgroundColor: AppColors.you,
-          foregroundColor: AppColors.background,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(context)
-          .textTheme
-          .titleMedium
-          ?.copyWith(color: AppColors.textSecondary),
-    );
-  }
-}
-
-/// M14: a calm inline message where a section has nothing to show yet.
-class _EmptyHint extends StatelessWidget {
-  const _EmptyHint({required this.icon, required this.message});
-
-  final IconData icon;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      child: Row(
-        children: [
-          Icon(icon, size: 28, color: AppColors.textSecondary),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Text(
-              message,
-              style: textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

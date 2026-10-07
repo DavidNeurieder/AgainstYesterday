@@ -1,7 +1,8 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// The record tab — a state-machine driven flow (§8, §9).
+/// The record flow — a pushed full-screen route over the shell (M16), driven
+/// by a state machine (§8, §9).
 ///
 /// One route, rendered as the right phase: pre-run, live, or complete. The UI
 /// never mutates the machine; it only maps [`RunStatus`] to screens.
@@ -31,7 +32,7 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
   void initState() {
     super.initState();
     // Keep a fresh session ready whenever the flow has none (including after
-    // a dismissed run), so visiting the tab always shows the pre-run screen.
+    // a dismissed run), so opening the flow always shows the pre-run screen.
     ref.listenManual(recordingControllerProvider, (_, next) {
       if (next == null) {
         _ensure();

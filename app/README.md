@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-201 headless tests run with `fake_async`, an in-memory store, and the
+212 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -31,7 +31,10 @@ boundaries (`test/route_library_test.dart`), the Rust FFI surface
 device-GPS source (`test/device_gps_test.dart`), the controller's real-GPS
 mode (`test/recording_controller_device_test.dart`) and the M15 diagnostics
 plus fixture export (`test/diagnostics_test.dart`,
-`test/fixture_export_test.dart`).
+`test/fixture_export_test.dart`). The M16 design system
+(`test/ui_kit_test.dart`) pins the shared `core/ui` building blocks and the
+shell restructure (Home / Routes / History tabs, pushed record flow, settings
+stub) is covered in `test/widget_test.dart`.
 
 The two Rust FFI suites skip themselves, with an explanation, when the cdylib
 has not been built — normal on a fresh checkout. CI passes
@@ -134,8 +137,10 @@ section names the active source.
 
 - `lib/app/` — root widget, router, shell tabs, dependency injection.
 - `lib/features/` — feature folders: `home`, `recording`, `result`, `routes`,
-  `activity` (each `presentation/` + `application/`).
-- `lib/core/` — theme and units.
+  `history`, `settings`, `activity` (each `presentation/` + `application/`).
+- `lib/core/` — theme, units, and the shared `ui` design system
+  (`core/ui/`): buttons, empty/loading/error states, sections, the PB gap
+  line and split rows.
 - `lib/engine/` — `EngineService` facade, fake + Rust FFI implementations,
   and the device `GpsSource`/geolocator bridge.
 - `lib/persistence/` — stores and repositories.

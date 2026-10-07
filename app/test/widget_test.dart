@@ -46,15 +46,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('River Loop'), findsWidgets);
 
-    await tester.tap(tab('Record'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(find.text('READY TO RUN'), findsOneWidget);
+    await tester.tap(tab('History'));
+    await tester.pumpAndSettle();
+    // The seeded catalog has finished activities → History rows.
+    expect(find.byIcon(Icons.directions_run), findsWidgets);
 
     await tester.tap(tab('Home'));
     await tester.pumpAndSettle();
     expect(find.text('Start a run'), findsOneWidget);
+  });
+
+  testWidgets('home gear opens the settings stub', (tester) async {
+    await tester.pumpWidget(pumpedApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Settings arrive in a later milestone.'), findsOneWidget);
   });
 
   testWidgets('start a run routes to pre-run screen', (tester) async {
@@ -63,6 +72,7 @@ void main() {
 
     await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('READY TO RUN'), findsOneWidget);

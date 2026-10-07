@@ -15,6 +15,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/app_states.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../../widgets/route_silhouette.dart';
@@ -33,19 +34,11 @@ class RoutesScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
-          if (routes.isEmpty) ...[
-            const SizedBox(height: AppSpacing.xxl),
-            const Icon(Icons.route, size: 48, color: AppColors.textMuted),
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                'No routes yet. Finish a run to record one.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-              ),
+          if (routes.isEmpty)
+            const EmptyState(
+              icon: Icons.route,
+              message: 'No routes yet. Finish a run to record one.',
             ),
-          ],
           for (final route in routes) ...[
             _RouteCourseCard(
               route: route,

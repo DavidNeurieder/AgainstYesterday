@@ -19,13 +19,12 @@ import 'package:against_yesterday/widgets/performance_gap.dart';
 import 'test_catalog.dart';
 
 void main() {
-  Finder tab(String label) =>
-      find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
-
   /// Drives the fake-GPS acquisition tone by tone so each phase is observed.
-  /// Seeds a route so the Record tab has a ghost to race (the app starts
-  /// empty, so the ghost only exists when a route is picked).
-  Future<void> openRecordTab(WidgetTester tester) async {
+  /// Seeds a route so the record flow has a ghost to race (the app starts
+  /// empty, so the ghost only exists when a route is picked). The flow is a
+  /// pushed screen on top of the shell (M16), reached from Home's primary
+  /// action.
+  Future<void> openRecordFlow(WidgetTester tester) async {
     await tester.pumpWidget(ProviderScope(
       overrides: [
         persistenceStoreProvider.overrideWithValue(
@@ -35,8 +34,11 @@ void main() {
       child: const AgainstYesterdayApp(),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(tab('Record'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
     await tester.pump();
+    // Let the pushed `/record` page transition finish without crossing the
+    // first 500 ms acquisition tone, so the phase assertions stay aligned.
+    await tester.pump(const Duration(milliseconds: 350));
   }
 
   Future<void> waitReady(WidgetTester tester) async {
@@ -49,7 +51,7 @@ void main() {
 
   testWidgets('acquiring GPS disables START and shows the hourglass cue',
       (tester) async {
-    await openRecordTab(tester);
+    await openRecordFlow(tester);
 
     // Preparing → acquiring keep the same pre-run screen.
     expect(find.text('GETTING GPS…'), findsOneWidget);
@@ -64,7 +66,7 @@ void main() {
 
   testWidgets('READY enables START and shows the GPS-ready chip',
       (tester) async {
-    await openRecordTab(tester);
+    await openRecordFlow(tester);
     await waitReady(tester);
 
     expect(find.text('READY TO RUN'), findsOneWidget);
@@ -78,7 +80,7 @@ void main() {
 
   testWidgets('running shows PAUSE+FINISH; paused shows RESUME+FINISH',
       (tester) async {
-    await openRecordTab(tester);
+    await openRecordFlow(tester);
     await waitReady(tester);
 
     await tester.tap(find.text('START'));
@@ -99,7 +101,7 @@ void main() {
 
   testWidgets('completed shows neither pause nor resume nor finish',
       (tester) async {
-    await openRecordTab(tester);
+    await openRecordFlow(tester);
     await waitReady(tester);
 
     await tester.tap(find.text('START'));
@@ -120,7 +122,7 @@ void main() {
 
   testWidgets('rapid pause/resume switching converges on a coherent state',
       (tester) async {
-    await openRecordTab(tester);
+    await openRecordFlow(tester);
     await waitReady(tester);
 
     await tester.tap(find.text('START'));

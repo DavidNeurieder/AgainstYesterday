@@ -12,11 +12,8 @@ import 'package:against_yesterday/widgets/performance_gap.dart';
 import 'test_catalog.dart';
 
 void main() {
-  Finder tab(String label) =>
-      find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
-
-  /// The app behind a seeded catalog, so the Record tab has a route to race —
-  /// the app ships with an empty catalog.
+  /// The app behind a seeded catalog, so the record flow has a route to
+  /// race — the app ships with an empty catalog.
   Widget pumpedApp() => ProviderScope(
         overrides: [
           persistenceStoreProvider.overrideWithValue(
@@ -36,8 +33,9 @@ void main() {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(tab('Record'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
 
     expect(find.text('READY TO RUN'), findsOneWidget);
@@ -50,8 +48,9 @@ void main() {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(tab('Record'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
 
     await tester.tap(find.text('START'));

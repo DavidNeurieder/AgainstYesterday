@@ -15,6 +15,7 @@ import 'package:against_yesterday/features/dev/application/fixture_export.dart';
 import 'package:against_yesterday/features/dev/presentation/diagnostics_screen.dart';
 import 'package:against_yesterday/features/home/presentation/home_screen.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/features/recording/presentation/live_run_screen.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'test_catalog.dart';
@@ -60,14 +61,21 @@ void main() {
   }
 
   Future<void> goToDiagnostics(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('Diagnostics'));
+    // The record flow is a pushed full-screen route (M16) with no shell
+    // chrome, so reach diagnostics through the router instead of the floating
+    // dev-tools button — whether the caller is on Home or in a live run.
+    final where = find.byType(LiveRunScreen).evaluate().isEmpty
+        ? find.byType(HomeScreen)
+        : find.byType(LiveRunScreen);
+    GoRouter.of(tester.element(where)).go('/dev/diagnostics');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
   }
 
   Future<void> startLiveRun(WidgetTester tester) async {
-    await tester.tap(find.text('Record'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(find.text('START'));

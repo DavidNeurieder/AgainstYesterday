@@ -13,7 +13,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/units.dart';
+import '../../../core/ui/split_row.dart';
 import '../../../persistence/persistence.dart';
 import '../../result/application/splits.dart';
 
@@ -109,7 +109,7 @@ class ActivityDetailScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.sm),
             for (final split in splits)
-              _SplitRow(split: split),
+              SplitRow(split: split),
           ],
           const SizedBox(height: AppSpacing.xl),
           Text(
@@ -161,45 +161,6 @@ class _NotFoundScreen extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SplitRow extends StatelessWidget {
-  const _SplitRow({required this.split});
-
-  final SplitDelta split;
-
-  @override
-  Widget build(BuildContext context) {
-    final ahead = split.deltaSeconds <= 0;
-    final color = ahead ? AppColors.ahead : AppColors.behind;
-    final sign = ahead ? '-' : '+';
-    final delta = Elapsed.seconds(split.deltaSeconds.abs()).format();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(
-              '${split.kilometer} km',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Text(
-            sign + delta,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-          ),
-        ],
       ),
     );
   }

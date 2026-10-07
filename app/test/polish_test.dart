@@ -135,14 +135,14 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // M14: the Record tab shows the error screen, and retrying recovers it
+  // M14: the record flow shows the error screen, and retrying recovers it
   // ---------------------------------------------------------------------------
-  testWidgets('record tab error state recovers via retry', (tester) async {
+  testWidgets('record flow error state recovers via retry', (tester) async {
     final engine = _FlakyEngine(failures: 1);
     await tester.pumpWidget(ProviderScope(
       overrides: [
         engineServiceProvider.overrideWithValue(engine),
-        // Seed a route so Record picks one to prepare a ghost with.
+        // Seed a route so the flow picks one to prepare a ghost with.
         persistenceStoreProvider.overrideWithValue(
           seededStore(routes: [riverLoopRoute]),
         ),
@@ -151,10 +151,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    Finder tab(String label) =>
-        find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
-    await tester.tap(tab('Record'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Could not start a run'), findsOneWidget);
@@ -182,10 +181,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    Finder tab(String label) =>
-        find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
-    await tester.tap(tab('Record'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
 
