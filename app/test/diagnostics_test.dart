@@ -15,6 +15,9 @@ import 'package:against_yesterday/features/dev/application/fixture_export.dart';
 import 'package:against_yesterday/features/dev/presentation/diagnostics_screen.dart';
 import 'package:against_yesterday/features/home/presentation/home_screen.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
+
+import 'test_catalog.dart';
 
 /// M15 Phase 10: the developer diagnostics entry point and screen.
 void main() {
@@ -25,7 +28,14 @@ void main() {
   );
 
   ProviderScope enabledApp() => ProviderScope(
-    overrides: [devToolsEnabledProvider.overrideWithValue(true)],
+    overrides: [
+      devToolsEnabledProvider.overrideWithValue(true),
+      // Seed a route so a live run has geometry and a PB ghost to race —
+      // the shipped app starts with an empty catalog.
+      persistenceStoreProvider.overrideWithValue(
+        seededStore(routes: [riverLoopRoute]),
+      ),
+    ],
     child: app(),
   );
 

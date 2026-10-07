@@ -21,6 +21,8 @@ import 'package:against_yesterday/features/routes/presentation/routes_screen.dar
 import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:integration_test/integration_test.dart';
 
+import '../test/test_catalog.dart';
+
 /// The distance value currently shown on the live screen, in meters.
 ///
 /// `Distance.format()` renders "412 m" below one kilometer and "1.05 km"
@@ -94,10 +96,20 @@ void main() {
     await tester.pumpWidget(const AgainstYesterdayApp());
     await tester.pumpAndSettle();
 
+    // The app ships with an empty catalog, so seed a route through the app's
+    // own repository (a fresh install would get this after its first saved
+    // run / imported route).
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp)),
+    );
+    await container
+        .read(routeRepositoryProvider.notifier)
+        .saveRoute(riverLoopRoute);
+    await tester.pumpAndSettle();
+
     // Home is the default tab.
     expect(find.text('Run against yesterday'), findsOneWidget);
     expect(find.text('River Loop'), findsWidgets);
-    expect(find.text('Park 5K'), findsWidgets);
 
     // Home → Record via the primary action.
     await tester.tap(find.text('Start a run'));
@@ -146,19 +158,16 @@ void main() {
     expect(find.text('PERFORMANCE'), findsOneWidget);
     expect(find.textContaining('fastest run'), findsOneWidget);
 
-    // DONE → Home now shows the finished run (2 seeds + 1 new = 3 tiles).
-    // The save runs in the background on purpose, so poll for the tile rather
-    // than assuming it landed while the screens changed underneath.
+    // DONE → Home now shows the finished run (empty start + this one = one
+    // tile). The save runs in the background on purpose, so poll for the tile
+    // rather than assuming it landed while the screens changed underneath.
     await tester.tap(find.text('DONE'));
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(MaterialApp)),
-    );
     await waitForCondition(
       tester,
-      () => tester.widgetList(find.byIcon(Icons.directions_run)).length >= 3,
-      'the finished run to appear on Home as a third tile',
-      // On timeout, separate "the save never ran" (activities still 2) from
-      // "the save ran but Home never rebuilt" (activities 3, tiles 2), report
+      () => tester.widgetList(find.byIcon(Icons.directions_run)).isNotEmpty,
+      'the finished run to appear on Home as a tile',
+      // On timeout, separate "the save never ran" (activities still 0) from
+      // "the save ran but Home never rebuilt" (activities 1, tiles 0), report
       // the live run's status (still recording = the finish tap never landed),
       // and say how far the background save got / where it broke.
       diagnostics: () {
@@ -174,12 +183,29 @@ void main() {
             'run_status=$status, save=$save';
       },
     );
-    expect(find.byIcon(Icons.directions_run), findsNWidgets(3));
+    expect(find.byIcon(Icons.directions_run), findsNWidgets(1));
     expect(find.text('Run against yesterday'), findsOneWidget);
   });
 
   testWidgets('browses the route library', (tester) async {
     await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpAndSettle();
+
+    // The app ships with an empty catalog; seed the library through the app's
+    // own repositories as a user would accumulate it.
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(MaterialApp)),
+    );
+    final routes = container.read(routeRepositoryProvider.notifier);
+    for (final route in demoRoutes) {
+      await routes.saveRoute(route);
+    }
+    await container
+        .read(activityRepositoryProvider.notifier)
+        .saveActivity(seedActivity(id: 'act-003'));
+    await container
+        .read(activityRepositoryProvider.notifier)
+        .saveActivity(seedActivity(id: 'act-002', routeId: parkLoopRoute.id));
     await tester.pumpAndSettle();
 
     // Routes tab lists the seeded catalog — scope into the NavigationBar to

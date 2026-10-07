@@ -30,7 +30,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/dependencies.dart';
 import '../../../core/units.dart';
 import '../../../engine/device_gps_source.dart';
-import '../../../engine/fake_engine.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 
@@ -98,13 +97,10 @@ class RecordingController extends Notifier<LiveRunState?> {
     if (_session != null) {
       return;
     }
-    final preferred = preferredRoutes.isNotEmpty
-        ? preferredRoutes.firstWhere(
-            (r) => r.id == FakeEngineService.riverLoopId,
-            orElse: () => preferredRoutes.first,
-          )
-        : null;
-    _session = _RecSession(preferred, 0);
+    _session = _RecSession(
+      preferredRoutes.isNotEmpty ? preferredRoutes.first : null,
+      0,
+    );
     _gpsSource = ref.read(deviceGpsProvider);
     _prevRawPosition = null;
     _beginAcquisition();
@@ -821,15 +817,12 @@ class RecordingController extends Notifier<LiveRunState?> {
     final session = _requireSession();
     final route = session.route;
     if (route == null) {
-      if (_gpsSource != null) {
-        // Device mode, no route: a genuinely new line — no synthetic rug to
-        // race on. Distance accumulates from the real fixes instead.
-        session.geometry = const [];
-        session.loopLength = 0;
-        return;
-      }
-      session.geometry = FakeEngineService.riverLoop;
-      session.loopLength = polylineMeters(session.geometry);
+      // No route in any mode: a genuinely new line — no synthetic rug to race
+      // on. Distance accumulates from the fixes (device) or the scenario
+      // clock (host/E2E) without a geometry to walk along. A loop length
+      // recovered from a resume snapshot is preserved so a restarted run
+      // keeps clamping to its recorded loop; fresh free runs stay unbounded.
+      session.geometry = const [];
       return;
     }
     session.geometry = route.geometry;
@@ -933,7 +926,7 @@ class _RecSession {
 
   final DateTime startedAt;
   Route? route;
-  List<GeoPoint> geometry = FakeEngineService.riverLoop;
+  List<GeoPoint> geometry = const [];
   double loopLength = 0;
   Ghost? ghost;
   Elapsed moving = Elapsed.zero();

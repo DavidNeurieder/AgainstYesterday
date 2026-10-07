@@ -109,12 +109,13 @@ void main() {
       fakeAsync((async) {
         final c = container(async, MemoryPersistenceStore());
         final ctrl = c.read(recordingControllerProvider.notifier);
+        const loopMeters = 4760.0;
         final snapshot = RunSnapshot(
           status: RunStatus.running,
           startedAt: DateTime.utc(2026, 1, 1, 10),
           movingSeconds: 1700,
           distanceMeters: 4500,
-          loopMeters: 4760,
+          loopMeters: loopMeters,
           routeId: null,
         );
         ctrl.resumeFromSnapshot(snapshot);
@@ -122,11 +123,10 @@ void main() {
         expect(c.read(recordingControllerProvider)!.distance.meters,
             closeTo(4500, 0.01));
 
-        // Headless resumes rebuild the loop from the geometry.
-        final loop = polylineMeters(FakeEngineService.riverLoop);
+        // Headless resumes clamp to the loop length recorded in the snapshot.
         async.elapse(const Duration(seconds: 300)); // long enough to lap
         expect(c.read(recordingControllerProvider)!.distance.meters,
-            closeTo(loop, 0.5));
+            closeTo(loopMeters, 0.5));
         expect(c.read(recordingControllerProvider)!.routeProgress,
             lessThanOrEqualTo(1.0));
       });
@@ -235,8 +235,8 @@ void main() {
     });
   });
 
-  group('corrupt history falls back to seeds', () {
-    test('a corrupt activities document recovers to the seeded history', () async {
+  group('corrupt history degrades to an empty history', () {
+    test('a corrupt activities document recovers to an empty history', () async {
       final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
       addTearDown(() => dir.delete(recursive: true));
       final store = JsonFileStore(dir);
@@ -248,7 +248,7 @@ void main() {
       addTearDown(c.dispose);
 
       final history = c.read(activityRepositoryProvider);
-      expect(history.length, 2); // seeded demo history (act-002, act-003)
+      expect(history, isEmpty);
     });
   });
 }

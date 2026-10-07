@@ -101,8 +101,9 @@ diagnostics entry point.
 ## Using the real phone GPS
 
 A plain `flutter run`/`flutter test` replays the deterministic demo timeline
-(the ~4.8 km "River Loop"), so the whole loop is explorable with no phone. To
-record *actual* device fixes, build with `USE_DEVICE_GPS`:
+(roughly the ~4.8 km "River Loop" walkable on the host — the app's catalog
+itself stays empty until the user builds routes), so the flow is explorable
+with no phone. To record *actual* device fixes, build with `USE_DEVICE_GPS`:
 
 ```bash
 cd app && flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
@@ -179,10 +180,12 @@ snapshot.
 
 ## Status
 
-Milestones M1–M15 are implemented (see [CHANGELOG.md](CHANGELOG.md)). The demo
-ships with a seeded catalog and a deterministic fake GPS timeline (the ~4.8 km
-"River Loop"), so the whole loop is explorable on any device or in tests; a
-`USE_DEVICE_GPS=true` build records the phone receiver's real fixes instead.
+Milestones M1–M15 are implemented (see [CHANGELOG.md](CHANGELOG.md)). The app
+ships with an empty catalog — no pre-recorded routes or demo history — and
+records a free run until the user builds routes by finishing runs. On the
+host/tests the deterministic fake GPS timeline (the ~4.8 km "River Loop"
+fixture) keeps the whole loop explorable with no phone; a `USE_DEVICE_GPS=true`
+build records the phone receiver's real fixes instead.
 M15 added the raw-GPS quality model, checked-in replay fixtures, ghost
 geometry invariants and continuity-aware matching on the Rust side, plus the
 developer diagnostics screen on the app side. It also retains the raw fixes

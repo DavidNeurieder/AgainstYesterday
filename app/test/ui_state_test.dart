@@ -9,18 +9,31 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'package:against_yesterday/widgets/performance_gap.dart';
+
+import 'test_catalog.dart';
 
 void main() {
   Finder tab(String label) =>
       find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
 
   /// Drives the fake-GPS acquisition tone by tone so each phase is observed.
+  /// Seeds a route so the Record tab has a ghost to race (the app starts
+  /// empty, so the ghost only exists when a route is picked).
   Future<void> openRecordTab(WidgetTester tester) async {
-    await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        persistenceStoreProvider.overrideWithValue(
+          seededStore(routes: [riverLoopRoute]),
+        ),
+      ],
+      child: const AgainstYesterdayApp(),
+    ));
     await tester.pumpAndSettle();
     await tester.tap(tab('Record'));
     await tester.pump();

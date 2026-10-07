@@ -2,12 +2,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
+
+import 'test_catalog.dart';
 
 void main() {
+  /// The app behind a seeded catalog — the shipped app starts empty, so tests
+  /// that render routes or race one seed them explicitly.
+  Widget pumpedApp() => ProviderScope(
+        overrides: [
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: demoRoutes, activities: demoActivities()),
+          ),
+        ],
+        child: const AgainstYesterdayApp(),
+      );
+
   testWidgets('home shows the primary start action and catalogs', (tester) async {
-    await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
     // Primary action per §43.
@@ -21,7 +36,7 @@ void main() {
   });
 
   testWidgets('shell navigates between tabs', (tester) async {
-    await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
     Finder tab(String label) =>
@@ -43,7 +58,7 @@ void main() {
   });
 
   testWidgets('start a run routes to pre-run screen', (tester) async {
-    await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'Start a run'));

@@ -130,9 +130,10 @@ final class RustEngineService implements EngineService {
   }
 }
 
-/// The demo loop both engines agree on, passed to the native generator.
-/// Mirrors `FakeEngineService.riverLoop` so fake and Rust engines seed the
-/// same catalog geometry.
+/// The demo loop the host-side generator walks, mirroring
+/// `FakeEngineService.riverLoop` so fake and Rust engines produce matching
+/// deterministic fixtures. This is the engine's test geometry — the app
+/// catalog starts empty and is user-built only.
 final List<GeoPoint> _recordingGeometry = const [
   GeoPoint(latitude: 52.5050, longitude: 13.3600),
   GeoPoint(latitude: 52.5095, longitude: 13.3660),

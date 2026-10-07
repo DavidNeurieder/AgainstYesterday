@@ -11,6 +11,12 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- The app no longer ships pre-recorded demo data. The route catalog and
+  activity history start empty on a fresh install — users build both by
+  finishing runs. Recording without a route is always a free run (no synthetic
+  ghost geometry) in every mode; host tests and the E2E seed their own
+  fixtures through `app/test/test_catalog.dart`. The deterministic fake GPS
+  timeline and the River Loop engine fixture remain for host/test exploration.
 - The live run can now record the phone's **real GPS**. A build with
   `USE_DEVICE_GPS=true` streams 1 Hz fixes from the geolocator plugin into the
   recording controller, so position, distance, pace, the raw-fix buffer and the

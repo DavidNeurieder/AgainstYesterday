@@ -2,14 +2,29 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'package:against_yesterday/widgets/performance_gap.dart';
+
+import 'test_catalog.dart';
 
 void main() {
   Finder tab(String label) =>
       find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+
+  /// The app behind a seeded catalog, so the Record tab has a route to race —
+  /// the app ships with an empty catalog.
+  Widget pumpedApp() => ProviderScope(
+        overrides: [
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: [riverLoopRoute]),
+          ),
+        ],
+        child: const AgainstYesterdayApp(),
+      );
 
   /// Drives the fake-GPS acquisition to READY.
   Future<void> waitReady(WidgetTester tester) async {
@@ -18,7 +33,7 @@ void main() {
   }
 
   testWidgets('pre-run reaches READY TO RUN with GPS', (tester) async {
-    await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
     await tester.tap(tab('Record'));
@@ -32,7 +47,7 @@ void main() {
   });
 
   testWidgets('start, live gap, pause, resume, finish, done', (tester) async {
-    await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
     await tester.tap(tab('Record'));
@@ -98,10 +113,11 @@ void main() {
     await waitReady(tester); // no GPS frame needed at the result screen
     expect(find.text('Splits'), findsOneWidget);
 
-    // M10: the finished run lands in Home's recent history.
+    // M10: the finished run lands in Home's recent history (empty start →
+    // just this one).
     await tester.tap(find.text('DONE'));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.directions_run), findsNWidgets(3));
+    expect(find.byIcon(Icons.directions_run), findsNWidgets(1));
 
     // M11: tapping the most recent activity opens its detail screen.
     await tester.tap(find.byIcon(Icons.directions_run).first);

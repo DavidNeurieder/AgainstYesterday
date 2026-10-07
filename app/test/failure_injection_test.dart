@@ -21,6 +21,8 @@ import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
+import 'test_catalog.dart';
+
 const _route = Route(
   id: FakeEngineService.riverLoopId,
   name: 'River Loop',
@@ -67,25 +69,23 @@ void main() {
       c.read(recordingControllerProvider);
 
   // -------------------------------------------------------------------------
-  // Storage reads fail → fall back to the seeded defaults (never crash).
+  // Storage reads fail → degrade to the empty defaults (never crash).
   // -------------------------------------------------------------------------
-  group('failed storage reads degrade to seeds', () {
-    test('a throwing routes read falls back to the seeded catalog', () async {
+  group('failed storage reads degrade to the empty defaults', () {
+    test('a throwing routes read degrades to an empty catalog', () async {
       final c = ProviderContainer(overrides: [
         persistenceStoreProvider.overrideWithValue(const _ThrowingStore()),
       ]);
       addTearDown(c.dispose);
-      expect(c.read(routeRepositoryProvider), hasLength(3));
-      expect(c.read(routeRepositoryProvider).first.id,
-          FakeEngineService.riverLoopId);
+      expect(c.read(routeRepositoryProvider), isEmpty);
     });
 
-    test('a throwing activities read falls back to the seeded history', () async {
+    test('a throwing activities read degrades to an empty history', () async {
       final c = ProviderContainer(overrides: [
         persistenceStoreProvider.overrideWithValue(const _ThrowingStore()),
       ]);
       addTearDown(c.dispose);
-      expect(c.read(activityRepositoryProvider), hasLength(2));
+      expect(c.read(activityRepositoryProvider), isEmpty);
     });
 
     test('a throwing snapshot read yields no interrupted run', () async {
@@ -200,27 +200,24 @@ void main() {
   // Engine failures on the way OUT (route recognition) are safe too.
   // -------------------------------------------------------------------------
   group('route recognition failure on finish', () {
-    test('a headless run finishing with a failing matcher still completes', () {
+    test('a route-less run finishing with a failing matcher still completes', () {
       fakeAsync((async) {
+        // Start on a known route, then drop it, so the finish runs route
+        // recognition against a seeded catalog whose matcher throws.
         final c = ProviderContainer(overrides: [
           engineServiceProvider.overrideWithValue(_MismatchingEngine()),
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: [riverLoopRoute]),
+          ),
         ]);
         addTearDown(c.dispose);
         keepAlive(c);
 
         final ctrl = c.read(recordingControllerProvider.notifier);
-        // Headless: no route selected, so finishing runs _recognizeRoute.
-        ctrl.resumeFromSnapshot(
-          RunSnapshot(
-            status: RunStatus.ready,
-            startedAt: DateTime.utc(2026, 1, 1, 10),
-            movingSeconds: 0,
-            distanceMeters: 0,
-            loopMeters: 4760,
-          ),
-        );
+        ctrl.ensureSession([riverLoopRoute]);
         async.flushMicrotasks();
-        expect(state(c)!.status, RunStatus.ready);
+        expect(state(c)!.status, RunStatus.preparing);
+        ctrl.continueWithoutRoute();
         ctrl.beginRun();
         async.elapse(const Duration(seconds: 5));
         ctrl.finishRun();
@@ -236,7 +233,7 @@ void main() {
   // Structurally valid JSON, wrong shape → safe defaults (Phase 6/14).
   // -------------------------------------------------------------------------
   group('valid JSON with the wrong shape', () {
-    test('routes document of the wrong shape falls back to seeds', () async {
+    test('routes document of the wrong shape degrades to an empty catalog', () async {
       final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
       addTearDown(() => dir.delete(recursive: true));
       final store = JsonFileStore(dir);
@@ -245,10 +242,11 @@ void main() {
         persistenceStoreProvider.overrideWithValue(store),
       ]);
       addTearDown(c.dispose);
-      expect(c.read(routeRepositoryProvider), hasLength(3));
+      expect(c.read(routeRepositoryProvider), isEmpty);
     });
 
-    test('activities document of the wrong shape falls back to seeds', () async {
+    test('activities document of the wrong shape degrades to an empty history',
+        () async {
       final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
       addTearDown(() => dir.delete(recursive: true));
       final store = JsonFileStore(dir);
@@ -257,7 +255,7 @@ void main() {
         persistenceStoreProvider.overrideWithValue(store),
       ]);
       addTearDown(c.dispose);
-      expect(c.read(activityRepositoryProvider), hasLength(2));
+      expect(c.read(activityRepositoryProvider), isEmpty);
     });
 
     test('snapshot document of the wrong shape yields no interrupted run',

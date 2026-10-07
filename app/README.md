@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-197 headless tests run with `fake_async`, an in-memory store, and the
+200 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -108,10 +108,12 @@ these to expose the diagnostics entry point (M15).
 ## Real phone GPS
 
 A plain `flutter run`/`flutter test` replays the deterministic demo timeline
-(no receiver needed — deterministic and cheap). A `USE_DEVICE_GPS=true` build
-records the phone's real fixes: the geolocator plugin streams 1 Hz positions
-into the recording controller, and position, distance, pace, the raw-fix
-buffer and the persisted track all come from the receiver.
+(no receiver needed — deterministic and cheap); the app starts with an empty
+route catalog and records freely until the user builds routes by finishing
+runs. A `USE_DEVICE_GPS=true` build records the phone's real fixes: the
+geolocator plugin streams 1 Hz positions into the recording controller, and
+position, distance, pace, the raw-fix buffer and the persisted track all come
+from the receiver.
 
 ```bash
 flutter build apk --debug --dart-define=USE_DEVICE_GPS=true

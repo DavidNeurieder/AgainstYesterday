@@ -11,6 +11,8 @@ import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
+
+import 'test_catalog.dart';
 import 'package:against_yesterday/persistence/serialization.dart';
 
 const _route = Route(
@@ -269,7 +271,8 @@ void main() {
   // Widget: lifecycle observer triggers snapshot on backgrounding
   // ---------------------------------------------------------------------------
   testWidgets('app backgrounding triggers lifecycle snapshot', (tester) async {
-    final store = MemoryPersistenceStore();
+    // A seeded catalog so the Record tab picks a route to race.
+    final store = seededStore(routes: [riverLoopRoute]);
     await tester.pumpWidget(ProviderScope(
       overrides: [persistenceStoreProvider.overrideWithValue(store)],
       child: const AgainstYesterdayApp(),

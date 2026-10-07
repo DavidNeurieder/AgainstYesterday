@@ -107,39 +107,39 @@ void main() {
   });
 
   group('in-memory repositories', () {
-    test('routes seed, then saveRoute upserts by id', () async {
+    test('routes start empty, then saveRoute appends and upserts by id', () async {
       final c = ProviderContainer();
       addTearDown(c.dispose);
 
-      expect(c.read(routeRepositoryProvider), hasLength(3));
+      expect(c.read(routeRepositoryProvider), isEmpty);
 
       await c.read(routeRepositoryProvider.notifier).saveRoute(
             _route(id: 'river-loop', name: 'Renamed', attempts: 99),
           );
-      final renamed = c.read(routeRepositoryProvider)
-          .firstWhere((r) => r.id == 'river-loop');
-      expect(renamed.name, 'Renamed');
-      expect(renamed.attemptCount, 99);
+      var cat = c.read(routeRepositoryProvider);
+      expect(cat, hasLength(1));
+      expect(cat.single.name, 'Renamed');
+      expect(cat.single.attemptCount, 99);
 
       await c.read(routeRepositoryProvider.notifier).saveRoute(
             _route(id: 'new-route', name: 'New Route', attempts: 1),
           );
-      final after = c.read(routeRepositoryProvider);
-      expect(after, hasLength(4));
-      expect(after.last.name, 'New Route');
+      cat = c.read(routeRepositoryProvider);
+      expect(cat, hasLength(2));
+      expect(cat.last.name, 'New Route');
     });
 
-    test('activities seed newest-first and saveActivity dedupes by id', () async {
+    test('activities start empty and saveActivity dedupes by id', () async {
       final c = ProviderContainer();
       addTearDown(c.dispose);
 
-      expect(c.read(activityRepositoryProvider), hasLength(2));
+      expect(c.read(activityRepositoryProvider), isEmpty);
 
       await c
           .read(activityRepositoryProvider.notifier)
           .saveActivity(_activity(id: 'act-005'));
       var history = c.read(activityRepositoryProvider);
-      expect(history, hasLength(3));
+      expect(history, hasLength(1));
       expect(history.first.id, 'act-005');
 
       // Re-saving the same id moves it up without duplicating.
@@ -147,7 +147,7 @@ void main() {
           .read(activityRepositoryProvider.notifier)
           .saveActivity(_activity(id: 'act-005', routeId: null));
       history = c.read(activityRepositoryProvider);
-      expect(history, hasLength(3));
+      expect(history, hasLength(1));
       expect(history.first.id, 'act-005');
       expect(history.first.routeId, isNull);
     });
@@ -211,14 +211,14 @@ void main() {
       expect(kept.single.duration?.seconds, 1502);
     });
 
-    test('a corrupt document falls back to the seed', () {
+    test('a corrupt document degrades to an empty catalog', () {
       temp.createSync(recursive: true);
       File('${temp.path}/routes.json').writeAsStringSync('{not json');
       final c = ProviderContainer(
         overrides: [persistenceStoreProvider.overrideWithValue(store)],
       );
       addTearDown(c.dispose);
-      expect(c.read(routeRepositoryProvider), hasLength(3));
+      expect(c.read(routeRepositoryProvider), isEmpty);
     });
   });
 }

@@ -17,6 +17,8 @@ import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:against_yesterday/widgets/performance_gap.dart';
 import 'package:against_yesterday/widgets/route_map.dart';
 
+import 'test_catalog.dart';
+
 const _route = Route(
   id: FakeEngineService.riverLoopId,
   name: 'River Loop',
@@ -138,7 +140,13 @@ void main() {
   testWidgets('record tab error state recovers via retry', (tester) async {
     final engine = _FlakyEngine(failures: 1);
     await tester.pumpWidget(ProviderScope(
-      overrides: [engineServiceProvider.overrideWithValue(engine)],
+      overrides: [
+        engineServiceProvider.overrideWithValue(engine),
+        // Seed a route so Record picks one to prepare a ghost with.
+        persistenceStoreProvider.overrideWithValue(
+          seededStore(routes: [riverLoopRoute]),
+        ),
+      ],
       child: const AgainstYesterdayApp(),
     ));
     await tester.pumpAndSettle();

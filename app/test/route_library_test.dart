@@ -2,16 +2,31 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/features/routes/presentation/route_detail_screen.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
+
+import 'test_catalog.dart';
 
 void main() {
   Finder tab(String label) =>
       find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
 
+  /// The app behind a seeded catalog — the shipped app starts empty, so the
+  /// library renders whatever the tests seed.
+  Widget pumpedApp() => ProviderScope(
+        overrides: [
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: demoRoutes, activities: demoActivities()),
+          ),
+        ],
+        child: const AgainstYesterdayApp(),
+      );
+
   testWidgets('Routes tab lists the route library with stats', (tester) async {
-    await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
     await tester.tap(tab('Routes'));
@@ -25,7 +40,7 @@ void main() {
   });
 
   testWidgets('tapping a route card opens its detail', (tester) async {
-    await tester.pumpWidget(const AgainstYesterdayApp());
+    await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
     await tester.tap(tab('Routes'));

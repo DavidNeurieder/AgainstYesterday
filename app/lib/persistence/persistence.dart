@@ -6,8 +6,8 @@
 /// Repositories own the data and expose it to the UI as [Notifier]s, so Home
 /// and Record stay reactive without routing data through the recording
 /// controller. By default a [`NoopPersistenceStore`] keeps state in memory
-/// (deterministic demo data, hermetic widget tests); swap in a
-/// [`JsonFileStore`] to make it survive restarts:
+/// (empty catalog, hermetic widget tests); swap in a [`JsonFileStore`] to make
+/// it survive restarts:
 ///
 /// ```dart
 /// ProviderScope(
@@ -24,8 +24,6 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/units.dart';
-import '../engine/fake_engine.dart';
 import '../engine/models.dart';
 import 'serialization.dart';
 
@@ -143,12 +141,12 @@ class RouteRepository extends Notifier<List<Route>> {
       try {
         return parseRouteList(raw);
       } on FormatException {
-        // Corrupt store: fall back to the seeded catalog.
+        // Corrupt store: start from an empty catalog.
       } on TypeError {
         // Structurally valid JSON with the wrong shape.
       }
     }
-    return _seedRoutes;
+    return const [];
   }
 
   /// Upserts [route] into the catalog.
@@ -186,12 +184,12 @@ class ActivityRepository extends Notifier<List<Activity>> {
       try {
         return parseActivityList(raw);
       } on FormatException {
-        // Corrupt store: fall back to the seeded history.
+        // Corrupt store: start from an empty history.
       } on TypeError {
         // Structurally valid JSON with the wrong shape.
       }
     }
-    return _seedActivities;
+    return const [];
   }
 
   /// Inserts [activity] at the top of the history (newest first).
@@ -256,72 +254,3 @@ class RunSnapshotRepository extends Notifier<RunSnapshot?> {
 
   static const _key = 'run_snapshot';
 }
-
-/// Seeded route catalog shown until the user builds their own (M10 demo data).
-List<Route> get _seedRoutes => const <Route>[
-      Route(
-        id: FakeEngineService.riverLoopId,
-        name: 'River Loop',
-        distance: Distance.kilometers(4.76),
-        geometry: FakeEngineService.riverLoop,
-        attemptCount: 12,
-        personalBest: Elapsed.seconds(1470),
-      ),
-      Route(
-        id: 'park-5k',
-        name: 'Park 5K',
-        distance: Distance.kilometers(5.0),
-        geometry: _park5k,
-        attemptCount: 8,
-        personalBest: Elapsed.seconds(1625),
-      ),
-      Route(
-        id: 'huegelrunde',
-        name: 'Hügelrunde',
-        distance: Distance.kilometers(8.2),
-        geometry: _huegelrunde,
-        attemptCount: 3,
-        personalBest: Elapsed.seconds(2770),
-      ),
-    ];
-
-/// Seeded history so Home shows recent activity on first launch.
-List<Activity> get _seedActivities {
-  final now = DateTime.now().toUtc();
-  return [
-    Activity(
-      id: 'act-003',
-      routeId: FakeEngineService.riverLoopId,
-      startedAt: now.subtract(const Duration(hours: 26)),
-      duration: const Elapsed.seconds(1502),
-      distance: const Distance.kilometers(4.75),
-      performance: '24:22 · 1st',
-    ),
-    Activity(
-      id: 'act-002',
-      routeId: 'park-5k',
-      startedAt: now.subtract(const Duration(days: 4)),
-      duration: const Elapsed.seconds(1630),
-      distance: const Distance.kilometers(5.01),
-      performance: '27:10 · 3rd',
-    ),
-  ];
-}
-
-/// Minimal loop geometry for the Park 5K demo route.
-const List<GeoPoint> _park5k = <GeoPoint>[
-  GeoPoint(latitude: 52.5200, longitude: 13.3800),
-  GeoPoint(latitude: 52.5320, longitude: 13.3860),
-  GeoPoint(latitude: 52.5200, longitude: 13.3920),
-  GeoPoint(latitude: 52.5080, longitude: 13.3860),
-  GeoPoint(latitude: 52.5200, longitude: 13.3800),
-];
-
-/// Minimal loop geometry for the Hügelrunde demo route.
-const List<GeoPoint> _huegelrunde = <GeoPoint>[
-  GeoPoint(latitude: 52.4900, longitude: 13.3000),
-  GeoPoint(latitude: 52.5100, longitude: 13.3100),
-  GeoPoint(latitude: 52.4900, longitude: 13.3200),
-  GeoPoint(latitude: 52.4700, longitude: 13.3100),
-  GeoPoint(latitude: 52.4900, longitude: 13.3000),
-];

@@ -10,6 +10,8 @@ import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
+import 'test_catalog.dart';
+
 const _route = Route(
   id: FakeEngineService.riverLoopId,
   name: 'River Loop',
@@ -122,7 +124,7 @@ void main() {
 
       // M10: the finished run was saved into the activity history.
       final history = c.read(activityRepositoryProvider);
-      expect(history.length, 3); // 2 seeded demo activities + this run
+      expect(history.length, 1); // empty history + this run
       final saved = history.first;
       expect(saved.duration?.seconds, closeTo(30, 1));
       expect(saved.track, isNotEmpty);
@@ -133,11 +135,17 @@ void main() {
 
   test('a full loop saved without a route is recognized and tagged', () {
     fakeAsync((async) {
-      final c = ProviderContainer();
+      // Recognition matches the finished free-run track against the user's
+      // catalog, so seed River Loop into the repository.
+      final c = ProviderContainer(overrides: [
+        persistenceStoreProvider.overrideWithValue(
+          seededStore(routes: [riverLoopRoute]),
+        ),
+      ]);
       addTearDown(c.dispose);
       keepAlive(c);
       final notifier = c.read(recordingControllerProvider.notifier);
-      notifier.ensureSession([_route]);
+      notifier.ensureSession([riverLoopRoute]);
       async.flushMicrotasks();
       async.elapse(const Duration(milliseconds: 1000));
       notifier.continueWithoutRoute();
