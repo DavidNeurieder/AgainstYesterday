@@ -64,7 +64,7 @@ List<SplitDelta> computeSplits({
     final targetM = km * 1000.0;
 
     // Activity time at this km: linear interpolation on the track.
-    final activitySec = _elapsedAtDistance(track, startTime, targetM);
+    final activitySec = elapsedAtDistance(track, startTime, targetM);
 
     // PB time at this km: constant speed.
     final pbSec = targetM / pbSpeed;
@@ -79,7 +79,10 @@ List<SplitDelta> computeSplits({
 }
 
 /// Elapsed seconds at [distanceM] interpolated from [track] (25 m-spaced).
-double _elapsedAtDistance(
+///
+/// Shared with the §23 gap curve; returns the last point's time when
+/// [distanceM] lies beyond the track.
+double elapsedAtDistance(
   List<TrackPoint> track,
   DateTime startTime,
   double distanceM,

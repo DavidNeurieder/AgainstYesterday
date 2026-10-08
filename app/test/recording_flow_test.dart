@@ -115,16 +115,19 @@ void main() {
     );
     expect(find.byType(PerformanceGap), findsNothing);
 
-    // M11: VIEW RESULT opens the detailed result with splits visible.
+    // M11: VIEW RESULT opens the detailed result with splits visible. The
+    // §23 chart (M26) pushes the splits just past the first screen, so the
+    // lazy list has not built them yet — scroll them into view first.
     await tester.tap(find.text('VIEW RESULT'));
     await tester.pumpAndSettle();
     await waitReady(tester); // no GPS frame needed at the result screen
+    await tester.scrollUntilVisible(find.text('Splits'), 200);
     expect(find.text('Splits'), findsOneWidget);
 
     // M10: the finished run lands in Home's recent history (empty start →
     // just this one). RACE AGAIN pushes DONE down the result list, so bring
     // it on-screen before tapping.
-    await tester.ensureVisible(find.text('DONE'));
+    await tester.scrollUntilVisible(find.text('DONE'), 200);
     await tester.pump();
     await tester.tap(find.text('DONE'));
     await tester.pumpAndSettle();

@@ -23,7 +23,9 @@ import '../../../persistence/persistence.dart';
 import '../../recording/application/recording_controller.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
+import '../application/gap_curve.dart';
 import '../application/splits.dart';
+import 'gap_chart.dart';
 
 /// Base stagger step between the result stats' entrance (§30).
 const int _kStep = 70;
@@ -57,6 +59,15 @@ class ResultScreen extends ConsumerWidget {
             trackMeters: trackMeters,
           )
         : [];
+
+    // §23 gap curve — the chart above the splits.
+    final gapCurve = (activity != null && route != null)
+        ? computeGapCurve(
+            activity: activity,
+            route: route,
+            trackMeters: trackMeters,
+          )
+        : const <GapPoint>[];
 
     // Ranking: how many saved runs on this route are faster.
     final rank = _rank(route?.id, live.elapsed, activities);
@@ -119,10 +130,17 @@ class ResultScreen extends ConsumerWidget {
                 units: units,
               ),
             ),
-          if (splits.isNotEmpty) ...[
+          if (gapCurve.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xl),
             StaggeredIn(
               delay: const Duration(milliseconds: 310),
+              child: GapChart(curve: gapCurve, units: units),
+            ),
+          ],
+          if (splits.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xl),
+            StaggeredIn(
+              delay: const Duration(milliseconds: 390),
               child: Text(
                 'Splits',
                 style: textTheme.titleMedium?.copyWith(
@@ -133,14 +151,14 @@ class ResultScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.sm),
             for (final entry in splits.asMap().entries)
               StaggeredIn(
-                delay: Duration(milliseconds: 340 + 30 * entry.key),
+                delay: Duration(milliseconds: 420 + 30 * entry.key),
                 child: SplitRow(split: entry.value),
               ),
           ],
           if (rank != null) ...[
             const SizedBox(height: AppSpacing.xl),
             StaggeredIn(
-              delay: const Duration(milliseconds: 460),
+              delay: const Duration(milliseconds: 540),
               child: Text(
                 rank,
                 textAlign: TextAlign.center,
@@ -156,7 +174,7 @@ class ResultScreen extends ConsumerWidget {
           // leaves the loop.
           if (route != null) ...[
             StaggeredIn(
-              delay: const Duration(milliseconds: 540),
+              delay: const Duration(milliseconds: 620),
               child: PrimaryButton(
                 label: 'RACE AGAIN',
                 icon: Icons.replay,
@@ -169,7 +187,7 @@ class ResultScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.sm),
             StaggeredIn(
-              delay: const Duration(milliseconds: 540),
+              delay: const Duration(milliseconds: 620),
               child: TextButton(
                 onPressed: () {
                   AppHaptics.light(ref);
@@ -181,7 +199,7 @@ class ResultScreen extends ConsumerWidget {
             ),
           ] else
             StaggeredIn(
-              delay: const Duration(milliseconds: 540),
+              delay: const Duration(milliseconds: 620),
               child: PrimaryButton(
                 label: 'DONE',
                 onPressed: () {

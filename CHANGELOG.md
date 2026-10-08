@@ -11,6 +11,14 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- The performance graph (§23): the result screen's GAP TO YOUR BEST chart
+  plots how far ahead of (green) or behind (amber) your personal best you
+  were at every 100 m of the covered distance, against a dashed zero rule
+  with an AHEAD/BEHIND gutter so the direction never rests on colour
+  alone. The line follows the same constant-speed PB model as the splits,
+  the distance axis honours the display unit, screen readers get a spoken
+  summary of the finish gap, and the chart appears once 250 m are covered
+  — between the performance bar and the splits (M26).
 - The race speaks up when GPS gets shaky (§17) and when you wander off
   the line (§18): a weak-signal banner sits above the readout whenever the
   latest fix's accuracy drops out of the good bucket (<15 m good, 15–40 m
