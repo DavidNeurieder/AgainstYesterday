@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-277 headless tests run with `fake_async`, an in-memory store, and the
+283 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -56,7 +56,9 @@ M27 §33 error screens (`test/error_screens_test.dart`) pin the route-load
 failure and the finish screen's save-error block, and the M28
 accessibility suite (`test/accessibility_test.dart`) pins the WCAG
 palette, the colour alternatives, the spoken names and the 48 px touch
-targets.
+targets, and the M29 onboarding suite (`test/onboarding_test.dart`) walks
+the three first-launch screens, the GET STARTED hand-off into
+record-a-route and the gate that keeps hermetic stores off the intro.
 
 The two Rust FFI suites skip themselves, with an explanation, when the cdylib
 has not been built — normal on a fresh checkout. CI passes

@@ -155,6 +155,7 @@ void main() {
       hapticsEnabled: false,
       countdownEnabled: false,
       units: Units.miles,
+      onboardingSeen: false,
     );
     expect(parseAppSettings(appSettingsToJson(custom)), custom);
     expect(parseAppSettings(appSettingsToJson(AppSettings.defaults)),

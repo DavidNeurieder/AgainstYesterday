@@ -11,6 +11,19 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- First-launch onboarding (§34): a fresh install opens on three swipeable
+  screens — "Against Yesterday / Race your best." → "Choose a route. / Your
+  previous best becomes your opponent." → "See the gap. / Know exactly when
+  you're winning or losing." — and GET STARTED drops the user straight into
+  record-a-route, never more than three screens and no account step. The
+  gate lives in the settings store: hermetic (test/demo) stores never
+  onboard, a real install shows the intro until the settings document
+  records it as seen, and documents written before this milestone count as
+  already seen. The milestone also wires the device store itself — `main()`
+  now hands the app a `JsonFileStore` rooted in the application documents
+  directory (via `path_provider`), so settings, routes, activities and
+  snapshots finally survive a restart on a phone instead of the in-memory
+  `NoopPersistenceStore` default (M29).
 - Accessibility audit (§32): the palette is pinned to WCAG AA — every text
   token keeps ≥4.5:1 on all three surfaces (muted text, the ghost grey and
   the error red were nudged lighter, and destructive buttons got their own
