@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_buttons.dart';
+import '../../../core/ui/app_motion.dart';
 import '../../../core/ui/gap_line.dart';
 import '../../../core/ui/split_row.dart';
 import '../../../core/units.dart';
@@ -23,6 +24,9 @@ import '../../recording/application/recording_controller.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/splits.dart';
+
+/// Base stagger step between the result stats' entrance (§30).
+const int _kStep = 70;
 
 class ResultScreen extends ConsumerWidget {
   const ResultScreen({super.key});
@@ -65,15 +69,19 @@ class ResultScreen extends ConsumerWidget {
             vertical: AppSpacing.lg,
           ),
           children: [
-            Text(
+          StaggeredIn(
+            child: Text(
               routeName,
               textAlign: TextAlign.center,
               style: textTheme.titleLarge?.copyWith(
                 color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
+          ),
+          const SizedBox(height: AppSpacing.md),
+          StaggeredIn(
+            delay: Duration(milliseconds: _kStep),
+            child: Text(
               live.elapsed.formatClock(),
               textAlign: TextAlign.center,
               style: textTheme.displayMedium?.copyWith(
@@ -81,8 +89,11 @@ class ResultScreen extends ConsumerWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
+          ),
+          const SizedBox(height: 4),
+          StaggeredIn(
+            delay: Duration(milliseconds: _kStep),
+            child: Text(
               live.distance.formatWith(units),
               textAlign: TextAlign.center,
               style: textTheme.headlineSmall?.copyWith(
@@ -90,45 +101,63 @@ class ResultScreen extends ConsumerWidget {
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
-            GapLine(gap: gap),
-            const SizedBox(height: AppSpacing.lg),
-            if (route != null && gap != null)
-              _PerformanceBar(
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          StaggeredIn(
+            delay: const Duration(milliseconds: 150),
+            child: GapLine(gap: gap),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          if (route != null && gap != null)
+            StaggeredIn(
+              delay: const Duration(milliseconds: 230),
+              child: _PerformanceBar(
                 pbTime: route.personalBest,
                 youTime: live.elapsed,
                 totalDistance: route.distance,
                 yourDistance: live.distance,
                 units: units,
               ),
-            if (splits.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xl),
-              Text(
+            ),
+          if (splits.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xl),
+            StaggeredIn(
+              delay: const Duration(milliseconds: 310),
+              child: Text(
                 'Splits',
                 style: textTheme.titleMedium?.copyWith(
                   color: AppColors.textSecondary,
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              for (final split in splits)
-                SplitRow(split: split),
-            ],
-            if (rank != null) ...[
-              const SizedBox(height: AppSpacing.xl),
-              Text(
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            for (final entry in splits.asMap().entries)
+              StaggeredIn(
+                delay: Duration(milliseconds: 340 + 30 * entry.key),
+                child: SplitRow(split: entry.value),
+              ),
+          ],
+          if (rank != null) ...[
+            const SizedBox(height: AppSpacing.xl),
+            StaggeredIn(
+              delay: const Duration(milliseconds: 460),
+              child: Text(
                 rank,
                 textAlign: TextAlign.center,
                 style: textTheme.bodyLarge?.copyWith(
                   color: AppColors.textSecondary,
                 ),
               ),
-            ],
-            const SizedBox(height: AppSpacing.xl),
-            // M20 §29: after a route race, RACE AGAIN drops back into that
-            // route's pre-race (fresh session + the 3-2-1-GO countdown); DONE
-            // leaves the loop.
-            if (route != null) ...[
-              PrimaryButton(
+            ),
+          ],
+          const SizedBox(height: AppSpacing.xl),
+          // M20 §29: after a route race, RACE AGAIN drops back into that
+          // route's pre-race (fresh session + the 3-2-1-GO countdown); DONE
+          // leaves the loop.
+          if (route != null) ...[
+            StaggeredIn(
+              delay: const Duration(milliseconds: 540),
+              child: PrimaryButton(
                 label: 'RACE AGAIN',
                 icon: Icons.replay,
                 onPressed: () {
@@ -137,8 +166,11 @@ class ResultScreen extends ConsumerWidget {
                   context.go('/race/${route.id}');
                 },
               ),
-              const SizedBox(height: AppSpacing.sm),
-              TextButton(
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            StaggeredIn(
+              delay: const Duration(milliseconds: 540),
+              child: TextButton(
                 onPressed: () {
                   AppHaptics.light(ref);
                   ref.read(recordingControllerProvider.notifier).dismissRun();
@@ -146,15 +178,19 @@ class ResultScreen extends ConsumerWidget {
                 },
                 child: const Text('DONE'),
               ),
-            ] else
-              PrimaryButton(
+            ),
+          ] else
+            StaggeredIn(
+              delay: const Duration(milliseconds: 540),
+              child: PrimaryButton(
                 label: 'DONE',
                 onPressed: () {
                   ref.read(recordingControllerProvider.notifier).dismissRun();
                   context.go('/');
                 },
               ),
-          ],
+            ),
+        ],
         ),
       ),
     );

@@ -25,6 +25,16 @@ const Map<AheadBehind, String> _states = <AheadBehind, String>{
   AheadBehind.unknown: '—',
 };
 
+/// Signed label from an interpolated magnitude (§30): the tween feeds this
+/// the animated seconds, while the semantics keep the final spoken label.
+String _format(AheadBehind state, double seconds) {
+  final magnitude = Elapsed.seconds(seconds);
+  return switch (state) {
+    AheadBehind.behind => '+${magnitude.format()}',
+    _ => magnitude.format(),
+  };
+}
+
 class PerformanceGap extends ConsumerWidget {
   const PerformanceGap({
     super.key,
@@ -46,13 +56,6 @@ class PerformanceGap extends ConsumerWidget {
         AheadBehind.behind => AppColors.behind,
         AheadBehind.tied => AppColors.you,
         AheadBehind.unknown => AppColors.textMuted,
-      };
-
-  /// Signed label, e.g. `0:12` (ahead) or `+0:12` (behind).
-  String get _label => switch (state) {
-        AheadBehind.ahead || AheadBehind.tied => difference.format(),
-        AheadBehind.behind => '+${difference.format()}',
-        AheadBehind.unknown => '—',
       };
 
   @override
@@ -77,18 +80,31 @@ class PerformanceGap extends ConsumerWidget {
           children: [
             // M14: color flips (ahead/behind) crossfade instead of snapping.
             // Value-equality keeps it still when only the text changes.
+            // M23 §30: the digits themselves tween between ticks — the sign
+            // and the state word stay instant, only the count glides.
             TweenAnimationBuilder<Color?>(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOut,
               tween: ColorTween(end: _color),
-              builder: (context, color, _) => Text(
-                _label,
-                style: textTheme.displayMedium?.copyWith(
+              builder: (context, color, _) {
+                final style = textTheme.displayMedium?.copyWith(
                   color: color ?? _color,
                   fontWeight: FontWeight.w700,
                   fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
+                );
+                if (state == AheadBehind.unknown) {
+                  return Text('—', style: style);
+                }
+                return TweenAnimationBuilder<double>(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  tween: Tween<double>(end: difference.seconds),
+                  builder: (context, seconds, _) => Text(
+                    _format(state, seconds),
+                    style: style,
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 4),
             Text(

@@ -11,6 +11,14 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Deliberate animation (§30): Home's hero and recent cards fade up in a
+  subtle stagger, the result screen's stats arrive in sequence, and a PB
+  finish gets its moment — a springing trophy, the "0:04 FASTER" gain and
+  the previous-PB line behind the NEW PERSONAL BEST heading (ideas §20).
+  The race gap's digits now tween between ticks instead of snapping, while
+  the AHEAD/BEHIND state and semantics stay instant. Everything is one-shot
+  and drops out entirely when animations are disabled (M23). Ghost/YOU
+  marker interpolation already shipped with §14, the countdown with M19.
 - History (§24–§25) grows up: activities group under calendar-month headers
   ("October", "October 2025" for other years), each row shows the route,
   time and "distance · Today/Yesterday/date", runs that stood up their

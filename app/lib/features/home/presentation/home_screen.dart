@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_buttons.dart';
+import '../../../core/ui/app_motion.dart';
 import '../../../core/ui/app_sections.dart';
 import '../../../core/ui/app_states.dart';
 import '../../../engine/models.dart';
@@ -40,33 +41,54 @@ class HomeScreen extends ConsumerWidget {
             const _Header(),
             const SizedBox(height: AppSpacing.xl),
             if (routes.isEmpty)
-              EmptyHomeState(onRecord: () {
-                AppHaptics.medium(ref);
-                context.go('/record-route');
-              })
-            else ...[
-              const SectionHeader(title: 'READY TO RACE'),
-              const SizedBox(height: AppSpacing.sm),
-              FeaturedRouteCard(
-                route: routes.first,
-                onRace: () {
+              StaggeredIn(
+                delay: const Duration(milliseconds: 80),
+                child: EmptyHomeState(onRecord: () {
                   AppHaptics.medium(ref);
-                  context.go('/race/${routes.first.id}');
-                },
+                  context.go('/record-route');
+                }),
+              )
+            else ...[
+              const StaggeredIn(
+                child: SectionHeader(title: 'READY TO RACE'),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              StaggeredIn(
+                delay: const Duration(milliseconds: 80),
+                child: FeaturedRouteCard(
+                  route: routes.first,
+                  onRace: () {
+                    AppHaptics.medium(ref);
+                    context.go('/race/${routes.first.id}');
+                  },
+                ),
               ),
             ],
             const SizedBox(height: AppSpacing.xl),
-            const SectionHeader(title: 'Recent'),
+            const StaggeredIn(
+              delay: Duration(milliseconds: 140),
+              child: SectionHeader(title: 'Recent'),
+            ),
             const SizedBox(height: AppSpacing.sm),
             if (activities.isEmpty)
-              const EmptyState(
-                compact: true,
-                icon: Icons.directions_run,
-                message: 'No races yet. Choose a route and start racing.',
+              const StaggeredIn(
+                delay: Duration(milliseconds: 180),
+                child: EmptyState(
+                  compact: true,
+                  icon: Icons.directions_run,
+                  message: 'No races yet. Choose a route and start racing.',
+                ),
               )
             else ...[
-              for (final activity in activities.take(_recentLimit)) ...[
-                _ActivityTile(activity: activity),
+              for (final entry in activities
+                  .take(_recentLimit)
+                  .toList()
+                  .asMap()
+                  .entries) ...[
+                StaggeredIn(
+                  delay: Duration(milliseconds: 180 + 60 * entry.key),
+                  child: _ActivityTile(activity: entry.value),
+                ),
                 const SizedBox(height: AppSpacing.sm),
               ],
             ],

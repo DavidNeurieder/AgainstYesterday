@@ -161,4 +161,33 @@ void main() {
     expect(find.text('River Loop'), findsWidgets);
     expect(find.text('PAUSE'), findsNothing);
   });
+
+  testWidgets('a run ahead of the ghost finishes as a PB celebration (§20)',
+      (tester) async {
+    await tester.pumpWidget(app(routes: demoRoutes));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await waitReady(tester);
+    await tester.tap(find.text('START'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // The demo scenario always outruns the constant-speed PB ghost, so
+    // finishing ahead of the pace is a PB every time.
+    await tester.pump(const Duration(seconds: 120));
+    await tester.tap(find.text('FINISH'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NEW PERSONAL BEST'), findsOneWidget);
+    expect(find.byIcon(Icons.emoji_events), findsOneWidget);
+    expect(find.textContaining('FASTER'), findsOneWidget);
+    expect(find.text('Previous PB 24:30'), findsOneWidget);
+  });
 }

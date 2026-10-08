@@ -14,7 +14,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_buttons.dart';
+import '../../../core/ui/app_motion.dart';
 import '../../../core/ui/gap_line.dart';
+import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
@@ -36,6 +38,9 @@ class RunCompleteScreen extends ConsumerWidget {
     final gap = state.ghostGap;
     final isNewPb =
         gap != null && gap.ahead && gap.timeDifference.seconds < 0;
+    // §20: the celebration frames the gain against the standing best.
+    final gainSeconds = gap?.timeDifference.seconds.abs() ?? 0.0;
+    final previousPb = state.route?.personalBest;
 
     return Scaffold(
       body: SafeArea(
@@ -69,6 +74,50 @@ class RunCompleteScreen extends ConsumerWidget {
                   color: AppColors.textSecondary,
                 ),
               ),
+              // M23 §20: the PB moment — trophy pops, then the gain and the
+              // previous best arrive in sequence.
+              if (isNewPb) ...[
+                const SizedBox(height: AppSpacing.md),
+                TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeOutBack,
+                  builder: (context, scale, child) =>
+                      Transform.scale(scale: scale, child: child),
+                  child: const Icon(
+                    Icons.emoji_events,
+                    size: 56,
+                    color: AppColors.pb,
+                    semanticLabel: 'Personal best',
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                StaggeredIn(
+                  delay: const Duration(milliseconds: 350),
+                  child: Text(
+                    '${Elapsed.seconds(gainSeconds).format()} FASTER',
+                    textAlign: TextAlign.center,
+                    style: textTheme.titleMedium?.copyWith(
+                      color: AppColors.pb,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                if (previousPb != null) ...[
+                  const SizedBox(height: 2),
+                  StaggeredIn(
+                    delay: const Duration(milliseconds: 500),
+                    child: Text(
+                      'Previous PB ${previousPb.format()}',
+                      textAlign: TextAlign.center,
+                      style: textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
               const SizedBox(height: AppSpacing.xl),
               Text(
                 state.distance.formatWith(units),

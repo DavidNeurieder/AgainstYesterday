@@ -32,6 +32,17 @@ void main() {
     );
   }
 
+  /// Seconds currently rendered by the hero label (`0:41` / `+0:41`).
+  double labelSeconds(WidgetTester tester) {
+    final data = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((t) => t.data ?? '')
+        .firstWhere(RegExp(r'^\+?\d+:\d\d$').hasMatch);
+    final match = RegExp(r'^\+?(\d+):(\d\d)$').firstMatch(data)!;
+    return (int.parse(match.group(1)!) * 60 + int.parse(match.group(2)!))
+        .toDouble();
+  }
+
   testWidgets('ahead state shows a signed label', (tester) async {
     await pumpGap(tester, state: AheadBehind.ahead);
     expect(find.text('0:12'), findsOneWidget);
@@ -54,6 +65,25 @@ void main() {
 
     await pumpGap(tester, state: AheadBehind.unknown);
     expect(find.text('—'), findsOneWidget);
+  });
+
+  testWidgets('the gap digits tween between values (§30)', (tester) async {
+    await pumpGap(tester, state: AheadBehind.ahead);
+    expect(find.text('0:12'), findsOneWidget);
+
+    // A tick pushes the gap out to 1:00 — the digits glide, then land.
+    await pumpGap(
+      tester,
+      state: AheadBehind.ahead,
+      difference: const Elapsed.seconds(60),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    final mid = labelSeconds(tester);
+    expect(mid, greaterThan(12));
+    expect(mid, lessThan(60));
+
+    await tester.pumpAndSettle();
+    expect(find.text('1:00'), findsOneWidget);
   });
 
   test('AheadBehind.fromGap maps a GhostState', () {
