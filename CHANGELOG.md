@@ -11,6 +11,14 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- History (§24–§25) grows up: activities group under calendar-month headers
+  ("October", "October 2025" for other years), each row shows the route,
+  time and "distance · Today/Yesterday/date", runs that stood up their
+  route's best carry a gold trophy, and everything else trails a `+0:44`
+  delta versus the route's current PB. The light filter set is route chips
+  plus "PBs only" (the plan's All/Running/Cycling would need a sport field
+  a running-only app doesn't have). Shared date labels moved out of the
+  route-detail screen into `core/date_labels.dart` (M22).
 - Settings (§26) replace the M16 stub: Race (Haptics, Countdown), Display
   (Units), Data (Export GPX, Delete all data) and About (version, privacy,
   licenses). Both toggles are wired for real — every tick in the app now goes

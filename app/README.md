@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-227 headless tests run with `fake_async`, an in-memory store, and the
+235 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -40,9 +40,11 @@ awaits." empty state — in `test/widget_test.dart` and `test/ui_state_test.dart
 the M18 record-a-route flow (prep → recording → name-and-save → saved) in
 `test/record_route_test.dart`, the M19 route-bound pre-race with its
 3-2-1-GO countdown (plus the M20 RACE AGAIN loop) in
-`test/race_flow_test.dart`, and the M21 settings — the countdown gate, the
+`test/race_flow_test.dart`, the M21 settings — the countdown gate, the
 unit switch over the readouts, GPX export, delete-all and the model
-round-trip — in `test/settings_test.dart`.
+round-trip — in `test/settings_test.dart`, and the M22 month-grouped
+History with PB trophies, route/PB filters and its grouping helpers in
+`test/history_test.dart`.
 
 The two Rust FFI suites skip themselves, with an explanation, when the cdylib
 has not been built — normal on a fresh checkout. CI passes
