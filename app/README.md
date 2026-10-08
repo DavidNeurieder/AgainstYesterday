@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-270 headless tests run with `fake_async`, an in-memory store, and the
+277 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -53,7 +53,10 @@ overlays (`test/race_alerts_test.dart`) cover the weak-GPS banner and the
 off-route signal, and the M26 gap curve and performance graph
 (`test/gap_curve_test.dart`) pin the §23 chart's data and summary, and the
 M27 §33 error screens (`test/error_screens_test.dart`) pin the route-load
-failure and the finish screen's save-error block.
+failure and the finish screen's save-error block, and the M28
+accessibility suite (`test/accessibility_test.dart`) pins the WCAG
+palette, the colour alternatives, the spoken names and the 48 px touch
+targets.
 
 The two Rust FFI suites skip themselves, with an explanation, when the cdylib
 has not been built — normal on a fresh checkout. CI passes

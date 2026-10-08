@@ -44,6 +44,15 @@ class SplitRow extends StatelessWidget {
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
           ),
+          const SizedBox(width: AppSpacing.sm),
+          // §32: the word, not just the colour, says which side of the PB
+          // this split landed on.
+          Text(
+            ahead ? 'ahead' : 'behind',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+          ),
         ],
       ),
     );

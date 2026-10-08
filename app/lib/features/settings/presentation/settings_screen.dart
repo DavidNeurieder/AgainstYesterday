@@ -181,7 +181,9 @@ class SettingsScreen extends ConsumerWidget {
           ),
           FilledButton(
             key: const ValueKey('confirm-delete-all'),
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.errorFill,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),

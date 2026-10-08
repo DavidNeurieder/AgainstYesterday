@@ -110,6 +110,7 @@ void main() {
       )));
       expect(find.text('3 km'), findsOneWidget);
       expect(find.text('-0:05'), findsOneWidget);
+      expect(find.text('ahead'), findsOneWidget);
 
       await tester.pumpWidget(frame(SplitRow(
         split: const SplitDelta(
@@ -119,6 +120,7 @@ void main() {
         ),
       )));
       expect(find.text('+0:08'), findsOneWidget);
+      expect(find.text('behind'), findsOneWidget);
     });
   });
 

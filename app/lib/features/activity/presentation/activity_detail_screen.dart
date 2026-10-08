@@ -58,6 +58,7 @@ class ActivityDetailScreen extends ConsumerWidget {
         title: Text(routeName),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back',
           onPressed: () => context.pop(),
         ),
       ),

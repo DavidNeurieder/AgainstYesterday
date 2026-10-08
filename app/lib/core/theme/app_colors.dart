@@ -32,15 +32,16 @@ abstract final class AppColors {
   /// Secondary text.
   static const Color textSecondary = Color(0xFF9AA3B2);
 
-  /// Tertiary / disabled text. Raised for WCAG AA contrast on both surfaces
-  /// (M14): 5.0:1 on `background`, 4.6:1 on `surface`.
-  static const Color textMuted = Color(0xFF7A8493);
+  /// Tertiary / disabled text. Keeps WCAG AA (≥4.5:1) on every surface
+  /// (M14, audited M28): 6.0:1 on `background`, 5.5:1 on `surface`,
+  /// 4.9:1 on `surfaceHigh`.
+  static const Color textMuted = Color(0xFF8792A1);
 
   /// YOU — the live run (white primary, like the plan's "Primary white").
   static const Color you = Color(0xFFF2F4F8);
 
-  /// GHOST — the reference attempt.
-  static const Color ghost = Color(0xFF7C8A9E);
+  /// GHOST — the reference attempt. AA on every surface (M28).
+  static const Color ghost = Color(0xFF8593A7);
 
   /// Ahead of the ghost.
   static const Color ahead = Color(0xFF34C77B);
@@ -54,6 +55,10 @@ abstract final class AppColors {
   /// GPS warning.
   static const Color gpsWarning = Color(0xFFF08A3C);
 
-  /// Error state.
-  static const Color error = Color(0xFFE0453F);
+  /// Error text and icons — AA on every surface (M28 audit).
+  static const Color error = Color(0xFFEE5A53);
+
+  /// Destructive button fill: `textPrimary` reads at 4.6:1 over it, where
+  /// the lighter [error] text token would not (M28).
+  static const Color errorFill = Color(0xFFC93B34);
 }

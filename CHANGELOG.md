@@ -11,6 +11,14 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Accessibility audit (§32): the palette is pinned to WCAG AA — every text
+  token keeps ≥4.5:1 on all three surfaces (muted text, the ghost grey and
+  the error red were nudged lighter, and destructive buttons got their own
+  darker fill so the white label still reads), splits now spell out ahead
+  or behind instead of leaning on green or amber, the map's PB chip is a
+  readable size and colour, the detail back button is named for screen
+  readers, and a new suite checks the contrast maths, the colour
+  alternatives, the spoken names and the 48 px touch targets (M28).
 - Consistent error screens (§33): every failure lands on one ErrorScreen
   skeleton — title bar, icon, headline, reason, recovery actions. A GPS
   refusal headlines GPS UNAVAILABLE and offers the matching location

@@ -247,8 +247,14 @@ class _GhostDot extends StatelessWidget {
             borderRadius: BorderRadius.circular(4),
           ),
           child: const Text(
+            // §32: readable size, and a token that keeps AA on the chip.
             'PB',
-            style: TextStyle(color: AppColors.ghost, fontSize: 9, height: 1.3),
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              height: 1.3,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
