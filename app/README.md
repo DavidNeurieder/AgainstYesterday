@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-239 headless tests run with `fake_async`, an in-memory store, and the
+246 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -46,7 +46,9 @@ round-trip — in `test/settings_test.dart`, and the M22 month-grouped
 History with PB trophies, route/PB filters and its grouping helpers in
 `test/history_test.dart`, and the M23 entrance motion plus the PB
 celebration and gap-digit tween in `test/motion_test.dart`,
-`test/performance_gap_test.dart` and `test/race_flow_test.dart`.
+`test/performance_gap_test.dart` and `test/race_flow_test.dart`, and the
+M24 responsive suite (`test/responsive_test.dart`) pumps every primary
+screen at 320/390/430 px plus the live run in landscape.
 
 The two Rust FFI suites skip themselves, with an explanation, when the cdylib
 has not been built — normal on a fresh checkout. CI passes

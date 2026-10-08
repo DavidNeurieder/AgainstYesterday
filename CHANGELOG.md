@@ -11,6 +11,14 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Responsive layout (§31): a regression suite pumps every primary screen
+  — Home, Routes, History, Settings, both detail screens, the whole race
+  flow, and the live run in landscape — at the 320/390/430 px phone range
+  (Flutter's test runner fails on any RenderFlex overflow). Fixes it
+  turned up: the finish screen scrolls when its content cannot fit the
+  smallest phones while staying centered when it can, and the settings
+  Units control wraps onto its own line instead of pushing past the card
+  edge (M24).
 - Deliberate animation (§30): Home's hero and recent cards fade up in a
   subtle stagger, the result screen's stats arrive in sequence, and a PB
   finish gets its moment — a springing trophy, the "0:04 FASTER" gain and

@@ -68,8 +68,11 @@ class SettingsScreen extends ConsumerWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                // §31: wraps the control onto its own line on narrow phones
+                // instead of overflowing (the segment labels are wide).
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     const Text('Units'),
                     SegmentedButton<Units>(

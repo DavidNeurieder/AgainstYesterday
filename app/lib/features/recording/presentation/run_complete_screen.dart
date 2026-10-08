@@ -46,116 +46,126 @@ class RunCompleteScreen extends ConsumerWidget {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              // M14: the headline settles into place with a springy scale-in.
-              TweenAnimationBuilder<double>(
-                tween: _kScaleIn,
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeOutBack,
-                child: Text(
-                  isNewPb ? 'NEW PERSONAL BEST' : 'RUN COMPLETE',
-                  textAlign: TextAlign.center,
-                  style: textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: isNewPb ? AppColors.ahead : null,
-                  ),
-                ),
-                builder: (context, scale, child) =>
-                    Transform.scale(scale: scale, child: child),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                routeName,
-                textAlign: TextAlign.center,
-                style: textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              // M23 §20: the PB moment — trophy pops, then the gain and the
-              // previous best arrive in sequence.
-              if (isNewPb) ...[
-                const SizedBox(height: AppSpacing.md),
-                TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: 0, end: 1),
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeOutBack,
-                  builder: (context, scale, child) =>
-                      Transform.scale(scale: scale, child: child),
-                  child: const Icon(
-                    Icons.emoji_events,
-                    size: 56,
-                    color: AppColors.pb,
-                    semanticLabel: 'Personal best',
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                StaggeredIn(
-                  delay: const Duration(milliseconds: 350),
-                  child: Text(
-                    '${Elapsed.seconds(gainSeconds).format()} FASTER',
-                    textAlign: TextAlign.center,
-                    style: textTheme.titleMedium?.copyWith(
-                      color: AppColors.pb,
-                      fontWeight: FontWeight.w700,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ),
-                if (previousPb != null) ...[
-                  const SizedBox(height: 2),
-                  StaggeredIn(
-                    delay: const Duration(milliseconds: 500),
-                    child: Text(
-                      'Previous PB ${previousPb.format()}',
-                      textAlign: TextAlign.center,
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
+          // §31: centered when it fits, scrollable on the smallest phones.
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Spacer(),
+                      // M14: the headline settles into place with a springy scale-in.
+                      TweenAnimationBuilder<double>(
+                        tween: _kScaleIn,
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeOutBack,
+                        child: Text(
+                          isNewPb ? 'NEW PERSONAL BEST' : 'RUN COMPLETE',
+                          textAlign: TextAlign.center,
+                          style: textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: isNewPb ? AppColors.ahead : null,
+                          ),
+                        ),
+                        builder: (context, scale, child) =>
+                            Transform.scale(scale: scale, child: child),
                       ),
-                    ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        routeName,
+                        textAlign: TextAlign.center,
+                        style: textTheme.bodyLarge?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                      // M23 §20: the PB moment — trophy pops, then the gain and the
+                      // previous best arrive in sequence.
+                      if (isNewPb) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        TweenAnimationBuilder<double>(
+                          tween: Tween<double>(begin: 0, end: 1),
+                          duration: const Duration(milliseconds: 500),
+                          curve: Curves.easeOutBack,
+                          builder: (context, scale, child) =>
+                              Transform.scale(scale: scale, child: child),
+                          child: const Icon(
+                            Icons.emoji_events,
+                            size: 56,
+                            color: AppColors.pb,
+                            semanticLabel: 'Personal best',
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        StaggeredIn(
+                          delay: const Duration(milliseconds: 350),
+                          child: Text(
+                            '${Elapsed.seconds(gainSeconds).format()} FASTER',
+                            textAlign: TextAlign.center,
+                            style: textTheme.titleMedium?.copyWith(
+                              color: AppColors.pb,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ),
+                        if (previousPb != null) ...[
+                          const SizedBox(height: 2),
+                          StaggeredIn(
+                            delay: const Duration(milliseconds: 500),
+                            child: Text(
+                              'Previous PB ${previousPb.format()}',
+                              textAlign: TextAlign.center,
+                              style: textTheme.bodyMedium?.copyWith(
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: AppSpacing.xl),
+                      Text(
+                        state.distance.formatWith(units),
+                        textAlign: TextAlign.center,
+                        style: textTheme.displayMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        state.elapsed.formatClock(),
+                        textAlign: TextAlign.center,
+                        style: textTheme.headlineMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      GapLine(gap: gap),
+                      const Spacer(),
+                      PrimaryButton(
+                        label: 'VIEW RESULT',
+                        onPressed: () {
+                          AppHaptics.selection(ref);
+                          context.push('/record/result');
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      TextButton(
+                        onPressed: () {
+                          AppHaptics.light(ref);
+                          controller.dismissRun();
+                          context.go('/');
+                        },
+                        child: const Text('DONE'),
+                      ),
+                    ],
                   ),
-                ],
-              ],
-              const SizedBox(height: AppSpacing.xl),
-              Text(
-                state.distance.formatWith(units),
-                textAlign: TextAlign.center,
-                style: textTheme.displayMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                state.elapsed.formatClock(),
-                textAlign: TextAlign.center,
-                style: textTheme.headlineMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              GapLine(gap: gap),
-              const Spacer(),
-              PrimaryButton(
-                label: 'VIEW RESULT',
-                onPressed: () {
-                  AppHaptics.selection(ref);
-                  context.push('/record/result');
-                },
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextButton(
-                onPressed: () {
-                  AppHaptics.light(ref);
-                  controller.dismissRun();
-                  context.go('/');
-                },
-                child: const Text('DONE'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
