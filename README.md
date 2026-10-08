@@ -184,7 +184,7 @@ snapshot.
 
 ## Status
 
-Milestones M1–M15 are implemented (see [CHANGELOG.md](CHANGELOG.md)). The app
+Milestones M1–M29 are implemented (see [CHANGELOG.md](CHANGELOG.md)). The app
 ships with an empty catalog — no pre-recorded routes or demo history — and
 records a free run until the user builds routes by finishing runs. On the
 host/tests the deterministic fake GPS timeline (the ~4.8 km "River Loop"
@@ -195,6 +195,11 @@ geometry invariants and continuity-aware matching on the Rust side, plus the
 developer diagnostics screen on the app side. It also retains the raw fixes
 through the recording lifecycle (exported, never fabricated) and gates the
 diagnostics route, not just its entry button.
+M16–M29 closed the loop the plan asks for: record, race, result, PB alerts,
+entrance motion, responsive layouts, settings, history, consistent error
+screens, a WCAG-checked palette and the three-screen first-launch intro —
+with `main()` now persisting settings, routes, activities and snapshots to
+the device's application documents directory across restarts.
 
 ## License
 
