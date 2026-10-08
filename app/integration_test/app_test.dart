@@ -22,76 +22,10 @@ import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:integration_test/integration_test.dart';
 
 import '../test/test_catalog.dart';
-
-/// The distance value currently shown on the live screen, in meters.
-///
-/// Returns 0 with the live screen not yet mounted (e.g. still on the 3-2-1-GO
-/// countdown), so polling probes just keep waiting.
-int _displayedMeters(WidgetTester tester) {
-  final finder = find.byKey(const ValueKey('live-distance'));
-  if (!tester.any(finder)) {
-    return 0;
-  }
-  final text = tester.widget<Text>(finder).data!;
-  final match = RegExp(r'^(\d+(?:\.\d+)?)\s*(km|m)$').firstMatch(text.trim());
-  if (match == null) {
-    return 0;
-  }
-  final value = double.parse(match.group(1)!);
-  return match.group(2) == 'km' ? (value * 1000).round() : value.round();
-}
+import 'support.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-
-  /// Pumps while wall-clock time elapses (the live binding can't pump for a
-  /// duration), so real periodic timers fire and re-render.
-  Future<void> pumpFor(WidgetTester tester, Duration duration) async {
-    final end = DateTime.now().add(duration);
-    while (DateTime.now().isBefore(end)) {
-      await tester.pump();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-  }
-
-  /// Polls until [text] is onscreen. On-device GPS acquisition and async
-  /// saves happen on real timers, so a fixed await would be flaky.
-  Future<void> waitForText(WidgetTester tester, String text,
-      {Duration timeout = const Duration(seconds: 10)}) async {
-    final end = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(end)) {
-      await tester.pump();
-      if (tester.any(find.text(text))) {
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-    fail('Timed out waiting for "$text"');
-  }
-
-  /// Polls until [probe] holds. Ticks and GPS fixes arrive on the wall clock,
-  /// and the CI emulator runs without hardware acceleration, so a fixed sleep
-  /// can end before the first fix does — every "must advance" assertion polls
-  /// instead of sleeping. [diagnostics] (when given) is appended to the
-  /// timeout failure so a red CI run shows the state that never arrived.
-  Future<void> waitForCondition(
-    WidgetTester tester,
-    bool Function() probe,
-    String description, {
-    Duration timeout = const Duration(seconds: 30),
-    String Function()? diagnostics,
-  }) async {
-    final end = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(end)) {
-      await tester.pump();
-      if (probe()) {
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    }
-    fail('Timed out waiting for $description'
-        '${diagnostics == null ? '' : '\n${diagnostics()}'}');
-  }
 
   testWidgets('records a run end to end', (tester) async {
     await tester.pumpWidget(const AgainstYesterdayApp());
@@ -129,10 +63,10 @@ void main() {
     // GPS advances the distance on real ticks. Poll rather than sleeping a
     // fixed two seconds: the CI emulator has no hardware acceleration, and a
     // cold GPS start can need considerably longer to deliver its first fixes.
-    final before = _displayedMeters(tester);
+    final before = displayedMeters(tester);
     await waitForCondition(
       tester,
-      () => _displayedMeters(tester) > before,
+      () => displayedMeters(tester) > before,
       'the distance to advance past $before m',
     );
 
@@ -269,10 +203,10 @@ void main() {
     await tester.pumpAndSettle();
     await waitForCondition(
       tester,
-      () => _displayedMeters(tester) > 0,
+      () => displayedMeters(tester) > 0,
       'the distance to start moving',
     );
-    final before = _displayedMeters(tester);
+    final before = displayedMeters(tester);
 
     // Background: the app's lifecycle observer snapshots the interrupted run.
     // Post both transitions back-to-back: the live test binding stops
@@ -283,7 +217,7 @@ void main() {
     await tester.pumpAndSettle();
     await pumpFor(tester, const Duration(milliseconds: 300));
     expect(store.read('run_snapshot'), isNotNull);
-    expect(_displayedMeters(tester), greaterThanOrEqualTo(before));
+    expect(displayedMeters(tester), greaterThanOrEqualTo(before));
 
     // "Process death": tear the tree down and relaunch over the same store.
     await tester.pumpWidget(const SizedBox());
@@ -299,7 +233,7 @@ void main() {
     await waitForText(tester, 'PACE');
     expect(find.text('TIME'), findsOneWidget);
     expect(find.text('FINISH'), findsOneWidget);
-    final restored = _displayedMeters(tester);
+    final restored = displayedMeters(tester);
     // Deliberately not polled: the snapshot carries the distance itself, so
     // this must hold on the first render — a reset here is a real defect.
     expect(restored, greaterThanOrEqualTo(before));
@@ -307,7 +241,7 @@ void main() {
     // The restored session is alive, not a static screenshot.
     await waitForCondition(
       tester,
-      () => _displayedMeters(tester) > restored,
+      () => displayedMeters(tester) > restored,
       'the restored distance to advance past $restored m',
     );
 

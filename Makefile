@@ -13,8 +13,9 @@
 # timeline for hosts and the E2E.
 
 .PHONY: build build-release install run test test-rust-engine lint tz-test \
-        connected-test connected-test-engine engine-build engine-test \
-        engine-lint engine-fmt engine-doc engine-android full-test clean
+        connected-test connected-test-engine connected-test-gps \
+        engine-build engine-test engine-lint engine-fmt engine-doc \
+        engine-android full-test clean
 
 build:
 	cd app && flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
@@ -49,6 +50,10 @@ connected-test:
 
 connected-test-engine: engine-android
 	cd app && ./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true
+
+# Real-receiver suite: fixes simulated through the emulator geo console.
+connected-test-gps: engine-android
+	cd app && ./tool/android_integration_test.sh --device-gps --dart-define=USE_RUST_ENGINE=true
 
 engine-build:
 	cargo build --release -p gps-engine

@@ -96,6 +96,20 @@ A leading non-flag argument names the AVD; anything else is forwarded to
 ./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true
 ```
 
+`--device-gps` runs the real-receiver suite
+(`integration_test/device_gps_test.dart`): with `USE_DEVICE_GPS=true` the
+fixes arrive through the real geolocator platform channel, so acquisition,
+recording and the race axis exercise exactly the path a phone uses. The
+script drives it — it grants the location permission while `flutter test`
+runs, pre-flights location services and the emulator geo console, and
+pushes 1 Hz positions along the saved route's start segment through that
+console (emulator 36 accepts `geo nmea` sentences but never delivers them
+to Android's location stack; plain `geo fix` does):
+
+```bash
+./tool/android_integration_test.sh --device-gps
+```
+
 `ANDROID_AVD` and `ANDROID_SERIAL` override the AVD name and device serial.
 
 ## Real engine

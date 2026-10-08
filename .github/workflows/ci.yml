@@ -166,4 +166,9 @@ jobs:
           api-level: 34
           arch: x86_64
           working-directory: app
-          script: flutter test integration_test --dart-define=USE_RUST_ENGINE=true
+          # Sequential in one emulator session: the demo suite first, then the
+          # real-receiver suite, whose harness feeds simulated fixes over the
+          # emulator geo console (see tool/android_integration_test.sh).
+          script: |
+            ./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true
+            ./tool/android_integration_test.sh --device-gps --dart-define=USE_RUST_ENGINE=true

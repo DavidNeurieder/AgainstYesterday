@@ -3,9 +3,8 @@
 
 /// App root: provider scope + theme + router (M1 shell).
 ///
-/// As a [ConsumerStatefulWidget] it also observes app lifecycle changes and
-/// forwards them to the recording controller (M13, §28), so a run stays
-/// accurate and recoverable across backgrounding.
+/// Forwards app lifecycle changes to the recording controller (M13, §28), so
+/// a run stays accurate and recoverable across backgrounding.
 library;
 
 import 'package:flutter/material.dart';
@@ -22,7 +21,37 @@ class AgainstYesterdayApp extends ConsumerStatefulWidget {
   ConsumerState<AgainstYesterdayApp> createState() => _AgainstYesterdayAppState();
 }
 
-class _AgainstYesterdayAppState extends ConsumerState<AgainstYesterdayApp> with WidgetsBindingObserver {
+class _AgainstYesterdayAppState extends ConsumerState<AgainstYesterdayApp> {
+  @override
+  Widget build(BuildContext context) {
+    return ProviderScope(
+      // The lifecycle observer lives INSIDE the scope: a state above its own
+      // ProviderScope cannot resolve providers (`containerOf` only looks
+      // upward), so a real platform lifecycle message would otherwise crash
+      // any tree pumped without an outer scope (bare `pumpWidget(app)`).
+      child: _LifecycleRelay(
+        child: MaterialApp.router(
+          title: 'Against Yesterday',
+          debugShowCheckedModeBanner: false,
+          theme: buildAppTheme(),
+          routerConfig: buildRouter(),
+        ),
+      ),
+    );
+  }
+}
+
+class _LifecycleRelay extends ConsumerStatefulWidget {
+  const _LifecycleRelay({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_LifecycleRelay> createState() => _LifecycleRelayState();
+}
+
+class _LifecycleRelayState extends ConsumerState<_LifecycleRelay>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -51,14 +80,5 @@ class _AgainstYesterdayAppState extends ConsumerState<AgainstYesterdayApp> with 
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ProviderScope(
-      child: MaterialApp.router(
-        title: 'Against Yesterday',
-        debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        routerConfig: buildRouter(),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => widget.child;
 }

@@ -11,6 +11,22 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- On-emulator end-to-end tests with simulated GPS (M30): a new
+  `integration_test/device_gps_test.dart` records a route and races a saved
+  one against fixes that arrive through the real geolocator platform channel
+  (`USE_DEVICE_GPS=true`), so acquisition, recording and the race axis run on
+  the same path a phone uses. The harness
+  `tool/android_integration_test.sh --device-gps` drives it: it grants the
+  location permission while `flutter test` runs, pre-flights location
+  services and the emulator geo console, and feeds 1 Hz positions along the
+  saved route's start segment over that console. Getting there needed two
+  fixes in `DeviceGpsSource`: the fused client gates its update request on
+  Google Play services' location-settings check, which never resolves on an
+  offline emulator, so `fixes()` now forces the plain `LocationManager`
+  client on Android, and the service acquisition check got a timeout instead
+  of hanging forever. Wired up as `make connected-test-gps` and as a second,
+  sequential run inside the CI `android-integration-test` job (M30).
+
 - First-launch onboarding (§34): a fresh install opens on three swipeable
   screens — "Against Yesterday / Race your best." → "Choose a route. / Your
   previous best becomes your opponent." → "See the gap. / Know exactly when

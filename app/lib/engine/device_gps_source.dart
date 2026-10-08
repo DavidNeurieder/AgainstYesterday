@@ -71,7 +71,13 @@ class DeviceGpsSource implements GpsSource {
 
   @override
   Future<String?> ensureAvailable() async {
-    if (!await Geolocator.isLocationServiceEnabled()) {
+    // The GMS-backed settings check behind this can hang forever on an
+    // offline/uncertified emulator (WAITING_FOR_SERVER), so time it out and
+    // optimistically continue — the fix stream surfaces a real problem
+    // through its own error path.
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled()
+        .timeout(const Duration(seconds: 5), onTimeout: () => true);
+    if (!serviceEnabled) {
       return 'Location services are off. Turn on GPS, then try again.';
     }
     var permission = await Geolocator.checkPermission();
@@ -89,10 +95,16 @@ class DeviceGpsSource implements GpsSource {
   @override
   Stream<GpsFix> fixes() {
     return Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
+      locationSettings: AndroidSettings(
+        // Raw LocationManager fixes instead of the GMS FusedLocationProvider:
+        // the latter gates its first request behind a SettingsClient check
+        // that hangs forever (WAITING_FOR_SERVER) on offline/uncertified
+        // emulators, so no fix would ever arrive.
+        forceLocationManager: true,
         accuracy: LocationAccuracy.best,
         distanceFilter: 0,
         // ~1 fix/sec, matching the engine's 1 Hz sample cadence.
+        intervalDuration: const Duration(seconds: 1),
         timeLimit: null,
       ),
     ).map(gpsFixFromPosition);
