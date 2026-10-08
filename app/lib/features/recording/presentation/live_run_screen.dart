@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../widgets/performance_gap.dart';
 import '../../../widgets/route_map.dart';
@@ -53,6 +54,12 @@ class LiveRunScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // §17: a transient banner for temporary GPS problems — it sits
+              // above the race readout and vanishes once quality recovers.
+              if (state.gpsQuality != 'good') ...[
+                const _WeakGpsBanner(),
+                const SizedBox(height: AppSpacing.md),
+              ],
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 transitionBuilder: (child, animation) =>
@@ -101,14 +108,23 @@ class LiveRunScreen extends ConsumerWidget {
               ),
               const SizedBox(height: AppSpacing.md),
               Expanded(
-                child: RouteMap(
-                  geometry: state.route?.geometry ?? const [],
-                  you: state.currentPosition ??
-                      state.route?.geometry.first ??
-                      const GeoPoint(latitude: 51.96, longitude: 7.63),
-                  youProgress: state.routeProgress,
-                  ghost: state.ghostPosition,
-                  name: state.route?.name,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RouteMap(
+                      geometry: state.route?.geometry ?? const [],
+                      you: state.currentPosition ??
+                          state.route?.geometry.first ??
+                          const GeoPoint(latitude: 51.96, longitude: 7.63),
+                      youProgress: state.routeProgress,
+                      ghost: state.ghostPosition,
+                      name: state.route?.name,
+                    ),
+                    // §18: the race screen stays underneath; the overlay
+                    // clears itself as soon as the runner is back on line.
+                    if (state.offRoute case final Distance offRoute)
+                      _OffRouteBanner(distance: offRoute),
+                  ],
                 ),
               ),
               Padding(
@@ -156,6 +172,107 @@ class LiveRunScreen extends ConsumerWidget {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// §17: transient banner for a temporary GPS problem. Rendered only while
+/// quality is off 'good'; recovers on its own with the state.
+class _WeakGpsBanner extends StatelessWidget {
+  const _WeakGpsBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.gpsWarning.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.gpsWarning),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.gps_off, color: AppColors.gpsWarning),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'GPS SIGNAL WEAK',
+                    style: textTheme.titleSmall?.copyWith(
+                      color: AppColors.gpsWarning,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Your position may be temporarily inaccurate.',
+                    style: textTheme.bodySmall
+                        ?.copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// §18: off-route overlay — floats over the map so the race screen stays
+/// visible underneath. Shows the distance back to the nearest route point.
+class _OffRouteBanner extends StatelessWidget {
+  const _OffRouteBanner({required this.distance});
+
+  final Distance distance;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      liveRegion: true,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceHigh,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.gpsWarning),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'OFF ROUTE',
+                style: textTheme.titleLarge?.copyWith(
+                  color: AppColors.gpsWarning,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Return to the route\nto continue your race.',
+                textAlign: TextAlign.center,
+                style: textTheme.bodyMedium
+                    ?.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                '${distance.format()} away',
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ],
           ),

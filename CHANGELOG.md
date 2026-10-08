@@ -11,6 +11,15 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- The race speaks up when GPS gets shaky (§17) and when you wander off
+  the line (§18): a weak-signal banner sits above the readout whenever the
+  latest fix's accuracy drops out of the good bucket (<15 m good, 15–40 m
+  reduced, ≥40 m poor — the pill keeps the exact level), and a centred
+  OFF ROUTE card floats over the map with the metres back to the route.
+  The race screen stays visible underneath and both clear themselves the
+  moment the state recovers. Only a recognised route can be left, and the
+  demo runner tracks the geometry exactly, so the overlays never fire in
+  normal play (M25).
 - Responsive layout (§31): a regression suite pumps every primary screen
   — Home, Routes, History, Settings, both detail screens, the whole race
   flow, and the live run in landscape — at the 320/390/430 px phone range

@@ -328,7 +328,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       latitude: fix.latitude,
       longitude: fix.longitude,
     );
-    final projected = _projectOnPolyline(session.geometry, position);
+    final projected = projectOnPolyline(session.geometry, position);
     final onRoute = projected != null && session.route != null;
 
     // Ground covered since the previous fix (0 for the very first).
@@ -409,59 +409,6 @@ class RecordingController extends Notifier<LiveRunState?> {
       return Speed.metersPerSecond(groundMeters / deltaSeconds);
     }
     return Speed.zero();
-  }
-
-  /// Returns the arc length (and snapped point) of the polyline position
-  /// nearest to [point], or `null` when the geometry can't map the position.
-  ({double distanceM, GeoPoint point})? _projectOnPolyline(
-    List<GeoPoint> geometry,
-    GeoPoint point,
-  ) {
-    if (geometry.length < 2) {
-      return null;
-    }
-    var bestDistance = double.infinity;
-    var bestArcMeters = 0.0;
-    var bestPoint = point;
-    var walked = 0.0;
-    for (var i = 1; i < geometry.length; i++) {
-      final a = geometry[i - 1];
-      final b = geometry[i];
-      final segment = math.max(1e-9, haversineMeters(a, b));
-      final closest = _closestOnSegment(a, b, point, segment);
-      final d = haversineMeters(point, closest);
-      if (d < bestDistance) {
-        bestDistance = d;
-        bestPoint = closest;
-        bestArcMeters = walked + math.max(0, haversineMeters(a, closest));
-      }
-      walked += segment;
-    }
-    return (distanceM: bestArcMeters, point: bestPoint);
-  }
-
-  /// Orthogonal projection of [p] onto segment [a]–[b] (equal-distance
-  /// latitude/longitude plane, fine for short local segments).
-  GeoPoint _closestOnSegment(
-    GeoPoint a,
-    GeoPoint b,
-    GeoPoint p,
-    double segmentLength,
-  ) {
-    final dx = b.latitude - a.latitude;
-    final dy = b.longitude - a.longitude;
-    final denom = dx * dx + dy * dy;
-    if (denom <= 0) {
-      return a;
-    }
-    final t = (((p.latitude - a.latitude) * dx +
-                (p.longitude - a.longitude) * dy) /
-            denom)
-        .clamp(0.0, 1.0);
-    return GeoPoint(
-      latitude: a.latitude + dx * t,
-      longitude: a.longitude + dy * t,
-    );
   }
 
   void _advance() {
@@ -908,6 +855,14 @@ class RecordingController extends Notifier<LiveRunState?> {
   }) {
     final session = _requireSession();
     final keepGap = gap ?? state?.ghostGap;
+    // §17: quality follows the latest fix's accuracy; acquiring has no fix
+    // yet and reads as reduced. §18: only a recognised route can be left.
+    final accuracy = session.rawFixes.isEmpty
+        ? null
+        : session.rawFixes.last.accuracyMeters;
+    final offRoute = status == RunStatus.running && session.route != null
+        ? offRouteDistance(geometry: session.geometry, position: position)
+        : null;
     state = LiveRunState(
       status: status,
       elapsed: session.moving,
@@ -921,7 +876,10 @@ class RecordingController extends Notifier<LiveRunState?> {
       routeProgress: session.loopLength <= 0
           ? 0
           : session.distanceM / session.loopLength,
-      gpsQuality: status == RunStatus.gpsAcquiring ? 'reduced' : 'good',
+      gpsQuality: status == RunStatus.gpsAcquiring
+          ? 'reduced'
+          : qualityForGpsAccuracy(accuracy),
+      offRoute: offRoute,
       hasUnsavedData: hasUnsavedData,
       route: session.route,
       ghostPosition: ghostPosition ?? state?.ghostPosition,

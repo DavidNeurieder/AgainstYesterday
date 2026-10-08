@@ -288,6 +288,7 @@ class LiveRunState {
     this.ghostGap,
     required this.routeProgress,
     this.gpsQuality = 'good',
+    this.offRoute,
     this.hasUnsavedData = false,
     this.route,
     this.ghostPosition,
@@ -309,6 +310,10 @@ class LiveRunState {
 
   /// 'good' | 'reduced' | 'poor' (§17).
   final String gpsQuality;
+
+  /// How far the runner currently is from the route line when that distance
+  /// exceeds the off-route threshold; `null` while on the route (§18).
+  final Distance? offRoute;
 
   /// True while the run holds state that isn't persisted yet (§9). Cleared
   /// once the completed run is saved (M11).
@@ -357,6 +362,96 @@ GeoPoint? pointAlongPolyline(List<GeoPoint> geometry, double distanceMeters) {
     walked += segment;
   }
   return geometry.last;
+}
+
+/// Arc length (and snapped point) of the polyline position nearest to
+/// [point], or `null` when the geometry can't map the position.
+///
+/// The app-side twin of the engine's route projection: used for the live
+/// distance axis on a recognised route and the off-route signal (§18).
+({double distanceM, GeoPoint point})? projectOnPolyline(
+  List<GeoPoint> geometry,
+  GeoPoint point,
+) {
+  if (geometry.length < 2) {
+    return null;
+  }
+  var bestDistance = double.infinity;
+  var bestArcMeters = 0.0;
+  var bestPoint = point;
+  var walked = 0.0;
+  for (var i = 1; i < geometry.length; i++) {
+    final a = geometry[i - 1];
+    final b = geometry[i];
+    final segment = math.max(1e-9, haversineMeters(a, b));
+    final closest = _closestOnSegment(a, b, point, segment);
+    final d = haversineMeters(point, closest);
+    if (d < bestDistance) {
+      bestDistance = d;
+      bestPoint = closest;
+      bestArcMeters = walked + math.max(0, haversineMeters(a, closest));
+    }
+    walked += segment;
+  }
+  return (distanceM: bestArcMeters, point: bestPoint);
+}
+
+/// Orthogonal projection of [p] onto segment [a]–[b] (equal-distance
+/// latitude/longitude plane, fine for short local segments).
+GeoPoint _closestOnSegment(
+  GeoPoint a,
+  GeoPoint b,
+  GeoPoint p,
+  double segmentLength,
+) {
+  final dx = b.latitude - a.latitude;
+  final dy = b.longitude - a.longitude;
+  final denom = dx * dx + dy * dy;
+  if (denom <= 0) {
+    return a;
+  }
+  final t = (((p.latitude - a.latitude) * dx +
+              (p.longitude - a.longitude) * dy) /
+          denom)
+      .clamp(0.0, 1.0);
+  return GeoPoint(
+    latitude: a.latitude + dx * t,
+    longitude: a.longitude + dy * t,
+  );
+}
+
+/// GPS quality bucket for the live readout (§17): 'good' | 'reduced' | 'poor'.
+///
+/// Derived from the latest fix's horizontal accuracy (68% confidence
+/// radius): under 15 m is good, 15–40 m is reduced, 40 m or worse is poor.
+/// A missing accuracy counts as good — the fake receiver always reports 5 m.
+String qualityForGpsAccuracy(double? accuracyMeters) {
+  if (accuracyMeters == null || accuracyMeters < 15) {
+    return 'good';
+  }
+  if (accuracyMeters < 40) {
+    return 'reduced';
+  }
+  return 'poor';
+}
+
+/// Lateral distance from [position] to the nearest point on [geometry], or
+/// `null` while within [thresholdMeters] of the line — the off-route signal
+/// (§18). No position or a degenerate geometry is never "off route".
+Distance? offRouteDistance({
+  required List<GeoPoint> geometry,
+  GeoPoint? position,
+  double thresholdMeters = 30,
+}) {
+  if (position == null || geometry.length < 2) {
+    return null;
+  }
+  final projection = projectOnPolyline(geometry, position);
+  if (projection == null) {
+    return null;
+  }
+  final lateral = haversineMeters(position, projection.point);
+  return lateral < thresholdMeters ? null : Distance.meters(lateral);
 }
 
 /// How the live run compares to the reference at a point on the route (§45).

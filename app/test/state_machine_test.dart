@@ -222,6 +222,13 @@ void main() {
         async.elapse(const Duration(milliseconds: 500));
         expect(state(c)!.status, RunStatus.ready);
         expect(state(c)!.gpsQuality, 'good');
+
+        ctrl.beginRun();
+        async.elapse(const Duration(seconds: 2));
+        expect(state(c)!.status, RunStatus.running);
+        expect(state(c)!.gpsQuality, 'good');
+        // The demo runner tracks the geometry exactly, so §18 never fires.
+        expect(state(c)!.offRoute, isNull);
       });
     });
   });
