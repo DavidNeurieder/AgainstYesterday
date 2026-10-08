@@ -15,6 +15,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_buttons.dart';
 import '../../../core/ui/app_motion.dart';
+import '../../../core/ui/app_states.dart';
 import '../../../core/ui/gap_line.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
@@ -144,6 +145,17 @@ class RunCompleteScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       GapLine(gap: gap),
+                      // §33: only a failed disk write shows the block — the
+                      // run above is safely in memory either way.
+                      if (state.hasUnsavedData) ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        SaveErrorState(
+                          onRetry: () {
+                            AppHaptics.light(ref);
+                            controller.retrySave();
+                          },
+                        ),
+                      ],
                       const Spacer(),
                       PrimaryButton(
                         label: 'VIEW RESULT',

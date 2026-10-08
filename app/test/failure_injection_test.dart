@@ -48,6 +48,39 @@ class _ThrowingStore implements PersistenceStore {
   void remove(String key) => throw StateError('storage write failed');
 }
 
+/// Store that fails every operation until [failing] flips — the §33 retry
+/// scenario: broken storage, then healthy again.
+class _FlakyStore implements PersistenceStore {
+  _FlakyStore();
+
+  bool failing = true;
+  final MemoryPersistenceStore _inner = MemoryPersistenceStore();
+
+  @override
+  String? read(String key) {
+    if (failing) {
+      throw StateError('storage read failed');
+    }
+    return _inner.read(key);
+  }
+
+  @override
+  Future<void> write(String key, String value) {
+    if (failing) {
+      return Future.error(StateError('storage write failed'));
+    }
+    return _inner.write(key, value);
+  }
+
+  @override
+  void remove(String key) {
+    if (failing) {
+      throw StateError('storage write failed');
+    }
+    _inner.remove(key);
+  }
+}
+
 /// Engine whose route matching always fails (and so would `_recognizeRoute`).
 class _MismatchingEngine extends FakeEngineService {
   _MismatchingEngine() : super();
@@ -200,10 +233,12 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // Engine failures on the way OUT (route recognition) are safe too.
+  // Engine failures on the way OUT (route recognition) degrade to a
+  // route-less save instead of costing the run (§33).
   // -------------------------------------------------------------------------
   group('route recognition failure on finish', () {
-    test('a route-less run finishing with a failing matcher still completes', () {
+    test('a run finishing with a failing matcher still completes and saves',
+        () {
       fakeAsync((async) {
         // Start on a known route, then drop it, so the finish runs route
         // recognition against a seeded catalog whose matcher throws.
@@ -225,10 +260,55 @@ void main() {
         async.elapse(const Duration(seconds: 5));
         ctrl.finishRun();
         async.elapse(const Duration(milliseconds: 500));
+        async.flushMicrotasks();
 
         expect(state(c)!.status, RunStatus.completed);
-        expect(state(c)!.hasUnsavedData, isTrue);
+        // §33: the matcher only decides the routeId — the activity still
+        // lands on disk, so no save-error block is warranted.
+        expect(state(c)!.hasUnsavedData, isFalse);
+        final history = c.read(activityRepositoryProvider);
+        expect(history, hasLength(1));
+        expect(history.first.routeId, isNull);
+        expect(c.read(runSnapshotProvider), isNull);
       });
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // §33: the save-error block's TRY AGAIN rewrites the disk from memory.
+  // -------------------------------------------------------------------------
+  test('TRY AGAIN after a failed save lands the run (§33)', () {
+    fakeAsync((async) {
+      final store = _FlakyStore();
+      final c = ProviderContainer(overrides: [
+        persistenceStoreProvider.overrideWithValue(store),
+      ]);
+      addTearDown(c.dispose);
+      keepAlive(c);
+
+      final ctrl = c.read(recordingControllerProvider.notifier);
+      ctrl.ensureSession([_route]);
+      async.flushMicrotasks();
+      async.elapse(const Duration(milliseconds: 1000));
+      ctrl.beginRun();
+      async.elapse(const Duration(seconds: 5));
+      ctrl.finishRun();
+      async.elapse(const Duration(milliseconds: 500));
+      async.flushMicrotasks();
+
+      // Broken storage: the run is held in memory and flagged unsaved.
+      expect(state(c)!.status, RunStatus.completed);
+      expect(state(c)!.hasUnsavedData, isTrue);
+      expect(c.read(activityRepositoryProvider), hasLength(1));
+
+      // Storage heals; TRY AGAIN rewrites both documents and clears the flag.
+      store.failing = false;
+      ctrl.retrySave();
+      async.flushMicrotasks();
+
+      expect(state(c)!.hasUnsavedData, isFalse);
+      expect(c.read(activityRepositoryProvider), hasLength(1));
+      expect(c.read(runSnapshotProvider), isNull);
     });
   });
 

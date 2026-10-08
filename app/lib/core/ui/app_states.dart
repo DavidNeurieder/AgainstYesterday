@@ -141,11 +141,70 @@ class ErrorState extends StatelessWidget {
             ],
             if (actions.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.lg),
-              ...actions,
+              for (var i = 0; i < actions.length; i++) ...[
+                if (i > 0) const SizedBox(height: AppSpacing.sm),
+                actions[i],
+              ],
             ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// §33's full-screen error treatment: an [AppBar] over [ErrorState], with the
+/// recovery actions supplied by the caller. The three spec screens (GPS,
+/// route load, save) all share this skeleton so a failure always looks and
+/// acts the same.
+class ErrorScreen extends StatelessWidget {
+  const ErrorScreen({
+    super.key,
+    required this.title,
+    this.barTitle,
+    this.message,
+    this.icon = Icons.error_outline,
+    this.actions = const [],
+  });
+
+  final String title;
+  final String? barTitle;
+  final String? message;
+  final IconData icon;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: barTitle == null ? null : AppBar(title: Text(barTitle!)),
+      body: SafeArea(
+        child: ErrorState(
+          title: title,
+          message: message,
+          icon: icon,
+          actions: actions,
+        ),
+      ),
+    );
+  }
+}
+
+/// §33's inline save-error block for the finish and result screens: the run
+/// itself is safely shown, only the disk write failed, so TRY AGAIN rewrites
+/// the storage the controller still holds in memory.
+class SaveErrorState extends StatelessWidget {
+  const SaveErrorState({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ErrorState(
+      title: 'COULDN\'T SAVE ACTIVITY',
+      message: 'Your activity is safely stored and can be retried.',
+      actions: [
+        FilledButton(onPressed: onRetry, child: const Text('TRY AGAIN')),
+      ],
     );
   }
 }

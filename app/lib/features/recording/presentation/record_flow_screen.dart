@@ -19,7 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/ui/app_states.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../settings/application/settings_controller.dart';
@@ -27,6 +27,7 @@ import '../application/recording_controller.dart';
 import 'live_run_screen.dart';
 import 'pre_run_screen.dart';
 import 'run_complete_screen.dart';
+import 'run_error_screen.dart';
 
 class RecordFlowScreen extends ConsumerStatefulWidget {
   const RecordFlowScreen({super.key, this.routeId});
@@ -47,6 +48,10 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
   int _count = 3;
   Timer? _countdownTimer;
   Timer? _goTimer;
+
+  /// Set when a `/race/:id` session is set up but the route is no longer in
+  /// the catalog (§33): the pre-run never appears, only the load error.
+  bool _routeMissing = false;
 
   @override
   void initState() {
@@ -78,15 +83,28 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
         controller.resumeFromSnapshot(snapshot);
       } else if (widget.routeId case final id?) {
         // A race targets exactly one route; an empty match degrades to the
-        // same fresh unattached run `/record` would give.
+        // §33 load error instead of a ghostless run.
         final routes = ref.read(routeRepositoryProvider);
-        controller.ensureSession([
+        final match = [
           for (final route in routes) if (route.id == id) route,
-        ]);
+        ];
+        _routeMissing = match.isEmpty;
+        controller.ensureSession(match);
       } else {
         controller.ensureSession(ref.read(routeRepositoryProvider));
       }
     }
+  }
+
+  /// §33 RETRY: reload the route catalog (a route may have been re-imported)
+  /// and rebuild the session from it.
+  void _retryRouteLoad() {
+    ref.invalidate(routeRepositoryProvider);
+    ref.read(recordingControllerProvider.notifier).dismissRun();
+    setState(() {
+      _routeMissing = false;
+      _ensure();
+    });
   }
 
   /// Countdown disabled (Settings → Race), so START begins immediately, just
@@ -142,14 +160,17 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
             RunStatus.error => 'error',
             _ => 'pre',
           };
-    final screen = _counting
+    final screen = _routeMissing
+        ? _RouteLoadErrorScreen(onRetry: _retryRouteLoad)
+        : _counting
         ? _CountdownScreen(count: _count)
         : switch (status) {
             RunStatus.running || RunStatus.paused => LiveRunScreen(state: state!),
             RunStatus.finishing || RunStatus.completed =>
               RunCompleteScreen(state: state!),
-            RunStatus.error => _RunErrorScreen(
+            RunStatus.error => RunErrorScreen(
                 error: state?.error,
+                barTitle: 'New run',
                 onRetry: controller.retry,
                 onOpenSettings: state?.error?.gpsSettingsAction == true
                     ? controller.openSettings
@@ -181,7 +202,10 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
           child: child,
         ),
       ),
-      child: KeyedSubtree(key: ValueKey(phase), child: screen),
+      child: KeyedSubtree(
+        key: ValueKey(_routeMissing ? 'routeError' : phase),
+        child: screen,
+      ),
     );
   }
 }
@@ -230,63 +254,22 @@ class _CountdownScreen extends StatelessWidget {
   }
 }
 
-/// Destination for an unrecoverable acquisition error (M14): the reason (when
-/// known), an optional jump to the matching system settings, and retry.
-class _RunErrorScreen extends StatelessWidget {
-  const _RunErrorScreen({
-    required this.error,
-    required this.onRetry,
-    this.onOpenSettings,
-  });
+/// §33: the race's route vanished from the catalog before the session could
+/// start — the pre-run never appears, only the recovery action.
+class _RouteLoadErrorScreen extends StatelessWidget {
+  const _RouteLoadErrorScreen({required this.onRetry});
 
-  final RunError? error;
   final VoidCallback onRetry;
-  final VoidCallback? onOpenSettings;
-
-  static const String _fallback = 'The engine failed to prepare the ghost. '
-      'Try again.';
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('New run')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'Could not start a run',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                error?.message ?? _fallback,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-              ),
-              if (onOpenSettings != null) ...[
-                const SizedBox(height: AppSpacing.lg),
-                OutlinedButton.icon(
-                  onPressed: onOpenSettings,
-                  icon: const Icon(Icons.location_on_outlined),
-                  label: const Text('Open location settings'),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.lg),
-              FilledButton(
-                onPressed: onRetry,
-                child: const Text('Try again'),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return ErrorScreen(
+      barTitle: 'Race',
+      title: 'COULDN\'T LOAD ROUTE',
+      message: 'Try again.',
+      actions: [
+        FilledButton(onPressed: onRetry, child: const Text('RETRY')),
+      ],
     );
   }
 }

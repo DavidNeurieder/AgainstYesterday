@@ -15,6 +15,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/app_buttons.dart';
 import '../../../core/ui/app_motion.dart';
+import '../../../core/ui/app_states.dart';
 import '../../../core/ui/gap_line.dart';
 import '../../../core/ui/split_row.dart';
 import '../../../core/units.dart';
@@ -37,7 +38,9 @@ class ResultScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
     final units = ref.watch(displayUnitProvider);
-    final live = ref.read(recordingControllerProvider);
+    // Watched, not read: a background save failure (§33) flips
+    // `hasUnsavedData` after this screen is already up.
+    final live = ref.watch(recordingControllerProvider);
     if (live == null) {
       return const _EmptyResult();
     }
@@ -118,6 +121,19 @@ class ResultScreen extends ConsumerWidget {
             delay: const Duration(milliseconds: 150),
             child: GapLine(gap: gap),
           ),
+          if (live.hasUnsavedData) ...[
+            const SizedBox(height: AppSpacing.lg),
+            // §33: TRY AGAIN rewrites the disk from the controller's memory.
+            StaggeredIn(
+              delay: const Duration(milliseconds: 200),
+              child: SaveErrorState(
+                onRetry: () {
+                  AppHaptics.light(ref);
+                  ref.read(recordingControllerProvider.notifier).retrySave();
+                },
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           if (route != null && gap != null)
             StaggeredIn(

@@ -11,14 +11,13 @@ library;
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
 import '../application/recording_controller.dart';
 import 'route_record_prep_screen.dart';
 import 'route_record_recorder_screen.dart';
 import 'route_record_save_screen.dart';
 import 'route_record_saved_screen.dart';
+import 'run_error_screen.dart';
 
 class RouteRecordFlowScreen extends ConsumerStatefulWidget {
   const RouteRecordFlowScreen({super.key});
@@ -74,8 +73,9 @@ class _RouteRecordFlowScreenState extends ConsumerState<RouteRecordFlowScreen> {
         RouteRecordRecorderScreen(state: state!),
       RunStatus.finishing || RunStatus.completed =>
         RouteRecordSaveScreen(state: state!, onSaved: _onSaved),
-      RunStatus.error => _RecordRouteErrorScreen(
+      RunStatus.error => RunErrorScreen(
         error: state?.error,
+        barTitle: 'Record Route',
         onRetry: controller.retry,
         onOpenSettings: state?.error?.gpsSettingsAction == true
             ? controller.openSettings
@@ -103,67 +103,5 @@ class _RouteRecordFlowScreenState extends ConsumerState<RouteRecordFlowScreen> {
 
   void _onSaved(Route route) {
     setState(() => _saved = route);
-  }
-}
-
-/// Destination for an unrecoverable acquisition error (same copy as the race
-/// flow, M14): the reason (when known), an optional jump to the matching
-/// system settings, and retry.
-class _RecordRouteErrorScreen extends StatelessWidget {
-  const _RecordRouteErrorScreen({
-    required this.error,
-    required this.onRetry,
-    this.onOpenSettings,
-  });
-
-  final RunError? error;
-  final VoidCallback onRetry;
-  final VoidCallback? onOpenSettings;
-
-  static const String _fallback = 'The engine failed to prepare the ghost. '
-      'Try again.';
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Record Route')),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'Could not start a run',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                error?.message ?? _fallback,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-              ),
-              if (onOpenSettings != null) ...[
-                const SizedBox(height: AppSpacing.lg),
-                OutlinedButton.icon(
-                  onPressed: onOpenSettings,
-                  icon: const Icon(Icons.location_on_outlined),
-                  label: const Text('Open location settings'),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.lg),
-              FilledButton(
-                onPressed: onRetry,
-                child: const Text('Try again'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

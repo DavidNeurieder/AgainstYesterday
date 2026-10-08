@@ -76,6 +76,10 @@ class RecordingController extends Notifier<LiveRunState?> {
   GpsSource? _gpsSource;
   StreamSubscription<GpsFix>? _gpsSub;
 
+  /// The completed run whose disk write failed (§33) — held so TRY AGAIN on
+  /// the save-error block can rewrite it. `null` once the save has landed.
+  Activity? _lastFinishedActivity;
+
   /// Previous raw position, used to measure the ground travelled between
   /// consecutive fixes. Anchored on every observation so a later move always
   /// measures from the last heard fix; free-run distance accumulates only for
@@ -198,6 +202,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     _stopDeviceStream();
     _session = null;
     state = null;
+    _lastFinishedActivity = null;
     ref.read(runSnapshotProvider.notifier).save(null);
   }
 
@@ -665,22 +670,26 @@ class RecordingController extends Notifier<LiveRunState?> {
     final gap = session.ghost != null
         ? _gapAt(session, session.distanceM)
         : null;
-    _emit(status: RunStatus.completed, gap: gap, hasUnsavedData: true);
+    // The save runs in the background; the unsaved flag only turns on if it
+    // fails (§33), so the finish screen never flashes a false alarm.
+    _emit(status: RunStatus.completed, gap: gap, hasUnsavedData: false);
     _timer?.cancel();
     _timer = null;
     _stopDeviceStream();
-    // Persist in the background; the flag clears when the save lands.
     _persistCompletedRun();
   }
 
   /// Saves the finished run into the activity repository (M10, §27).
+  ///
+  /// A failed route match no longer costs the run: the activity is saved
+  /// without a route instead (§33), so the unsaved flag — and the save-error
+  /// block — only ever mean "the disk write failed, retry it".
   Future<void> _persistCompletedRun() async {
     final session = _requireSession();
     final gap = session.ghost != null
         ? _gapAt(session, session.distanceM)
         : null;
     final progress = ref.read(saveProgressProvider.notifier);
-    var saved = true;
     try {
       progress.report(
         'synthesize d=${session.distanceM.toStringAsFixed(1)} '
@@ -688,7 +697,14 @@ class RecordingController extends Notifier<LiveRunState?> {
       );
       final track = _synthesizeTrack(session);
       progress.report('synthesized ${track.length} pts');
-      final routeId = session.route?.id ?? await _recognizeRoute(track);
+      String? routeId = session.route?.id;
+      if (routeId == null) {
+        try {
+          routeId = await _recognizeRoute(track);
+        } catch (e) {
+          progress.report('route match failed: $e');
+        }
+      }
       progress.report('route=$routeId');
       final activity = Activity(
         id: 'act-${session.startedAt.millisecondsSinceEpoch}',
@@ -701,21 +717,59 @@ class RecordingController extends Notifier<LiveRunState?> {
         rawFixes: List.unmodifiable(session.rawFixes),
       );
       progress.report('activity built (${activity.rawFixes?.length} fixes)');
-      await ref
-          .read(activityRepositoryProvider.notifier)
-          .saveActivity(activity);
-      progress.report('activity saved');
-      await ref.read(runSnapshotProvider.notifier).save(null);
-      progress.report('snapshot cleared');
+      final saved = await _saveRunToDisk(activity);
+      progress.report(saved ? 'run saved' : 'disk save failed');
+      if (_session == session) {
+        _emit(status: RunStatus.completed, gap: gap, hasUnsavedData: !saved);
+      }
     } catch (e, st) {
-      // Best-effort persistence: degraded storage or a failed route match must
-      // keep the completed summary visible, not crash the app (Phase 13).
+      // Keep the completed summary visible rather than crashing the app
+      // (Phase 13); the §33 block offers the retry.
       debugPrint('Failed to persist completed run: $e\n$st');
       progress.report('error: ${e.runtimeType}: $e');
-      saved = false;
+      if (_session == session) {
+        _emit(status: RunStatus.completed, gap: gap, hasUnsavedData: true);
+      }
     }
-    if (_session == session) {
-      _emit(status: RunStatus.completed, gap: gap, hasUnsavedData: !saved);
+  }
+
+  /// Writes the finished run to storage: history first (the in-memory list
+  /// holds it either way), then the interrupted-run snapshot. Both writes must
+  /// land for the run to count as saved; the activity is kept for §33's
+  /// retry until they do.
+  Future<bool> _saveRunToDisk(Activity activity) async {
+    _lastFinishedActivity = activity;
+    final inHistory = await ref
+        .read(activityRepositoryProvider.notifier)
+        .saveActivity(activity);
+    final snapshotCleared =
+        await ref.read(runSnapshotProvider.notifier).save(null);
+    final saved = inHistory && snapshotCleared;
+    if (saved) {
+      _lastFinishedActivity = null;
+    }
+    return saved;
+  }
+
+  /// §33 TRY AGAIN: rewrites the disk from the activity already held in
+  /// memory and clears the save-error block once both writes land.
+  Future<void> retrySave() async {
+    final activity = _lastFinishedActivity;
+    if (activity == null ||
+        state?.status != RunStatus.completed ||
+        state?.hasUnsavedData != true) {
+      return;
+    }
+    final progress = ref.read(saveProgressProvider.notifier);
+    progress.report('retry save');
+    final saved = await _saveRunToDisk(activity);
+    progress.report(saved ? 'retry saved' : 'retry failed');
+    if (saved && state?.status == RunStatus.completed) {
+      _emit(
+        status: RunStatus.completed,
+        gap: state?.ghostGap,
+        hasUnsavedData: false,
+      );
     }
   }
 

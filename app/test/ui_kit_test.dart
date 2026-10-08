@@ -158,6 +158,33 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
   });
+
+  group('ErrorState', () {
+    testWidgets('renders the §33 block with spaced, tappable actions',
+        (tester) async {
+      var retried = 0;
+      await tester.pumpWidget(frame(
+        ErrorState(
+          title: 'COULDN\'T LOAD ROUTE',
+          message: 'Try again.',
+          actions: [
+            OutlinedButton(onPressed: _noop, child: const Text('SECOND')),
+            FilledButton(onPressed: () => retried++, child: const Text('RETRY')),
+          ],
+        ),
+      ));
+      expect(find.text('COULDN\'T LOAD ROUTE'), findsOneWidget);
+      expect(find.text('Try again.'), findsOneWidget);
+
+      // Actions are stacked with a gap, not jammed together.
+      final second = tester.getTopLeft(find.text('SECOND'));
+      final retry = tester.getTopLeft(find.text('RETRY'));
+      expect(retry.dy, greaterThan(second.dy));
+
+      await tester.tap(find.text('RETRY'));
+      expect(retried, 1);
+    });
+  });
 }
 
 void _noop() {}

@@ -187,7 +187,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pump(const Duration(milliseconds: 600));
 
-    expect(find.text('Could not start a run'), findsOneWidget);
+    expect(find.text('GPS UNAVAILABLE'), findsOneWidget);
     expect(
       find.textContaining('Location services are off.'),
       findsOneWidget,

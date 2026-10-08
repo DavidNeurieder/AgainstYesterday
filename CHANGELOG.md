@@ -11,6 +11,16 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Consistent error screens (§33): every failure lands on one ErrorScreen
+  skeleton — title bar, icon, headline, reason, recovery actions. A GPS
+  refusal headlines GPS UNAVAILABLE and offers the matching location
+  settings; a race whose route vanished from the catalog shows COULDN'T
+  LOAD ROUTE with RETRY, which reloads the catalog and drops back into
+  the pre-race as soon as the route is back; and a failed disk write no
+  longer costs the run — a failing route matcher now just saves the run
+  without a route, the activity is held in memory, and the finish and
+  result screens show an inline COULDN'T SAVE ACTIVITY block whose TRY
+  AGAIN rewrites the storage (M27).
 - The performance graph (§23): the result screen's GAP TO YOUR BEST chart
   plots how far ahead of (green) or behind (amber) your personal best you
   were at every 100 m of the covered distance, against a dashed zero rule

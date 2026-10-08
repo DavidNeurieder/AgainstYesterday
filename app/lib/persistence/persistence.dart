@@ -213,17 +213,26 @@ class ActivityRepository extends Notifier<List<Activity>> {
   }
 
   /// Inserts [activity] at the top of the history (newest first).
-  Future<void> saveActivity(Activity activity) async {
+  ///
+  /// Returns whether the disk write landed (§33): the in-memory list is
+  /// updated either way, so a `false` only means "retry the write".
+  Future<bool> saveActivity(Activity activity) async {
     state = [activity, ...state.where((a) => a.id != activity.id)];
-    await _persist();
+    return _persist();
   }
 
-  Future<void> _persist() async {
+  Future<bool> _persist() async {
     final store = ref.read(persistenceStoreProvider);
     if (store is NoopPersistenceStore) {
-      return;
+      return true;
     }
-    await writeBestEffort(store, _activitiesKey, activityListToJson(state));
+    try {
+      await store.write(_activitiesKey, activityListToJson(state));
+      return true;
+    } catch (_) {
+      // Degraded storage: the in-memory history stays authoritative.
+      return false;
+    }
   }
 
   /// Drops every activity from history (Settings → Delete all data, M21).
@@ -253,26 +262,38 @@ class RunSnapshotRepository extends Notifier<RunSnapshot?> {
 
   /// Overwrites the snapshot (called while a run is active and on lifecycle
   /// transitions), or null to clear it once the run is finished/dismissed.
-  Future<void> save(RunSnapshot? snapshot) async {
+  ///
+  /// Returns whether the disk write landed (§33); the in-memory value is
+  /// updated either way.
+  Future<bool> save(RunSnapshot? snapshot) async {
     if (snapshot == null) {
       state = null;
-      await _clear();
-      return;
+      return _clear();
     }
     state = snapshot;
     final store = ref.read(persistenceStoreProvider);
     if (store is NoopPersistenceStore) {
-      return;
+      return true;
     }
-    await writeBestEffort(store, _key, runSnapshotToJson(snapshot));
+    try {
+      await store.write(_key, runSnapshotToJson(snapshot));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
-  Future<void> _clear() async {
+  Future<bool> _clear() async {
     final store = ref.read(persistenceStoreProvider);
     if (store is NoopPersistenceStore) {
-      return;
+      return true;
     }
-    await writeBestEffort(store, _key, 'null');
+    try {
+      await store.write(_key, 'null');
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   static const _key = 'run_snapshot';
