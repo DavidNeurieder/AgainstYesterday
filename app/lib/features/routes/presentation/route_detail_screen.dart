@@ -22,6 +22,8 @@ import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../../widgets/route_map.dart';
+import '../../map/offline_region_repository.dart';
+import '../../map/offline_regions.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/route_stats.dart';
@@ -62,6 +64,10 @@ class RouteDetailScreen extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
+          if (ref.watch(offlineMapsAvailableProvider)) ...[
+            _OfflineDownloadCard(routeId: route.id),
+            const SizedBox(height: AppSpacing.md),
+          ],
           Text(
             '${route.distance.formatWith(units)} · '
             '${stats.runs} ${stats.runs == 1 ? 'run' : 'runs'} · '
@@ -306,6 +312,122 @@ class _AttemptRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Download/status card for this route's offline region (§23, offline map
+/// Phase 3). Only rendered when this build can download regions (device
+/// MapLibre builds); manage or delete downloads in Settings → Map.
+class _OfflineDownloadCard extends ConsumerWidget {
+  const _OfflineDownloadCard({required this.routeId});
+
+  final String routeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final region = ref.watch(offlineRegionRepositoryProvider
+        .select((regions) => regions.where((r) => r.routeId == routeId).firstOrNull));
+    final textTheme = Theme.of(context).textTheme;
+
+    final Widget content = switch (region?.status) {
+      OfflineRegionStatus.ready => Row(
+          children: [
+            const Icon(Icons.check_circle_outline,
+                size: 18, color: AppColors.ahead),
+            const SizedBox(width: AppSpacing.sm),
+            Text('Offline map ready — works without a connection.',
+                style: textTheme.bodySmall),
+          ],
+        ),
+      OfflineRegionStatus.downloading => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Downloading ${(region!.progress * 100).round()}%',
+              style: textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            LinearProgressIndicator(
+              key: ValueKey('route-offline-progress-$routeId'),
+              value: region.progress,
+              color: AppColors.you,
+              backgroundColor: AppColors.outline,
+              minHeight: 4,
+            ),
+          ],
+        ),
+      OfflineRegionStatus.failed => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              region!.errorText ?? 'Download failed.',
+              style: textTheme.bodySmall?.copyWith(color: AppColors.error),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _RetryButton(routeId: routeId),
+          ],
+        ),
+      _ => _DownloadButton(routeId: routeId),
+    };
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: content,
+      ),
+    );
+  }
+}
+
+class _DownloadButton extends ConsumerWidget {
+  const _DownloadButton({required this.routeId});
+
+  final String routeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final route = ref
+        .watch(routeRepositoryProvider)
+        .where((r) => r.id == routeId)
+        .firstOrNull;
+    return OutlinedButton.icon(
+      key: ValueKey('download-offline-$routeId'),
+      onPressed: route == null
+          ? null
+          : () => ref
+              .read(offlineRegionRepositoryProvider.notifier)
+              .downloadRoute(route),
+      icon: const Icon(Icons.download_for_offline_outlined),
+      label: const Text('Download offline map'),
+    );
+  }
+}
+
+class _RetryButton extends ConsumerWidget {
+  const _RetryButton({required this.routeId});
+
+  final String routeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final route = ref
+        .watch(routeRepositoryProvider)
+        .where((r) => r.id == routeId)
+        .firstOrNull;
+    return TextButton.icon(
+      onPressed: route == null
+          ? null
+          : () => ref
+              .read(offlineRegionRepositoryProvider.notifier)
+              .downloadRoute(route),
+      icon: const Icon(Icons.refresh),
+      label: const Text('Try again'),
     );
   }
 }

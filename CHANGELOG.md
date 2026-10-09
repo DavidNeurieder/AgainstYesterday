@@ -29,6 +29,17 @@ documented here, grouped by the implementation milestones in
   seam (static view, no follow, no markers), so every run — including a free
   "New route" run — shows its trace, and runs recorded before the map kept no
   track fall back to the previous layout.
+- Offline regions (Phase 3 of `ideas/offline_map_plan.txt`): each route can be
+  downloaded for offline use from the route detail page ("Download offline
+  map") and managed in Settings → Map — progress while it downloads, delete
+  with confirmation, and the OSM/OpenFreeMap attribution. Downloads are
+  one-at-a-time and size-capped by a client-side tile budget: the zoom is
+  chosen per route so the estimated Web-Mercator tile count stays under a
+  fixed cap, honouring the tile provider's no-bulk-collection terms. Metadata
+  survives restarts via the persistence store; the tiles themselves live in
+  MapLibre Native's offline database. Only MapLibre builds expose the
+  download affordances; host/tests drive the state machine through the
+  downloader seam.
 - Export every route and recorded run to the Android Downloads folder as a
   single timestamped GPX file: Settings → Export GPX now writes
   `against-yesterday-YYYY-MM-DD-HHMMSS.gpx` through a `MediaStore` platform

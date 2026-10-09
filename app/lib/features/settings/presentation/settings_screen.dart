@@ -16,6 +16,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/units.dart';
 import '../../../core/ui/app_sections.dart';
 import '../../../persistence/persistence.dart';
+import '../../map/map_settings_section.dart';
 import '../application/gpx_export.dart';
 import '../application/settings_controller.dart';
 import '../application/track_export.dart';
@@ -116,6 +117,8 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.lg),
+          const MapSettingsSection(),
+          const SizedBox(height: AppSpacing.lg),
           const SectionHeader(title: 'About'),
           const SizedBox(height: AppSpacing.sm),
           _Card(
@@ -210,7 +213,7 @@ class SettingsScreen extends ConsumerWidget {
 
   Future<void> _deleteAllData(WidgetRef ref) async {
     final store = ref.read(persistenceStoreProvider);
-    for (final key in ['routes', 'activities', 'run_snapshot', 'settings']) {
+    for (final key in ['routes', 'activities', 'run_snapshot', 'settings', 'offline_regions']) {
       try {
         store.remove(key);
       } catch (_) {
