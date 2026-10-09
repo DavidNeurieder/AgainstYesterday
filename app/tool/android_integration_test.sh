@@ -12,9 +12,11 @@
 #   ./tool/android_integration_test.sh --device-gps   # real-receiver suite;
 #                                                      # fixes simulated by the
 #                                                      # emulator geo console
+#   ./tool/android_integration_test.sh --smoke        # record-and-save journey
+#                                                      # only (old-API jobs)
 #
-# Anything that is not a leading AVD name or --device-gps is forwarded to
-# `flutter test` (e.g. --dart-define=USE_RUST_ENGINE=true).
+# Anything that is not a leading AVD name, --device-gps or --smoke is forwarded
+# to `flutter test` (e.g. --dart-define=USE_RUST_ENGINE=true).
 #
 # Requires ANDROID_HOME (or a local Android SDK) and a created AVD:
 #   flutter emulators --launch <avd>
@@ -29,16 +31,18 @@ set -euo pipefail
 
 PKG="dev.neurieder.against_yesterday"
 
-# --device-gps selects the device-GPS suite; the rest of the arguments keep
-# their original meaning (leading non-flag argument = AVD, rest forwarded).
+# --device-gps selects the device-GPS suite and --smoke narrows the demo suite
+# to its record-and-save journey; the rest of the arguments keep their original
+# meaning (leading non-flag argument = AVD, rest forwarded).
 DEVICE_GPS=0
+SMOKE=0
 ARGS=()
 for arg in "$@"; do
-  if [ "$arg" = "--device-gps" ]; then
-    DEVICE_GPS=1
-  else
-    ARGS+=("$arg")
-  fi
+  case "$arg" in
+    --device-gps) DEVICE_GPS=1 ;;
+    --smoke) SMOKE=1 ;;
+    *) ARGS+=("$arg") ;;
+  esac
 done
 set -- ${ARGS[@]+"${ARGS[@]}"}
 
@@ -256,8 +260,14 @@ run_demo_suite() {
   # Fresh install so the demo suite records against an empty catalog/history
   # and cannot inherit a previous run's saved route or activity.
   reset_app_state
-  echo ">> Running integration tests on $SERIAL..."
-  if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test integration_test -d "$SERIAL" \
+  # `--smoke` (old-API PR jobs) keeps only the record-and-save journey; the
+  # full suite also covers racing, the route library, and relaunch.
+  local target="integration_test"
+  if [ "$SMOKE" = "1" ]; then
+    target="integration_test/app_test.dart"
+  fi
+  echo ">> Running integration tests ($target) on $SERIAL..."
+  if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test "$target" -d "$SERIAL" \
     ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
     collect_artifacts demo
     exit 1

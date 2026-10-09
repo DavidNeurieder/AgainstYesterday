@@ -241,6 +241,20 @@ documented here, grouped by the implementation milestones in
 
 ### Tooling
 
+- **Fixed-outcome race tests.** `test/race_fixtures.dart` adds a
+  `LinearGhostEngine` whose reference time is exactly `distance / speed`, so a
+  scripted fix timeline pins the ghost gap's sign and magnitude instead of
+  accepting either result; `test/race_outcomes_test.dart` covers ahead, behind,
+  and the distance-scaled magnitude, and asserts the completion header for
+  ahead (NEW PERSONAL BEST), behind, an exact PB tie (RUN COMPLETE, since a PB
+  needs a strictly negative gap), and no ghost. The screen-lock, background,
+  and process-teardown transitions are each pinned in `test/lifecycle_test.dart`
+  as well.
+- **Wider Android matrix.** The CI emulator job runs the full journey on API 34
+  and, in parallel, a new `--smoke` subset (the record-and-save journey) on API
+  24, the oldest supported release; a new `nightly.yml` adds API 36 and a
+  repeated run to surface flakes. `tool/android_integration_test.sh --smoke`
+  backs the old-API job.
 - **Deterministic GPS edge-case suite.** `test/gps_fixtures.dart` gives the
   device-mode tests named receiver timelines with independently computed
   expectations, and `test/gps_edge_cases_test.dart` drives them through the

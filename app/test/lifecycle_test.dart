@@ -314,4 +314,96 @@ void main() {
     expect(snap.distanceMeters, greaterThan(0));
     expect(snap.routeId, FakeEngineService.riverLoopId);
   });
+
+  // ---------------------------------------------------------------------------
+  // Widget: each way a run leaves the foreground still snapshots it, and a
+  // screen-lock return keeps recording rather than resetting. Process
+  // recreation is the relaunch test (integration_test/app_test.dart) over a
+  // shared store.
+  // ---------------------------------------------------------------------------
+
+  /// Seeds a route, races it to the live screen, and returns the shared store.
+  Future<MemoryPersistenceStore> raceToLive(WidgetTester tester) async {
+    final store = seededStore(routes: [riverLoopRoute]);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [persistenceStoreProvider.overrideWithValue(store)],
+      child: const AgainstYesterdayApp(),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.text('START'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('PAUSE'), findsOneWidget);
+    return store;
+  }
+
+  testWidgets('screen lock snapshots, and the run survives the return',
+      (tester) async {
+    final store = await raceToLive(tester);
+    expect(store.read('run_snapshot'), isNull);
+
+    // inactive → paused is the lock-screen sequence.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    await tester.pump();
+    final raw = store.read('run_snapshot');
+    expect(raw, isNotNull);
+    expect(raw, isNot('null'));
+    final snap = parseRunSnapshot(raw!);
+    expect(snap.status, anyOf(RunStatus.running, RunStatus.paused));
+    expect(snap.distanceMeters, greaterThan(0));
+
+    // Unlocking resumes the same run, not a fresh session.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('PAUSE'), findsOneWidget);
+    expect(find.text('FINISH'), findsOneWidget);
+  });
+
+  testWidgets('backgrounding outside the lock also snapshots', (tester) async {
+    final store = await raceToLive(tester);
+    expect(store.read('run_snapshot'), isNull);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    await tester.pump();
+
+    final raw = store.read('run_snapshot');
+    expect(raw, isNotNull);
+    expect(raw, isNot('null'));
+    final snap = parseRunSnapshot(raw!);
+    expect(snap.distanceMeters, greaterThan(0));
+    expect(snap.routeId, FakeEngineService.riverLoopId);
+  });
+
+  testWidgets('process teardown keeps the snapshot it already wrote',
+      (tester) async {
+    // `detached` is a deliberate no-op: it is only reached after inactive /
+    // paused have already written the snapshot, so a killed run is restored
+    // by the relaunch test over the same store.
+    final store = await raceToLive(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    await tester.pump();
+    final before = store.read('run_snapshot');
+    expect(before, isNotNull);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
+    await tester.pump();
+    await tester.pump();
+    expect(store.read('run_snapshot'), before);
+  });
 }

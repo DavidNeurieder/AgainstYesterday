@@ -164,7 +164,7 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 299 tests (1 skipped: Rust FFI)
+cd app && flutter analyze && flutter test   # Flutter: 309 tests (1 skipped: Rust FFI)
 cargo test                                   # Rust: 204 tests + property cases
 
 # the same Flutter suite against the real Rust engine over FFI
@@ -187,9 +187,12 @@ snapshot.
 
 The on-device suites (`app/integration_test/`) run on an emulator through
 `app/tool/android_integration_test.sh` (`--device-gps` selects the
-real-receiver suite; see the script header for the environment knobs). On a
-red run the harness preserves the app log, a screenshot, and the
-location/permission dumps under `app/build/integration-artifacts/<suite>/`.
+real-receiver suite and `--smoke` narrows the demo suite to the record-and-save
+journey; see the script header for the environment knobs). CI runs the full
+journey on API 34 and the smoke on API 24 for every PR; the nightly workflow
+adds API 36 and a repeated run to catch flakes. On a red run the harness
+preserves the app log, a screenshot, and the location/permission dumps under
+`app/build/integration-artifacts/<suite>/`.
 
 ## Status
 
