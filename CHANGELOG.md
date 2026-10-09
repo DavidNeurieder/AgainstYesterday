@@ -241,6 +241,11 @@ documented here, grouped by the implementation milestones in
 
 ### Tooling
 
+- **Release checklist.** `docs/release_checklist.md` turns the plan's eight
+  release-acceptance gates into an actionable list, mapping each gate to the CI
+  job or test suite that covers it and marking the device-only items, plus the
+  manual device matrix and the endurance, battery, storage-full,
+  upgrade-over-existing-data, and release-APK smoke checks.
 - **Fixed-outcome race tests.** `test/race_fixtures.dart` adds a
   `LinearGhostEngine` whose reference time is exactly `distance / speed`, so a
   scripted fix timeline pins the ghost gap's sign and magnitude instead of

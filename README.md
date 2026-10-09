@@ -192,7 +192,8 @@ journey; see the script header for the environment knobs). CI runs the full
 journey on API 34 and the smoke on API 24 for every PR; the nightly workflow
 adds API 36 and a repeated run to catch flakes. On a red run the harness
 preserves the app log, a screenshot, and the location/permission dumps under
-`app/build/integration-artifacts/<suite>/`.
+`app/build/integration-artifacts/<suite>/`. Release sign-off uses the gates in
+[docs/release_checklist.md](docs/release_checklist.md).
 
 ## Status
 
