@@ -34,6 +34,11 @@ import 'support.dart';
 /// Mirrors the app's own define semantics (`dependencies.dart`).
 const String _useDeviceGps = String.fromEnvironment('USE_DEVICE_GPS');
 
+/// When `true`, this suite must actually run: a missing `USE_DEVICE_GPS` is a
+/// hard failure here rather than a silent skip, mirroring
+/// `REQUIRE_RUST_ENGINE` in the host CI job.
+const String _requireDeviceGps = String.fromEnvironment('REQUIRE_DEVICE_GPS');
+
 /// Why the acquisition gate never resolved: controller state plus everything
 /// onscreen (the gate screens replace their copy with the failure reason).
 String _gateDiagnostics(WidgetTester tester, ProviderContainer container) {
@@ -49,6 +54,17 @@ String _gateDiagnostics(WidgetTester tester, ProviderContainer container) {
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  // CI asks for this suite explicitly. If the define ever goes missing, fail
+  // loudly instead of letting the tests skip (and the job pass) while the app
+  // quietly falls back to the deterministic demo timeline.
+  if (_requireDeviceGps == 'true' && _useDeviceGps != 'true') {
+    throw StateError(
+      'REQUIRE_DEVICE_GPS=true but USE_DEVICE_GPS is not true; the device-GPS '
+      'suite would silently exercise the demo timeline. Pass '
+      '--dart-define=USE_DEVICE_GPS=true.',
+    );
+  }
 
   // Acquisition against the real receiver: service check + permission, both
   // prepared by the harness, so READY must arrive without an app fallback.

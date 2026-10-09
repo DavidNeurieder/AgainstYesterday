@@ -206,7 +206,7 @@ void main() {
       () => displayedMeters(tester) > 0,
       'the distance to start moving',
     );
-    final before = displayedMeters(tester);
+    final before = requireDisplayedMeters(tester);
 
     // Background: the app's lifecycle observer snapshots the interrupted run.
     // Post both transitions back-to-back: the live test binding stops
@@ -217,7 +217,7 @@ void main() {
     await tester.pumpAndSettle();
     await pumpFor(tester, const Duration(milliseconds: 300));
     expect(store.read('run_snapshot'), isNotNull);
-    expect(displayedMeters(tester), greaterThanOrEqualTo(before));
+    expect(requireDisplayedMeters(tester), greaterThanOrEqualTo(before));
 
     // "Process death": tear the tree down and relaunch over the same store.
     await tester.pumpWidget(const SizedBox());
@@ -233,7 +233,7 @@ void main() {
     await waitForText(tester, 'PACE');
     expect(find.text('TIME'), findsOneWidget);
     expect(find.text('FINISH'), findsOneWidget);
-    final restored = displayedMeters(tester);
+    final restored = requireDisplayedMeters(tester);
     // Deliberately not polled: the snapshot carries the distance itself, so
     // this must hold on the first render — a reset here is a real defect.
     expect(restored, greaterThanOrEqualTo(before));

@@ -164,7 +164,7 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 201 tests
+cd app && flutter analyze && flutter test   # Flutter: 284 tests (1 skipped: Rust FFI)
 cargo test                                   # Rust: 204 tests + property cases
 
 # the same Flutter suite against the real Rust engine over FFI
@@ -184,6 +184,12 @@ schema (`schema_version`, explicit `null` sensor fields, rejection of newer
 versions) against the exact document the Flutter exporter emits, and
 `tests/gps_pipeline.rs` drives a fixture end-to-end from raw fixes to a ghost
 snapshot.
+
+The on-device suites (`app/integration_test/`) run on an emulator through
+`app/tool/android_integration_test.sh` (`--device-gps` selects the
+real-receiver suite; see the script header for the environment knobs). On a
+red run the harness preserves the app log, a screenshot, and the
+location/permission dumps under `app/build/integration-artifacts/<suite>/`.
 
 ## Status
 

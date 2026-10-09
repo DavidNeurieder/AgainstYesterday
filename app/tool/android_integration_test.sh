@@ -19,6 +19,12 @@
 # Requires ANDROID_HOME (or a local Android SDK) and a created AVD:
 #   flutter emulators --launch <avd>
 #   avdmanager create avd -n test_phone -k "system-images;android-34;google_apis;x86_64"
+#
+# Environment:
+#   BOOT_TIMEOUT   seconds to wait for the device to boot (default 300)
+#   TEST_TIMEOUT   seconds to allow each `flutter test` run (default 900)
+#   ARTIFACTS_DIR  where failure artifacts land
+#                  (default build/integration-artifacts, relative to app/)
 set -euo pipefail
 
 PKG="dev.neurieder.against_yesterday"
@@ -49,6 +55,9 @@ fi
 FLUTTER_ARGS=("$@")
 SERIAL="${ANDROID_SERIAL:-emulator-5554}"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+BOOT_TIMEOUT="${BOOT_TIMEOUT:-300}"
+TEST_TIMEOUT="${TEST_TIMEOUT:-900}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-build/integration-artifacts}"
 
 EMULATOR="$SDK/emulator/emulator"
 ADB="$SDK/platform-tools/adb"
@@ -59,6 +68,15 @@ for bin in "$EMULATOR" "$ADB"; do
     exit 1
   fi
 done
+
+# GNU timeout ships on Linux and CI; fall back to no limit where it is absent
+# so a macOS dev machine can still run the harness.
+if command -v timeout >/dev/null 2>&1; then
+  TEST_TIMEOUT_CMD=(timeout "$TEST_TIMEOUT")
+else
+  echo ">> warning: 'timeout' not found; running without a test timeout" >&2
+  TEST_TIMEOUT_CMD=()
+fi
 
 BOOTS_EMULATOR=0
 FEEDER_PID=""
@@ -87,10 +105,38 @@ fi
 
 echo ">> Waiting for device $SERIAL to boot..."
 "$ADB" wait-for-device
+boot_deadline=$(( $(date +%s) + BOOT_TIMEOUT ))
 until [ "$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+  if [ "$(date +%s)" -ge "$boot_deadline" ]; then
+    echo "error: device $SERIAL did not finish booting within ${BOOT_TIMEOUT}s" >&2
+    exit 1
+  fi
   sleep 2
 done
 echo ">> Device booted."
+
+# --- Shared helpers ---------------------------------------------------------
+
+# A fresh install is the only reliable isolation between suites: it clears the
+# route catalog, activity history and the interrupted-run snapshot, so a run
+# cannot inherit the previous suite's saved state. Nothing to uninstall (no
+# package yet) is fine.
+reset_app_state() {
+  "$ADB" -s "$SERIAL" uninstall "$PKG" >/dev/null 2>&1 || true
+}
+
+# Preserves the evidence a red run needs: the app log, a screenshot, and the
+# location/permission state. Best-effort — it must never mask the test failure.
+collect_artifacts() {
+  local name="$1"
+  local dir="$ARTIFACTS_DIR/$name"
+  mkdir -p "$dir"
+  "$ADB" -s "$SERIAL" logcat -d > "$dir/logcat.txt" 2>/dev/null || true
+  "$ADB" -s "$SERIAL" exec-out screencap -p > "$dir/screenshot.png" 2>/dev/null || true
+  "$ADB" -s "$SERIAL" shell dumpsys location > "$dir/dumpsys-location.txt" 2>/dev/null || true
+  "$ADB" -s "$SERIAL" shell dumpsys package "$PKG" > "$dir/dumpsys-package.txt" 2>/dev/null || true
+  echo ">> Failure artifacts in $dir" >&2
+}
 
 # --- Device-GPS mode: simulated fixes over the emulator geo console ---------
 #
@@ -169,7 +215,7 @@ run_device_gps_suite() {
   sleep 1
   "$ADB" -s "$SERIAL" shell cmd location set-location-enabled true >/dev/null 2>&1 || true
   "$ADB" -s "$SERIAL" shell settings put secure location_mode 3 >/dev/null 2>&1 || true
-  "$ADB" -s "$SERIAL" shell dumpsys location 2>/dev/null | sed -n '1,6p' || true
+  "$ADB" -s "$SERIAL" dumpsys location 2>/dev/null | sed -n '1,6p' || true
 
   # Console probe: a plain `geo fix` must answer OK (KO = bad auth/args).
   local probe
@@ -182,18 +228,38 @@ run_device_gps_suite() {
       ;;
   esac
 
+  # Fresh install so this suite starts from an empty catalog/snapshot.
+  reset_app_state
+
   grant_location_loop &
   GRANT_PID=$!
   start_feeder &
   FEEDER_PID=$!
 
   echo ">> Running the device-GPS integration test on $SERIAL..."
-  if ! flutter test integration_test/device_gps_test.dart -d "$SERIAL" \
-    --dart-define=USE_DEVICE_GPS=true ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
-    echo ">> Device-GPS test failed — dumping location and permission state:" >&2
+  # REQUIRE_DEVICE_GPS turns a missing/tripped define into a hard failure
+  # instead of a silent skip, mirroring REQUIRE_RUST_ENGINE in the host job.
+  if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test integration_test/device_gps_test.dart -d "$SERIAL" \
+    --dart-define=USE_DEVICE_GPS=true \
+    --dart-define=REQUIRE_DEVICE_GPS=true \
+    ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
+    echo ">> Device-GPS test failed — dumping state:" >&2
     "$ADB" -s "$SERIAL" shell dumpsys location 2>/dev/null | tail -25 || true
     "$ADB" -s "$SERIAL" shell dumpsys package "$PKG" 2>/dev/null \
       | sed -n '/runtime permissions/,/^$/p' || true
+    collect_artifacts device-gps
+    exit 1
+  fi
+}
+
+run_demo_suite() {
+  # Fresh install so the demo suite records against an empty catalog/history
+  # and cannot inherit a previous run's saved route or activity.
+  reset_app_state
+  echo ">> Running integration tests on $SERIAL..."
+  if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test integration_test -d "$SERIAL" \
+    ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
+    collect_artifacts demo
     exit 1
   fi
 }
@@ -202,6 +268,5 @@ cd "$(dirname "$0")/.."
 if [ "$DEVICE_GPS" = "1" ]; then
   run_device_gps_suite
 else
-  echo ">> Running integration tests on $SERIAL..."
-  flutter test integration_test -d "$SERIAL" ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}
+  run_demo_suite
 fi

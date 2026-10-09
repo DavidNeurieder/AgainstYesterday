@@ -241,6 +241,18 @@ documented here, grouped by the implementation milestones in
 
 ### Tooling
 
+- **The on-device harness fails loudly instead of quietly.** A missing
+  `USE_DEVICE_GPS` now trips `REQUIRE_DEVICE_GPS` (set by the device-GPS
+  suite) rather than skipping every test green; the integration suite's
+  distance labels fail on an unreadable value instead of parsing to a silent
+  `0`; each suite uninstalls the app first so a run cannot inherit the
+  previous one's saved routes, history or snapshot; and the emulator boot and
+  `flutter test` runs carry explicit timeouts. On failure the harness keeps
+  the app log, a screenshot and the location/permission dumps under
+  `app/build/integration-artifacts/<suite>/`, which CI uploads with
+  `if: always()`. The `android-integration-test` job also gets a
+  `timeout-minutes` and a pinned `google_apis` emulator image. The staged
+  plan behind this lives in `specification/android_test_plan_adoption.txt`.
 - **Deterministic Android NDK.** `build_rust_engine_android.sh` no longer
   picks "the newest installed NDK" (which depended on directory order and moved
   with the runner image). It now resolves, in order: `ANDROID_NDK_HOME`,
