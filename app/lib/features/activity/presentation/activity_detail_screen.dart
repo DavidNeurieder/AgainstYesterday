@@ -15,6 +15,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/split_row.dart';
 import '../../../persistence/persistence.dart';
+import '../../map/map_surface.dart';
 import '../../result/application/splits.dart';
 import '../../settings/application/settings_controller.dart';
 
@@ -34,6 +35,7 @@ class ActivityDetailScreen extends ConsumerWidget {
 
     final textTheme = Theme.of(context).textTheme;
     final units = ref.watch(displayUnitProvider);
+    final mapSurface = ref.watch(mapSurfaceProvider);
     final routeId = activity.routeId;
     final routes = ref.watch(routeRepositoryProvider);
     final route = routeId != null
@@ -102,6 +104,27 @@ class ActivityDetailScreen extends ConsumerWidget {
                 color: AppColors.textSecondary,
               ),
             ),
+          // The recorded track on the map: the whole run shown static, fitted
+          // to the viewport, through whichever renderer the build selected
+          // (painter fallback on host/tests, MapLibre on device).
+          if (activity.track case final track? when track.length >= 2) ...[
+            const SizedBox(height: AppSpacing.xl),
+            SizedBox(
+              height: 240,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: mapSurface.build(
+                  context,
+                  MapScene(
+                    geometry: [for (final p in track) p.position],
+                    you: track.first.position,
+                    youProgress: 1,
+                    staticView: true,
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (splits.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xl),
             Text(

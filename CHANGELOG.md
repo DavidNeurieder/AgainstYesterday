@@ -20,10 +20,15 @@ documented here, grouped by the implementation milestones in
   through the seam: MapLibre draws the route and travelled portion as GeoJSON
   line layers plus YOU and PB-ghost markers, follows YOU until the runner pans,
   and offers a recenter button; the painter path is byte-for-byte the old
-  behaviour. The activity track map and per-route offline downloads follow
+  behaviour. Per-route offline downloads follow
   (`ideas/offline_map_plan.txt`). Android builds now require JDK 21 (MapLibre
   compiles with Java 21); CI pins Temurin 21 and the Makefile exports a
   detected JDK 21 as `JAVA_HOME`.
+- Activity detail now puts the recorded run on the map: the persisted
+  `Activity.track` is drawn fitted to the viewport through the same `MapSurface`
+  seam (static view, no follow, no markers), so every run — including a free
+  "New route" run — shows its trace, and runs recorded before the map kept no
+  track fall back to the previous layout.
 - Export every route and recorded run to the Android Downloads folder as a
   single timestamped GPX file: Settings → Export GPX now writes
   `against-yesterday-YYYY-MM-DD-HHMMSS.gpx` through a `MediaStore` platform

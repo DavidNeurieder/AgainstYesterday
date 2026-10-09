@@ -137,6 +137,9 @@ void main() {
     await tester.tap(find.byIcon(Icons.directions_run).first);
     await tester.pumpAndSettle();
     expect(find.text('River Loop'), findsWidgets);
+    // The recorded-track map (M-offline Phase 2) pushes the footer below the
+    // first screen, so bring it into view like the splits above.
+    await tester.scrollUntilVisible(find.textContaining('Run on'), 200);
     expect(find.textContaining('Run on'), findsOneWidget);
   });
 }
