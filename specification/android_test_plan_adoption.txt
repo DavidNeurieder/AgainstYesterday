@@ -1,0 +1,170 @@
+# Adopting the Android testing plan — AgainstYesterday
+
+Source: `ideas/android_test_plan.txt` (2026-10; local planning notes, gitignored).
+
+This turns that plan into a staged adoption for *this* repo: what already
+exists, the gaps, the exact changes per phase, the CI target, and the
+decisions (§6). It deliberately maps the plan's
+illustrative commands onto the real paths here (the plan's
+`./scripts/test_android_gps.sh` does not exist; the harness is
+`app/tool/android_integration_test.sh`).
+
+## The principle we're adopting
+
+A green suite must prove three *separate* things: the Android location
+pipeline works, the app computes correct results, and the UX stays safe when
+GPS fails. Screens rendering and a distance number going up is not enough.
+Two corollaries drive the first changes:
+
+- **No silent zeros.** A missing/unparsable value must fail the test, not
+  become `0`.
+- **No silent skips.** A required GPS test that is skipped is a failure, not
+  a pass.
+
+## 1. Where the repo stands today
+
+| Level | Status | Where |
+| --- | --- | --- |
+| L1 Rust | Strong | `cargo test --all-features`: unit, property, fixture/schema/pipeline (README lists 204+ incl. property cases) |
+| L1 Flutter unit | Strong | `app/test/` (39 files): state machine, motion, geometry, persistence, splits, units, models |
+| L2 Widget | Strong | `app/test/`: error screens, accessibility, responsive, record/race flows, settings, onboarding |
+| L3 Android integration | Thin but real | `app/integration_test/app_test.dart` (3 E2E) + `device_gps_test.dart` (2, real receiver path) |
+| Harness | Good start | `app/tool/android_integration_test.sh`: fails fast on missing SDK binaries and a dead geo console, cleanup trap, permission-grant loop, 1 Hz feeder on `riverLoop`'s first segment |
+| CI | Partly there | `test`, `flutter` (analyze + test + DST TZ), `android-engine-lib` (NDK-pinned per-ABI cdylib + FFI symbol check), `android-integration-test` (API 34: demo suite then device-GPS suite) |
+| SDKs | From Flutter | min **24**, target/compile **36** (`flutter.minSdkVersion` etc.) — CI only exercises API **34** |
+
+## 2. Gap analysis
+
+| Plan theme | Current | Gap | Phase |
+| --- | --- | --- | --- |
+| Deterministic fixtures | `riverLoop` start segment hardcoded in the shell; per-file `_FakeGpsSource` in Dart | No shared named fixture library (`stationary`, `straight_walk`, `gps_outage`, `stale_initial_fix`, …) with expected accepted/rejected fixes and distance ranges | 1 |
+| No silent zeros | `support.dart` `_parseMeters` returns `0` when the label doesn't parse | Violates the core rule; a broken label becomes a 31 s timeout, or a vacuous `expect` | **0** |
+| Diagnosable failures | `waitForCondition` diagnostics; shell dumps `dumpsys` on failure | No screenshot, no `logcat`, no JSON report, no test ID/timing/API level captured as artifacts | **0** |
+| Permissions / services | Unit: `device_gps_test.dart` fake platform (denied, deniedForever, off). Integration: happy path only | No integration test for first-grant, denial→retry, permanent denial→settings, disabled-services recovery, revocation | 2 |
+| Recording edge cases | Start/pause/resume/finish/relaunch covered | Start-without-GPS block (REC-02), rapid start/pause/stop (REC-03/14), save-failure (REC-13), stream outage/recovery (GPS-11/12) | 1 |
+| Distance edges | `motion_test`, `geometry_invariants_test`, controller device tests | Jitter, single outlier, duplicate coords/timestamps, date line, high latitude, missing fields — as named deterministic cases | 1 |
+| Races | `race_flow`, `splits`, `performance_gap`, `gap_curve` | Fixed fixtures that make exactly one outcome correct (ahead/behind/PB-boundary); today some tests accept either header | 2 |
+| Lifecycle | `lifecycle_test.dart`, `persistence_recovery_test.dart`, relaunch E2E | Background vs. screen-lock vs. process death treated distinctly (REC-09/10/11) | 2 |
+| Isolation | Each `flutter test` is a process; in-file tests use fresh `ProviderScope` | The harness never clears app data between suites, so a saved route/activity can leak into the next run | **0** |
+| Android matrix | API 34 only | Min (24) and target (36) never exercised; no repeated-run flake check | 2 |
+| CI reliability | Has the harness | No `timeout`, no artifact upload on failure, no "required tests ran" guard, no pinned AVD/image, no retry policy | **0** |
+| Physical / release | None | Device matrix, endurance/battery, upgrade, release-APK smoke, 8-gate checklist | 3 |
+| `dart format` gate | Not used (repo convention) | Plan suggests `dart format --set-exit-if-changed` | decided: not adopted |
+
+## 3. Mapping the plan's commands to this repo
+
+| Plan (illustrative) | This repo |
+| --- | --- |
+| `flutter pub get` / `flutter analyze` / `flutter test` | already in the `flutter` CI job |
+| `dart format --output=none --set-exit-if-changed .` | **not adopted** (decided) — the project does not run `dart format` (see §6) |
+| `flutter build apk --debug` | `make build` (`--dart-define=USE_DEVICE_GPS=true`) |
+| `USE_DEVICE_GPS=true ./scripts/test_android_gps.sh` | `./tool/android_integration_test.sh --device-gps --dart-define=USE_DEVICE_GPS=true` (from `app/`) |
+| "run the suite twice" | second invocation of the harness, with data cleared in between |
+
+## 4. Roadmap
+
+### Phase 0 — Trust the suite (small, high value)
+
+Goal: the existing suite fails *loudly* and preserves evidence; no silent
+zeros or skips.
+
+1. `app/integration_test/support.dart`
+   - Make the distance parsers fail on an unparsable label (`fail('…raw
+     text…')` or a nullable + explicit assert) instead of returning `0`.
+   - Add a `requireMeters(...)`-style helper for assertions that must not read
+     a zero from a missing widget.
+2. `app/tool/android_integration_test.sh`
+   - Wrap the boot wait and `flutter test` in a `timeout`; keep the cleanup
+     trap.
+   - Before each suite, `adb shell pm clear dev.neurieder.against_yesterday`
+     so persisted state can't leak between runs (isolation).
+   - On failure, collect `logcat`, a screenshot (`adb exec-out screencap -p`),
+     and the existing `dumpsys` dumps into
+     `app/build/integration-artifacts/<suite>/`.
+3. `.github/workflows/ci.yml` (`android-integration-test`)
+   - Add `timeout-minutes`; upload `integration-artifacts/` with
+     `if: always()`.
+   - Add a "required tests ran" guard: run `flutter test --reporter json` (or
+     parse the expanded output) and fail if the device-GPS tests are reported
+     as skipped rather than executed.
+   - Pin the emulator `api-level`/`arch`/image in one place.
+4. Re-baseline `README.md` test counts and add the harness artifact path.
+
+### Phase 1 — Deterministic GPS/recording coverage (unit + widget)
+
+1. New `app/test/gps_fixtures.dart` (sibling to `test_catalog.dart`), a
+   library of named fixtures — each with coords, timestamps, accuracy,
+   optional speed, expected accepted/rejected fixes, expected distance range,
+   and expected state transitions:
+   `stationary`, `straight_walk`, `multi_segment_route`, `noisy_stationary`,
+   `poor_accuracy`, `gps_outage`, `stale_initial_fix`, `route_deviation`,
+   `long_session`.
+2. `app/test/device_gps_test.dart` / a new `gps_edge_cases_test.dart`:
+   jitter, single outlier, duplicate coords/timestamps, date line, high
+   latitude, missing accuracy/altitude/speed.
+3. Controller: start-without-GPS block (REC-02), rapid start/pause/stop
+   (REC-03/14), stream outage→recovery (GPS-11/12), stale first fix
+   (GPS-09).
+4. Permission/service widget coverage (first grant, denial→retry,
+   permanent denial→settings, services off→recover) building on the existing
+   fake platform in `app/test/device_gps_test.dart`.
+
+### Phase 2 — Races and Android lifecycle
+
+1. Fixed-outcome race fixtures: runner ahead, behind, and exactly at the PB
+   boundary — assert sign, magnitude, and exactly one completion header
+   (today `app_test.dart` / `device_gps_test.dart` accept either).
+2. Lifecycle: distinguish ordinary backgrounding, screen lock, and process
+   recreation (extend `app_test.dart`'s relaunch test; `lifecycle_test.dart`,
+   `persistence_recovery_test.dart`).
+3. CI: add a second emulator API level (min 24) running a smoke subset, and a
+   repeated core run to expose flakiness (report both, don't mask).
+
+### Phase 3 — Release confidence
+
+1. `docs/release_checklist.md` with the plan's 8 gates, wired to CI where
+   possible.
+2. Manual device matrix (reference Pixel, one other manufacturer), 30-min and
+   2-hour endurance, battery, storage-full, upgrade-over-existing-data, and a
+   release-APK smoke (minified artifact, separate from debug).
+
+## 5. CI target
+
+```
+PR / push
+  test            cargo fmt + clippy + test + doc
+  flutter         analyze + test (Rust), DST-TZ pass
+  android-engine-lib   per-ABI cdylib + FFI symbol check   (unchanged)
+  android-integration-test
+      API 34   full demo suite + device-GPS suite
+      API 24   smoke subset (permission + record)
+      artifacts on failure; required-tests guard; timeouts
+nightly (scheduled)
+  API 36 smoke
+  repeat core suite x2 (flake report)
+  physical-device run (manual for now)
+```
+
+## 6. Decisions
+
+1. **`dart format` gate** — *decided: keep analyze-only.* The plan suggests a
+   `dart format --set-exit-if-changed` gate; the repo deliberately doesn't run
+   `dart format`, so CI stays `flutter analyze` + `flutter test`.
+2. **Emulator cost** — *decided: API 34 full + API 24 smoke on PRs; API 36 and
+   repeated runs nightly.* The full suite runs on 34, a permission/record smoke
+   subset on the minimum supported API, and the wider matrix stays off the PR
+   path.
+3. **Plan doc home** — *decided: `specification/`* (this file).
+4. **Physical devices** — open. Manual `docs/release_checklist.md` now, or a
+   hosted device farm later? Recommend the manual checklist for now.
+5. **Case IDs** — open. Adopt `GPS-01`/`DIST-01`/… as test names or tags for
+   traceability, or keep descriptive names? Recommend embedding the ID in the
+   test description.
+
+## 7. Recommended first PR
+
+Phase 0 only: fail-loud parsers in `app/integration_test/support.dart`,
+`pm clear` + artifact capture + `timeout` in
+`app/tool/android_integration_test.sh`, and the CI `timeout-minutes`,
+artifact upload, and required-tests guard. It is small, it fixes the exact
+anti-patterns the plan calls out, and it makes every later phase trustworthy.
