@@ -12,6 +12,17 @@
 # (USE_DEVICE_GPS=true); a plain `flutter build` keeps the deterministic demo
 # timeline for hosts and the E2E.
 
+# MapLibre (via maplibre_gl) compiles with Java 21, so the Android Gradle build
+# must run on JDK 21 even though the app itself targets Java 17. Prefer an
+# explicit JAVA_HOME; otherwise use the first JDK 21 on the machine.
+JAVA21 ?= $(shell for d in /usr/lib/jvm/*21* /opt/java/*21*; do \
+	if [ -x "$$d/bin/javac" ]; then echo "$$d"; break; fi; done)
+ifndef JAVA_HOME
+ifneq ($(JAVA21),)
+export JAVA_HOME := $(JAVA21)
+endif
+endif
+
 .PHONY: build build-release install run test test-rust-engine lint tz-test \
         connected-test connected-test-engine connected-test-gps \
         engine-build engine-test engine-lint engine-fmt engine-doc \

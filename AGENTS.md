@@ -23,6 +23,9 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   `cargo clippy --all-targets --all-features -- -D warnings`,
   `cargo fmt --all --check`, `cargo build --release -p gps-engine`.
 - CI (`.github/workflows/ci.yml`) mirrors these plus an on-device E2E suite.
+- Android builds need **JDK 21** (MapLibre compiles with Java 21) even though
+  the app targets Java 17. CI's Android job pins Temurin 21; the Makefile exports
+  a detected JDK 21 as `JAVA_HOME` when one is not already set.
 
 ## Engine notes
 
@@ -42,6 +45,18 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   `app/tool/build_rust_engine_android.sh`; they are gitignored, so rerun the
   script after a clean checkout. `make install` and `make build-release` run
   it for you so the device artifact carries the real engine.
+
+## Map notes
+
+- Screens draw route/track geometry through the `MapSurface` abstraction
+  (`lib/features/map/`), never a concrete map widget. `MAP_VIEW` selects the
+  renderer at build time: unset/`false` = the self-contained painter
+  (`RouteMap`), `true` = the MapLibre renderer (`maplibre_gl`). The painter is
+  the default, so host tests and desktop stay hermetic; device builds opt in.
+- `MAP_STYLE_URL` overrides the MapLibre style document (default OpenFreeMap
+  Liberty). Map data is OpenStreetMap (ODbL) and must be attributed; offline
+  regions are per-route downloads, not bundled (see
+  `ideas/offline_map_plan.txt`).
 
 ## Licensing
 

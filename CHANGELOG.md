@@ -11,6 +11,17 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Map renderer groundwork for the offline map: screens draw route and track
+  geometry through a `MapSurface` seam (`lib/features/map/`) whose concrete
+  renderer is picked at build time by `MAP_VIEW` — unset/`false` keeps the
+  self-contained `RouteMap` painter (host, tests, desktop), `true` selects the
+  new MapLibre renderer (`maplibre_gl`, the engine behind Organic Maps) with an
+  OpenFreeMap style overridable via `MAP_STYLE_URL`. The painter stays the
+  default and no screen is wired to the seam yet, so this is dependency and
+  architecture only; the on-device map, activity track view and per-route
+  offline downloads follow (`ideas/offline_map_plan.txt`). Android builds now
+  require JDK 21 (MapLibre compiles with Java 21); CI pins Temurin 21 and the
+  Makefile exports a detected JDK 21 as `JAVA_HOME`.
 - Export every route and recorded run to the Android Downloads folder as a
   single timestamped GPX file: Settings → Export GPX now writes
   `against-yesterday-YYYY-MM-DD-HHMMSS.gpx` through a `MediaStore` platform
