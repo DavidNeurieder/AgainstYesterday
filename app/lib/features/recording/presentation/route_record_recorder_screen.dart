@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /// Recording phase (§8 Step 2) — deliberately simpler than the race screen:
-/// there is no ghost yet, so the loop is just distance + moving time and the
-/// pause/finish controls. No gap, no map, no split stats.
+/// there is no ghost yet, so the loop is just distance + a wall-clock
+/// stopwatch and the pause/finish controls. No gap, no map, no split stats.
 library;
 
 import 'package:flutter/material.dart';
@@ -82,8 +82,9 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
                   const SizedBox(width: AppSpacing.xl),
                   _Metric(
                     label: 'TIME',
-                    value: state.elapsed.format(),
+                    value: state.clockElapsed.format(),
                     prominent: true,
+                    valueKey: const ValueKey('record-time'),
                   ),
                 ],
               ),
@@ -159,11 +160,13 @@ class _Metric extends StatelessWidget {
     required this.label,
     required this.value,
     this.prominent = false,
+    this.valueKey,
   });
 
   final String label;
   final String value;
   final bool prominent;
+  final Key? valueKey;
 
   @override
   Widget build(BuildContext context) {
@@ -174,6 +177,7 @@ class _Metric extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           value,
+          key: valueKey,
           style: (prominent ? textTheme.titleLarge : textTheme.titleMedium)
               ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
         ),

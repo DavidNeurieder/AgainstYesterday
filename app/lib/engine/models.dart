@@ -247,6 +247,7 @@ class RunSnapshot {
     required this.status,
     required this.startedAt,
     required this.movingSeconds,
+    this.clockSeconds = 0,
     required this.distanceMeters,
     required this.loopMeters,
     this.routeId,
@@ -256,6 +257,11 @@ class RunSnapshot {
   final RunStatus status;
   final DateTime startedAt;
   final double movingSeconds;
+
+  /// Wall-clock stopwatch at the snapshot (the recorder's live TIME), so a
+  /// recovered run resumes the visible clock where it left off.
+  final double clockSeconds;
+
   final double distanceMeters;
   final double loopMeters;
   final String? routeId;
@@ -282,6 +288,7 @@ class LiveRunState {
   const LiveRunState({
     required this.status,
     required this.elapsed,
+    this.clockElapsed = const Elapsed.zero(),
     required this.distance,
     this.currentPosition,
     required this.pace,
@@ -298,6 +305,13 @@ class LiveRunState {
 
   final RunStatus status;
   final Elapsed elapsed;
+
+  /// Wall-clock stopwatch since START, excluding paused stretches. The
+  /// recorder's live TIME reads this so the timer runs from the first second;
+  /// [elapsed] stays the motion-gated moving time a PB or ghost gap is
+  /// measured on, so a parked phone can still not manufacture one.
+  final Elapsed clockElapsed;
+
   final Distance distance;
   final GeoPoint? currentPosition;
   final Speed pace;

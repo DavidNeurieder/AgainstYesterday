@@ -91,6 +91,13 @@ class RecordingController extends Notifier<LiveRunState?> {
   /// so throttled/suspended background timers never corrupt the pace.
   DateTime _lastTick = clock.now();
 
+  /// When the current running stretch began (wall clock), or `null` while
+  /// paused/before START. The recorder's stopwatch is the session's
+  /// `clockSeconds` plus this live stretch; it keeps counting across a
+  /// backgrounding because the recorder is still running, while
+  /// `session.moving` stays fix-gated.
+  DateTime? _runningSince;
+
   /// Throttles background snapshot writes (at most every 5 seconds).
   static const Duration _snapshotEvery = Duration(seconds: 5);
   DateTime _throttleAnchor = clock.now();
@@ -137,6 +144,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     }
     _lastTick = clock.now();
     _throttleAnchor = clock.now();
+    _runningSince = clock.now();
     _emit(status: RunStatus.running);
     _startDeviceStream();
   }
@@ -145,6 +153,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     if (state?.status != RunStatus.running) {
       return;
     }
+    _flushClock();
     _stopDeviceStream();
     _emit(status: RunStatus.paused);
   }
@@ -155,6 +164,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     }
     _lastTick = clock.now();
     _throttleAnchor = clock.now();
+    _runningSince = clock.now();
     _emit(status: RunStatus.running);
     _startDeviceStream();
   }
@@ -188,6 +198,8 @@ class RecordingController extends Notifier<LiveRunState?> {
         state?.status != RunStatus.paused) {
       return;
     }
+    // Freeze the stopwatch at the finish line before sealing the run.
+    _flushClock();
     _emit(status: RunStatus.finishing);
     // Seal the run now, not on the next 500 ms tick: pressing FINISH is a
     // commitment, and a dismissal in the finishing→complete gap used to cancel
@@ -200,6 +212,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     _timer?.cancel();
     _timer = null;
     _stopDeviceStream();
+    _runningSince = null;
     _session = null;
     state = null;
     _lastFinishedActivity = null;
@@ -252,6 +265,13 @@ class RecordingController extends Notifier<LiveRunState?> {
         if (_gpsSource == null) {
           // Scenario timeline: the world advances on the clock.
           _advance();
+        } else {
+          // Device mode: fixes drive moving time/distance, but the wall-clock
+          // stopwatch must still tick between them — otherwise a standing
+          // runner watches TIME sit at 0:00. The last pace/position is kept so
+          // this refresh never invents a phantom pace.
+          _emit(status: RunStatus.running, pace: state?.pace);
+          _snapshotThrottled();
         }
       case RunStatus.finishing:
         _complete();
@@ -533,6 +553,29 @@ class RecordingController extends Notifier<LiveRunState?> {
 
   double _radians(double degrees) => degrees * (math.pi / 180.0);
 
+  /// Seconds the wall-clock stopwatch reads right now: everything flushed so
+  /// far plus the current running stretch. Derived from the real clock, so a
+  /// throttled background timer never freezes or inflates it.
+  double _clockSeconds(_RecSession session) {
+    final since = _runningSince;
+    if (since == null) {
+      return session.clockSeconds;
+    }
+    final delta = clock.now().difference(since).inMilliseconds / 1000.0;
+    return session.clockSeconds + (delta > 0 ? delta : 0);
+  }
+
+  /// Banks the current running stretch into the session and stops the
+  /// stopwatch — on pause, finish or teardown.
+  void _flushClock() {
+    final session = _session;
+    if (session == null || _runningSince == null) {
+      return;
+    }
+    session.clockSeconds = _clockSeconds(session);
+    _runningSince = null;
+  }
+
   /// Persists a snapshot at most every ~5 s of wall time so a backgrounded or
   /// killed process can resume close to where it left off (§28).
   void _snapshotThrottled() {
@@ -553,6 +596,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       status: live.status,
       startedAt: session.startedAt,
       movingSeconds: session.moving.seconds,
+      clockSeconds: _clockSeconds(session),
       distanceMeters: session.distanceM,
       loopMeters: session.loopLength,
       routeId: session.route?.id,
@@ -577,6 +621,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       snapshot.distanceMeters,
       startedAt: snapshot.startedAt,
       movingSeconds: snapshot.movingSeconds,
+      clockSeconds: snapshot.clockSeconds,
       loopLength: snapshot.loopMeters,
     );
     _gpsSource = ref.read(deviceGpsProvider);
@@ -597,6 +642,9 @@ class RecordingController extends Notifier<LiveRunState?> {
     }
     _lastTick = clock.now();
     _throttleAnchor = clock.now();
+    if (snapshot.status == RunStatus.running) {
+      _runningSince = clock.now();
+    }
     _emit(status: snapshot.status);
     _timer?.cancel();
     _timer = Timer.periodic(_tick, (_) => _onTick());
@@ -920,6 +968,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     state = LiveRunState(
       status: status,
       elapsed: session.moving,
+      clockElapsed: Elapsed.seconds(_clockSeconds(session)),
       distance: Distance.meters(session.distanceM),
       currentPosition: position ?? state?.currentPosition,
       pace: pace ?? Speed.metersPerSecond(_baseSpeedMps),
@@ -978,6 +1027,7 @@ class _RecSession {
     this.distanceM, {
     DateTime? startedAt,
     double movingSeconds = 0,
+    this.clockSeconds = 0,
     this.loopLength = 0,
   }) : startedAt = startedAt ?? DateTime.now().toUtc(),
        moving = Elapsed.seconds(movingSeconds);
@@ -988,6 +1038,11 @@ class _RecSession {
   double loopLength = 0;
   Ghost? ghost;
   Elapsed moving = Elapsed.zero();
+
+  /// Wall-clock seconds run so far, excluding paused stretches (the recorder's
+  /// stopwatch). Separate from [moving]: a parked phone still sees the clock
+  /// tick while its motion-gated distance and PB stay at zero.
+  double clockSeconds = 0;
   double distanceM;
 
   /// Every raw GPS observation received this session (M15 Phase 12), in

@@ -88,6 +88,13 @@ class _RouteRecordSaveScreenState extends ConsumerState<RouteRecordSaveScreen> {
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
+              Text(
+                'MOVING TIME',
+                textAlign: TextAlign.center,
+                style: textTheme.labelSmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
               const SizedBox(height: AppSpacing.xl),
               TextField(
                 controller: _name,

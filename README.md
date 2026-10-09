@@ -120,9 +120,12 @@ line accumulates ground distance as a new route. Movement is gated on the
 ground actually covered — a running fix must clear a 0.5 m/s floor (measured
 between fixes, or a receiver speed backed by matching displacement), so a
 parked phone doesn't count moving time, drift distance, or show a phantom
-cruise pace ("— /km") from a stale cached speed. Refusals (services off or
-permission denied) surface as the recoverable recording ERROR state. The
-diagnostics screen's GPS section prints which source is live.
+cruise pace ("— /km") from a stale cached speed. The recorder's TIME is a
+separate wall-clock stopwatch — it runs from START and pauses with PAUSE, so
+it stays alive while you stand still even though distance, pace and the saved
+PB wait for real movement. Refusals (services off or permission denied)
+surface as the recoverable recording ERROR state. The diagnostics screen's GPS
+section prints which source is live.
 
 ## Developer diagnostics
 

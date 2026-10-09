@@ -150,6 +150,13 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- The record-a-route screen's TIME is now a wall-clock stopwatch: it starts on
+  START RECORDING, pauses with PAUSE and resumes with RESUME, so the timer
+  reads a live value even while the runner stands still — no more watching
+  `0:00` on a parked phone and thinking the recording is broken. Distance and
+  pace stay motion-gated, and the saved baseline PB is still the moving time,
+  now labelled MOVING TIME on the name-and-save screen so the two figures are
+  not confused.
 - Real-GPS recordings now gate movement on the ground the receiver actually
   covered. A fix must clear a 0.5 m/s motion floor (measured between fixes, or
   a receiver-reported speed corroborated by matching displacement) before it

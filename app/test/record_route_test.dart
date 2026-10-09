@@ -5,7 +5,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/app/dependencies.dart';
+import 'package:against_yesterday/engine/device_gps_source.dart';
+import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
+
+/// A receiver that is usable but never reports a fix — the parked phone.
+class _ParkedGpsSource implements GpsSource {
+  @override
+  String get description => 'parked test GPS';
+
+  @override
+  Future<String?> ensureAvailable() async => null;
+
+  @override
+  Stream<GpsFix> fixes() => const Stream<GpsFix>.empty();
+
+  @override
+  Future<void> openSettings() async {}
+}
 
 /// M18: the record-a-route flow (§8) — prep → recording → name-and-save →
 /// saved. Runs against the deterministic demo timeline: a fresh install walks
@@ -35,6 +53,9 @@ void main() {
   String distance(WidgetTester tester) => tester
       .widget<Text>(find.byKey(const ValueKey('record-distance')))
       .data!;
+
+  String time(WidgetTester tester) =>
+      tester.widget<Text>(find.byKey(const ValueKey('record-time'))).data!;
 
   testWidgets('records, names and saves a new route with a first PB',
       (tester) async {
@@ -135,6 +156,40 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
     expect(find.text('PAUSED'), findsNothing);
     expect(distance(tester), isNot(frozen));
+  });
+
+  testWidgets('a parked phone still runs the recorder stopwatch',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
+          deviceGpsProvider.overrideWithValue(_ParkedGpsSource()),
+        ],
+        child: const AgainstYesterdayApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'RECORD ROUTE'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.text('GPS READY'), findsOneWidget);
+
+    await tester.tap(find.text('START RECORDING'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // The receiver never reports a fix: distance (and the saved PB) stay at
+    // zero, but TIME is a wall-clock stopwatch, so it must be ticking instead
+    // of sitting at 0:00 while the runner stands still.
+    expect(distance(tester), '0 m');
+    expect(time(tester), '0:00');
+    await tester.pump(const Duration(seconds: 10));
+    expect(distance(tester), '0 m');
+    expect(time(tester), isNot('0:00'));
   });
 
   testWidgets('routes tab offers record-route as its primary action',

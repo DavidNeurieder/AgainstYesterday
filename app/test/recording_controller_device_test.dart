@@ -198,6 +198,9 @@ void main() {
         expect(live.distance.meters, 0);
         // Moving time never starts on a still phone.
         expect(live.elapsed.seconds, 0);
+        // ...but the wall-clock stopwatch runs from START regardless, so the
+        // recorder's TIME is alive while the runner stands still.
+        expect(live.clockElapsed.seconds, closeTo(3.6, 0.05));
         // The cached speed must not surface as a cruise pace.
         expect(live.pace.metersPerSecond, 0);
         expect(live.pace.formatPace(), '— /km');
@@ -217,6 +220,10 @@ void main() {
         final moved = state(c)!;
         expect(moved.distance.meters, greaterThan(0));
         expect(moved.elapsed.seconds, greaterThan(0));
+        // The stopwatch keeps the total wall time, well ahead of the one
+        // moving interval that just started.
+        expect(moved.clockElapsed.seconds, closeTo(4.8, 0.05));
+        expect(moved.clockElapsed.seconds, greaterThan(moved.elapsed.seconds));
       });
     });
 
@@ -290,12 +297,15 @@ void main() {
 
         ctrl.pause();
         async.flushMicrotasks();
+        final clockAtPause = state(c)!.clockElapsed.seconds;
         // A fix arriving while paused must not move the run.
         async.elapse(const Duration(milliseconds: 1200));
         stream.add(_fix(geo[4].latitude, geo[4].longitude));
         async.flushMicrotasks();
         expect(state(c)!.status, RunStatus.paused);
         expect(state(c)!.distance.meters, distanceBefore);
+        // The stopwatch holds too — paused time is not recorded time.
+        expect(state(c)!.clockElapsed.seconds, clockAtPause);
 
         ctrl.resume();
         async.flushMicrotasks();
