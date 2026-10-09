@@ -164,7 +164,7 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 284 tests (1 skipped: Rust FFI)
+cd app && flutter analyze && flutter test   # Flutter: 299 tests (1 skipped: Rust FFI)
 cargo test                                   # Rust: 204 tests + property cases
 
 # the same Flutter suite against the real Rust engine over FFI

@@ -241,6 +241,17 @@ documented here, grouped by the implementation milestones in
 
 ### Tooling
 
+- **Deterministic GPS edge-case suite.** `test/gps_fixtures.dart` gives the
+  device-mode tests named receiver timelines with independently computed
+  expectations, and `test/gps_edge_cases_test.dart` drives them through the
+  recording controller: a still phone and sub-meter jitter add no distance, a
+  duplicate coordinate or timestamp cannot prove motion, a 30 s outage adds
+  nothing until fixes resume, a stale cached first fix is ignored, poor
+  accuracy is flagged while the movement still counts, missing sensor fields
+  are handled, a date-line crossing does not fabricate a planet-sized jump, a
+  high-latitude zonal walk keeps its true length, leaving a route raises the
+  off-route signal, and a rapid start/pause/resume/finish persists exactly one
+  run.
 - **The on-device harness fails loudly instead of quietly.** A missing
   `USE_DEVICE_GPS` now trips `REQUIRE_DEVICE_GPS` (set by the device-GPS
   suite) rather than skipping every test green; the integration suite's
