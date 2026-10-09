@@ -9,7 +9,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -19,6 +18,7 @@ import '../../../core/ui/app_sections.dart';
 import '../../../persistence/persistence.dart';
 import '../application/gpx_export.dart';
 import '../application/settings_controller.dart';
+import '../application/track_export.dart';
 
 /// Shown in About and kept in step with `pubspec.yaml`.
 const String kAppVersion = '1.0.0';
@@ -102,7 +102,7 @@ class SettingsScreen extends ConsumerWidget {
                 key: const ValueKey('export-gpx'),
                 leading: const Icon(Icons.ios_share_outlined),
                 title: const Text('Export GPX'),
-                subtitle: const Text('Copy routes and runs as GPX'),
+                subtitle: const Text('Save routes and runs to Downloads'),
                 onTap: () => _exportGpx(context, ref),
               ),
               const Divider(height: 1, color: AppColors.outline),
@@ -157,12 +157,19 @@ class SettingsScreen extends ConsumerWidget {
       messenger.showSnackBar(const SnackBar(content: Text('Nothing to export yet.')));
       return;
     }
-    await Clipboard.setData(ClipboardData(text: gpx));
-    final tracks = routes.length +
-        activities.where((a) => a.track?.isNotEmpty ?? false).length;
-    messenger.showSnackBar(
-      SnackBar(content: Text('Copied $tracks tracks as GPX.')),
-    );
+    final fileName = gpxFileName(DateTime.now());
+    try {
+      await ref
+          .read(trackExporterProvider)
+          .saveToDownloads(fileName: fileName, contents: gpx);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Saved $fileName to Downloads.')),
+      );
+    } on TrackExportException catch (error) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Export failed: ${error.message}')),
+      );
+    }
   }
 
   Future<void> _confirmDeleteAll(BuildContext context, WidgetRef ref) async {

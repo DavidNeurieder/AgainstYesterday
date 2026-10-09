@@ -9,27 +9,32 @@ library;
 import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/features/settings/application/settings_controller.dart';
+import 'package:against_yesterday/features/settings/application/track_export.dart';
 import 'package:against_yesterday/features/settings/domain/settings.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'test_catalog.dart';
 
 void main() {
-  Widget pumpedApp() => ProviderScope(
+  Widget pumpedApp({TrackExporter? exporter}) => ProviderScope(
         overrides: [
           persistenceStoreProvider.overrideWithValue(
             seededStore(routes: demoRoutes, activities: demoActivities()),
           ),
+          if (exporter != null)
+            trackExporterProvider.overrideWithValue(exporter),
         ],
         child: const AgainstYesterdayApp(),
       );
 
-  Future<void> openSettings(WidgetTester tester) async {
-    await tester.pumpWidget(pumpedApp());
+  Future<void> openSettings(
+    WidgetTester tester, {
+    TrackExporter? exporter,
+  }) async {
+    await tester.pumpWidget(pumpedApp(exporter: exporter));
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
@@ -94,33 +99,31 @@ void main() {
     expect(switchValue(tester).value, isFalse);
   });
 
-  testWidgets('export GPX copies the catalog to the clipboard', (tester) async {
-    final clipboard = <String>[];
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.setData') {
-          clipboard.add((call.arguments as Map)['text'] as String);
-        }
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null),
-    );
-
-    await openSettings(tester);
+  testWidgets('export GPX saves the catalog to Downloads', (tester) async {
+    final exporter = _RecordingTrackExporter();
+    await openSettings(tester, exporter: exporter);
     await tester.tap(find.byKey(const ValueKey('export-gpx')));
     await tester.pumpAndSettle();
 
-    expect(clipboard, hasLength(1));
-    expect(clipboard.single, startsWith('<?xml'));
-    expect(clipboard.single, contains('<trk>'));
-    expect(clipboard.single, contains('</gpx>'));
+    expect(exporter.calls, hasLength(1));
+    final saved = exporter.calls.single;
+    expect(saved.fileName, startsWith('against-yesterday-'));
+    expect(saved.fileName, endsWith('.gpx'));
+    expect(saved.contents, startsWith('<?xml'));
+    expect(saved.contents, contains('<trk>'));
+    expect(saved.contents, contains('</gpx>'));
     // Three demo routes, no activity tracks → three <trk> elements.
-    expect('<trk>'.allMatches(clipboard.single).length, 3);
-    expect(find.textContaining('3 tracks as GPX'), findsOneWidget);
+    expect('<trk>'.allMatches(saved.contents).length, 3);
+    expect(find.text('Saved ${saved.fileName} to Downloads.'), findsOneWidget);
+  });
+
+  testWidgets('export GPX reports a failed write', (tester) async {
+    final exporter = _RecordingTrackExporter(fail: true);
+    await openSettings(tester, exporter: exporter);
+    await tester.tap(find.byKey(const ValueKey('export-gpx')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Export failed: Downloads is not writable.'), findsOneWidget);
   });
 
   testWidgets('delete all data empties the catalog after a confirm',
@@ -182,4 +185,24 @@ void main() {
     );
     expect(sixMinKm.formatWith(Units.miles).endsWith('mph'), isTrue);
   });
+}
+
+/// A [TrackExporter] that records what the Settings screen asked it to save.
+class _RecordingTrackExporter implements TrackExporter {
+  _RecordingTrackExporter({this.fail = false});
+
+  final bool fail;
+  final calls = <({String fileName, String contents})>[];
+
+  @override
+  Future<String> saveToDownloads({
+    required String fileName,
+    required String contents,
+  }) async {
+    calls.add((fileName: fileName, contents: contents));
+    if (fail) {
+      throw const TrackExportException('Downloads is not writable.');
+    }
+    return 'Download/$fileName';
+  }
 }

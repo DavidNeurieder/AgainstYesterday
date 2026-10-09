@@ -41,8 +41,8 @@ the M18 record-a-route flow (prep → recording → name-and-save → saved) in
 `test/record_route_test.dart`, the M19 route-bound pre-race with its
 3-2-1-GO countdown (plus the M20 RACE AGAIN loop) in
 `test/race_flow_test.dart`, the M21 settings — the countdown gate, the
-unit switch over the readouts, GPX export, delete-all and the model
-round-trip — in `test/settings_test.dart`, and the M22 month-grouped
+unit switch over the readouts, GPX export to Downloads, delete-all and the
+model round-trip — in `test/settings_test.dart`, and the M22 month-grouped
 History with PB trophies, route/PB filters and its grouping helpers in
 `test/history_test.dart`, and the M23 entrance motion plus the PB
 celebration and gap-digit tween in `test/motion_test.dart`,

@@ -11,6 +11,14 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Export every route and recorded run to the Android Downloads folder as a
+  single timestamped GPX file: Settings → Export GPX now writes
+  `against-yesterday-YYYY-MM-DD-HHMMSS.gpx` through a `MediaStore` platform
+  channel (`MainActivity`), so API 29+ needs no permission while API 24–28
+  fall back to asking for the legacy `WRITE_EXTERNAL_STORAGE` grant. The write
+  is abstracted behind a `TrackExporter` that tests replace with a recording
+  fake, and non-Android hosts (desktop runs) save into the platform Download
+  directory instead (`track_export.dart`, `gpx_export_test.dart`).
 - Delete a recorded run from History: each row carries a delete affordance
   that opens a confirmation dialog before removing the activity. Route stats
   and PB badges are derived from the history list, so deleting a run updates

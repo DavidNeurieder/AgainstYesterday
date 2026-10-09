@@ -2,6 +2,11 @@
     <!-- Live GPS recording: exact location while the app is in the foreground. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- GPX export on API 24–28 writes the public Downloads folder directly;
+         API 29+ uses MediaStore and needs no permission. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"/>
     <application
         android:label="Against Yesterday"
         android:name="${applicationName}"

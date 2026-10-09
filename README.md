@@ -24,6 +24,9 @@ Flutter app  →  EngineService (facade)  →  Rust engine (FFI)
   detection, a splits breakdown, activity detail, and home history.
 - **Background recording** — wall-clock timing and persisted run snapshots, so
   an interrupted run survives process death and resumes where it left off.
+- **GPX export** — Settings saves every route and recorded run as one GPX file
+  straight into the Android Downloads folder (MediaStore on API 29+, the
+  legacy storage grant below it).
 - **Polish** — phase transitions, haptics, WCAG-AA contrast and semantics
   labels, error/empty/loading states, and repaint isolation.
 - **Developer diagnostics** — a `DEV_TOOLS` gated readout of the live engine /
@@ -164,7 +167,7 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 312 tests (1 skipped: Rust FFI)
+cd app && flutter analyze && flutter test   # Flutter: 320 tests (1 skipped: Rust FFI)
 cargo test                                   # Rust: 204 tests + property cases
 
 # the same Flutter suite against the real Rust engine over FFI
