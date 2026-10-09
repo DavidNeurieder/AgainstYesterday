@@ -63,7 +63,6 @@ class MapScene {
     this.ghost,
     this.name,
     this.staticView = false,
-    this.followsYou = true,
   });
 
   /// The route (or recorded track) to draw.
@@ -84,10 +83,6 @@ class MapScene {
   /// Fits the whole geometry with no follow or panning (route-detail
   /// thumbnail).
   final bool staticView;
-
-  /// Whether the camera should track YOU (live run) rather than fit the whole
-  /// route. Ignored when [staticView] is set.
-  final bool followsYou;
 }
 
 /// Renders a [MapScene]. Implemented by the painter fallback and by MapLibre.

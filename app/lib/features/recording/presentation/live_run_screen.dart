@@ -15,7 +15,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../widgets/performance_gap.dart';
-import '../../../widgets/route_map.dart';
+import '../../map/map_surface.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
@@ -30,6 +30,7 @@ class LiveRunScreen extends ConsumerWidget {
     final paused = state.status == RunStatus.paused;
     final textTheme = Theme.of(context).textTheme;
     final units = ref.watch(displayUnitProvider);
+    final mapSurface = ref.watch(mapSurfaceProvider);
     final controller = ref.read(recordingControllerProvider.notifier);
 
     final gapState = switch (state.ghostGap) {
@@ -111,14 +112,17 @@ class LiveRunScreen extends ConsumerWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    RouteMap(
-                      geometry: state.route?.geometry ?? const [],
-                      you: state.currentPosition ??
-                          state.route?.geometry.first ??
-                          const GeoPoint(latitude: 51.96, longitude: 7.63),
-                      youProgress: state.routeProgress,
-                      ghost: state.ghostPosition,
-                      name: state.route?.name,
+                    mapSurface.build(
+                      context,
+                      MapScene(
+                        geometry: state.route?.geometry ?? const [],
+                        you: state.currentPosition ??
+                            state.route?.geometry.first ??
+                            const GeoPoint(latitude: 51.96, longitude: 7.63),
+                        youProgress: state.routeProgress,
+                        ghost: state.ghostPosition,
+                        name: state.route?.name,
+                      ),
                     ),
                     // §18: the race screen stays underneath; the overlay
                     // clears itself as soon as the runner is back on line.

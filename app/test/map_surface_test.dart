@@ -62,6 +62,39 @@ void main() {
     });
   });
 
+  group('traveledGeometry', () {
+    const points = [
+      GeoPoint(latitude: 52.5, longitude: 13.4),
+      GeoPoint(latitude: 52.5, longitude: 13.42),
+      GeoPoint(latitude: 52.5, longitude: 13.44),
+    ];
+
+    test('is empty below or at zero and full at or above one', () {
+      expect(traveledGeometry(points, 0), isEmpty);
+      expect(traveledGeometry(points, -1), isEmpty);
+      expect(traveledGeometry(points, 1), points);
+      expect(traveledGeometry(points, 2), points);
+    });
+
+    test('cuts the polyline proportionally by length', () {
+      final half = traveledGeometry(points, 0.5);
+      // Two equal segments, so half the total length lands exactly on the
+      // middle node (13.42) — the polygon is cut at 13.42 with no dangling tip.
+      expect(half, hasLength(2));
+      expect(half.first, points.first);
+      expect(half.last.longitude, closeTo(13.42, 1e-9));
+      expect(half.last.latitude, 52.5);
+
+      final quarter = traveledGeometry(points, 0.25);
+      // A quarter of 0.04° is halfway along the first segment.
+      expect(quarter.last.longitude, closeTo(13.41, 1e-9));
+    });
+
+    test('does not slice a degenerate or single-point trace', () {
+      expect(traveledGeometry([points.first], 0.5), isEmpty);
+    });
+  });
+
   testWidgets('the painter fallback still renders the scene', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
