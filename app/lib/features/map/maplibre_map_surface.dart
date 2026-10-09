@@ -30,9 +30,15 @@ class MaplibreMapSurface implements MapSurface {
 /// The live MapLibre view. Kept public so an integration test can pump it
 /// directly; screens go through [MapSurface].
 class MaplibreRouteMap extends StatefulWidget {
-  const MaplibreRouteMap({super.key, required this.scene});
+  const MaplibreRouteMap({super.key, required this.scene, this.onReady});
 
   final MapScene scene;
+
+  /// Invoked once after the style has loaded and the first scene was drawn —
+  /// the on-device map smoke test waits on it so it knows the native map
+  /// really initialised, instead of asserting on a widget that may never
+  /// have touched MapLibre Native.
+  final VoidCallback? onReady;
 
   @override
   State<MaplibreRouteMap> createState() => _MaplibreRouteMapState();
@@ -157,6 +163,7 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       ),
     );
     await _sync(animate: false);
+    widget.onReady?.call();
   }
 
   Future<void> _sync({required bool animate}) async {

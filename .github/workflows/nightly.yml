@@ -28,6 +28,10 @@ jobs:
           # Reference API, the demo journey twice, to catch flakes.
           - api-level: 34
             suite: repeat
+          # Reference API, the real MapLibre map: pulls the style and tiles
+          # over the network, so it lives here (nightly) and not on PRs.
+          - api-level: 34
+            suite: map
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -60,6 +64,9 @@ jobs:
               # runs are isolated.
               ./tool/android_integration_test.sh
               ./tool/android_integration_test.sh
+            elif [ "${{ matrix.suite }}" = "map" ]; then
+              # Real MapLibre map over the network (nightly-only, see above).
+              ./tool/android_integration_test.sh --map-smoke
             else
               ./tool/android_integration_test.sh --smoke
             fi

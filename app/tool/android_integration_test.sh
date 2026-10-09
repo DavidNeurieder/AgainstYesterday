@@ -12,11 +12,14 @@
 #   ./tool/android_integration_test.sh --device-gps   # real-receiver suite;
 #                                                      # fixes simulated by the
 #                                                      # emulator geo console
+#   ./tool/android_integration_test.sh --map-smoke    # real MapLibre map smoke
+#                                                      # (nightly-only: network)
 #   ./tool/android_integration_test.sh --smoke        # record-and-save journey
 #                                                      # only (old-API jobs)
 #
-# Anything that is not a leading AVD name, --device-gps or --smoke is forwarded
-# to `flutter test` (e.g. --dart-define=USE_RUST_ENGINE=true).
+# Anything that is not a leading AVD name, --device-gps, --map-smoke or
+# --smoke is forwarded to `flutter test` (e.g.
+# --dart-define=USE_RUST_ENGINE=true).
 #
 # Requires ANDROID_HOME (or a local Android SDK) and a created AVD:
 #   flutter emulators --launch <avd>
@@ -31,15 +34,18 @@ set -euo pipefail
 
 PKG="dev.neurieder.against_yesterday"
 
-# --device-gps selects the device-GPS suite and --smoke narrows the demo suite
-# to its record-and-save journey; the rest of the arguments keep their original
-# meaning (leading non-flag argument = AVD, rest forwarded).
+# --device-gps selects the device-GPS suite, --map-smoke the real MapLibre map
+# smoke, and --smoke narrows the demo suite to its record-and-save journey;
+# the rest of the arguments keep their original meaning (leading non-flag
+# argument = AVD, rest forwarded).
 DEVICE_GPS=0
+MAP_SMOKE=0
 SMOKE=0
 ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --device-gps) DEVICE_GPS=1 ;;
+    --map-smoke) MAP_SMOKE=1 ;;
     --smoke) SMOKE=1 ;;
     *) ARGS+=("$arg") ;;
   esac
@@ -256,6 +262,22 @@ run_device_gps_suite() {
   fi
 }
 
+run_map_smoke_suite() {
+  # Fresh install so the map smoke cannot inherit a previous suite's saved
+  # regions or routes.
+  reset_app_state
+  echo ">> Running the map smoke integration test on $SERIAL..."
+  # MAP_VIEW=true is what makes the suite run at all (its skip gate); the real
+  # map pulls the style document and tiles over the network.
+  if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test \
+    integration_test/map_smoke_test.dart -d "$SERIAL" \
+    --dart-define=MAP_VIEW=true \
+    ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
+    collect_artifacts map-smoke
+    exit 1
+  fi
+}
+
 run_demo_suite() {
   # Fresh install so the demo suite records against an empty catalog/history
   # and cannot inherit a previous run's saved route or activity.
@@ -277,6 +299,8 @@ run_demo_suite() {
 cd "$(dirname "$0")/.."
 if [ "$DEVICE_GPS" = "1" ]; then
   run_device_gps_suite
+elif [ "$MAP_SMOKE" = "1" ]; then
+  run_map_smoke_suite
 else
   run_demo_suite
 fi

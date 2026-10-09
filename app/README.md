@@ -17,7 +17,7 @@ flutter analyze
 flutter test
 ```
 
-283 headless tests run with `fake_async`, an in-memory store, and the
+355 headless tests run with `fake_async`, an in-memory store, and the
 deterministic fake engine — no device or GPS required. Coverage spans the run
 state machine (`test/state_machine_test.dart`), pause/resume timing
 (`test/pause_resume_test.dart`), persistence & recovery
@@ -110,6 +110,16 @@ to Android's location stack; plain `geo fix` does):
 ./tool/android_integration_test.sh --device-gps
 ```
 
+`--map-smoke` runs the real MapLibre map (`integration_test/map_smoke_test
+.dart`): it renders a route scene on the native map and waits for the style
+to load, which takes real network. The suite skips itself unless launched
+with `--dart-define=MAP_VIEW=true`, which the harness passes for you — it is
+nightly/connected-only and off-network CI stays hermetic:
+
+```bash
+./tool/android_integration_test.sh --map-smoke
+```
+
 `ANDROID_AVD` and `ANDROID_SERIAL` override the AVD name and device serial.
 
 ## Real engine
@@ -171,11 +181,30 @@ touch the plugin: they either keep the demo timeline or inject a
 deterministic `GpsSource` through `deviceGpsProvider`. The diagnostics GPS
 section names the active source.
 
+## Map & offline regions
+
+Screens draw route and track geometry through `MapSurface`
+(`lib/features/map/`), never a concrete map widget. `MAP_VIEW` picks the
+renderer at build time, mirroring `USE_RUST_ENGINE`: unset/`false` keeps the
+self-contained painter (`RouteMap`, hermetic on host/tests), `true` requires
+the MapLibre renderer (`maplibre_gl`, the engine behind Organic Maps);
+`MAP_STYLE_URL` overrides the style document (default OpenFreeMap Liberty).
+Android builds with MapLibre need JDK 21 — the Makefile exports a detected
+JDK 21 as `JAVA_HOME`, and CI pins Temurin 21.
+
+Per-route offline regions ("Download offline map" on the route page, managed
+in Settings → Map) are user-initiated, size-capped by a client-side tile
+budget, and one at a time; metadata persists through the persistence store
+and the tiles live in MapLibre Native's offline database. See
+[`../docs/map_licensing.md`](../docs/map_licensing.md) for licenses,
+attribution and the no-bundled-region decision.
+
 ## Layout
 
 - `lib/app/` — root widget, router, shell tabs, dependency injection.
 - `lib/features/` — feature folders: `home`, `recording`, `result`, `routes`,
-  `history`, `settings`, `activity` (each `presentation/` + `application/`).
+  `history`, `settings`, `activity`, `map` (each `presentation/` +
+  `application/` where applicable).
 - `lib/core/` — theme, units, and the shared `ui` design system
   (`core/ui/`): buttons, empty/loading/error states, sections, the PB gap
   line and split rows.

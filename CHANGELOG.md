@@ -40,6 +40,15 @@ documented here, grouped by the implementation milestones in
   MapLibre Native's offline database. Only MapLibre builds expose the
   download affordances; host/tests drive the state machine through the
   downloader seam.
+- Offline-map Phase 4 polish: `docs/map_licensing.md` records the engine
+  (BSD-3-Clause), data (OSM/ODbL) and tile-service licenses, the attribution
+  requirement and the recorded no-bundled-region decision; the READMEs and
+  this changelog document the renderer seam, `MAP_VIEW`/`MAP_STYLE_URL` and
+  the JDK 21 requirement; and an on-device map smoke
+  (`integration_test/map_smoke_test.dart`, `./tool/android_integration_test.sh
+  --map-smoke`) renders a route on the real MapLibre map and waits for the
+  style to load. The smoke needs network, so it runs only in the nightly
+  workflow (new API 34 `map` row); PR/off-network CI stays hermetic.
 - Export every route and recorded run to the Android Downloads folder as a
   single timestamped GPX file: Settings → Export GPX now writes
   `against-yesterday-YYYY-MM-DD-HHMMSS.gpx` through a `MediaStore` platform

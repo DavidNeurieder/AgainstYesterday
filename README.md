@@ -16,8 +16,16 @@ Flutter app  →  EngineService (facade)  →  Rust engine (FFI)
   elapsed time and the PB gap.
 - **Ghost racing** — every route carries a PB; run against its ghost live on
   the map, and finish the run to see where you were faster or slower.
-- **Route map** — self-contained painter (no map SDK): the route, the travelled
-  portion, the YOU and PB-ghost markers, a follow camera with recenter.
+- **Map** — route and track geometry drawn through one `MapSurface` seam. The
+  default is a self-contained painter (no map SDK) that stays hermetic on host
+  and desktop; device builds opt into the MapLibre renderer (the engine behind
+  Organic Maps) with `MAP_VIEW=true`: the route, the travelled portion, the YOU
+  and PB-ghost markers and a follow camera with recenter.
+- **Offline maps** — per-route regions downloaded straight from the route page
+  ("Download offline map") and managed in Settings → Map: progress while a
+  region downloads, delete with confirmation, and the OSM attribution.
+  Downloads are user-initiated, size-capped and one at a time, so the app never
+  floods the tile provider.
 - **Route library** — course cards with PB/average/last stats, a performance
   chart of every attempt, and attempt history.
 - **Results & history** — run-complete interstitial with NEW PERSONAL BEST
@@ -130,6 +138,30 @@ PB wait for real movement. Refusals (services off or permission denied)
 surface as the recoverable recording ERROR state. The diagnostics screen's GPS
 section prints which source is live.
 
+## Offline map & map licensing
+
+Device builds can render through MapLibre Native (the engine behind Organic
+Maps) and download routes for offline use:
+
+```bash
+cd app && flutter build apk --debug \
+  --dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+```
+
+`MAP_VIEW` is tri-state, mirroring `USE_RUST_ENGINE`: unset/`false` keeps the
+self-contained painter (the hermetic host/test/desktop default), `true`
+requires the MapLibre renderer. `MAP_STYLE_URL` overrides the style document
+(default OpenFreeMap Liberty) — point it at a self-hosted tile server for
+anything beyond per-route downloads. Android builds with MapLibre need JDK 21
+(the plugin compiles with Java 21); the Makefile exports a detected JDK 21 as
+`JAVA_HOME` and CI pins Temurin 21, so `make build`/`install` just work.
+
+Offline regions are per-route, user-initiated and size-capped (zoom 12–15
+under a client-side tile budget), one download at a time, managed in Settings →
+Map. **No tiles are bundled** — see [docs/map_licensing.md](docs/map_licensing.md)
+for the engine (BSD-3-Clause), data (OSM, ODbL) and tile-service licenses, the
+attribution requirement, and the recorded no-bundled-region decision.
+
 ## Developer diagnostics
 
 Build with the diagnostics entry point enabled (`M15`):
@@ -167,7 +199,7 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 320 tests (1 skipped: Rust FFI)
+cd app && flutter analyze && flutter test   # Flutter: 355 tests (1 skipped: Rust FFI)
 cargo test                                   # Rust: 204 tests + property cases
 
 # the same Flutter suite against the real Rust engine over FFI
@@ -190,12 +222,14 @@ snapshot.
 
 The on-device suites (`app/integration_test/`) run on an emulator through
 `app/tool/android_integration_test.sh` (`--device-gps` selects the
-real-receiver suite and `--smoke` narrows the demo suite to the record-and-save
-journey; see the script header for the environment knobs). CI runs the full
-journey on API 34 and the smoke on API 24 for every PR; the nightly workflow
-adds API 36 and a repeated run to catch flakes. On a red run the harness
-preserves the app log, a screenshot, and the location/permission dumps under
-`app/build/integration-artifacts/<suite>/`. Release sign-off uses the gates in
+real-receiver suite, `--map-smoke` the real-MapLibre map smoke — nightly only,
+it needs the network — and `--smoke` narrows the demo suite to the
+record-and-save journey; see the script header for the environment knobs). CI
+runs the full journey on API 34 and the smoke on API 24 for every PR; the
+nightly workflow adds API 36, a repeated run to catch flakes, and the map
+smoke. On a red run the harness preserves the app log, a screenshot, and the
+location/permission dumps under `app/build/integration-artifacts/<suite>/`.
+Release sign-off uses the gates in
 [docs/release_checklist.md](docs/release_checklist.md).
 
 ## Status
@@ -216,6 +250,12 @@ entrance motion, responsive layouts, settings, history, consistent error
 screens, a WCAG-checked palette and the three-screen first-launch intro —
 with `main()` now persisting settings, routes, activities and snapshots to
 the device's application documents directory across restarts.
+The offline-map roadmap added a renderer seam (`MapSurface`, painter default,
+MapLibre on device), a live-run map with YOU/PB markers and follow, the
+recorded-track map on activity detail, and per-route offline regions with
+Settings management — see the staging plan in
+`ideas/offline_map_plan.txt` and the licensing page above for what is bundled
+and what is downloaded.
 
 ## License
 
