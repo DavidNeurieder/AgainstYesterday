@@ -11,6 +11,12 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Delete a recorded run from History: each row carries a delete affordance
+  that opens a confirmation dialog before removing the activity. Route stats
+  and PB badges are derived from the history list, so deleting a run updates
+  them immediately, the in-memory history is authoritative even if the disk
+  write fails, and the removal persists across restarts
+  (`ActivityRepository.deleteActivity`).
 - On-emulator end-to-end tests with simulated GPS (M30): a new
   `integration_test/device_gps_test.dart` records a route and races a saved
   one against fixes that arrive through the real geolocator platform channel

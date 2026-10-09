@@ -221,6 +221,19 @@ class ActivityRepository extends Notifier<List<Activity>> {
     return _persist();
   }
 
+  /// Removes the activity with [id] from history.
+  ///
+  /// Returns whether the disk write landed (§33): the in-memory list is
+  /// updated either way, so a `false` only means "retry the write". Route
+  /// stats and PB badges are derived from this list, so they update with it.
+  Future<bool> deleteActivity(String id) async {
+    state = [
+      for (final activity in state)
+        if (activity.id != id) activity,
+    ];
+    return _persist();
+  }
+
   Future<bool> _persist() async {
     final store = ref.read(persistenceStoreProvider);
     if (store is NoopPersistenceStore) {

@@ -151,6 +151,24 @@ void main() {
       expect(history.first.id, 'act-005');
       expect(history.first.routeId, isNull);
     });
+
+    test('deleteActivity drops exactly the named run', () async {
+      final c = ProviderContainer();
+      addTearDown(c.dispose);
+
+      final repo = c.read(activityRepositoryProvider.notifier);
+      await repo.saveActivity(_activity(id: 'a'));
+      await repo.saveActivity(_activity(id: 'b'));
+      await repo.saveActivity(_activity(id: 'c'));
+
+      expect(await repo.deleteActivity('b'), isTrue);
+      // Newest first, and only the named run is gone.
+      expect(c.read(activityRepositoryProvider).map((a) => a.id), ['c', 'a']);
+
+      // Deleting an unknown id is a no-op that still reports success.
+      expect(await repo.deleteActivity('missing'), isTrue);
+      expect(c.read(activityRepositoryProvider), hasLength(2));
+    });
   });
 
   group('JSON file store', () {
@@ -209,6 +227,27 @@ void main() {
       expect(kept, hasLength(1));
       expect(kept.single.track, hasLength(1));
       expect(kept.single.duration?.seconds, 1502);
+    });
+
+    test('a deleted activity stays deleted across repository restarts',
+        () async {
+      final first = ProviderContainer(
+        overrides: [persistenceStoreProvider.overrideWithValue(store)],
+      );
+      addTearDown(first.dispose);
+      final repo = first.read(activityRepositoryProvider.notifier);
+      await repo.saveActivity(_activity(id: 'keep'));
+      await repo.saveActivity(_activity(id: 'drop'));
+      await repo.deleteActivity('drop');
+
+      final second = ProviderContainer(
+        overrides: [persistenceStoreProvider.overrideWithValue(store)],
+      );
+      addTearDown(second.dispose);
+      expect(
+        second.read(activityRepositoryProvider).map((a) => a.id),
+        ['keep'],
+      );
     });
 
     test('a corrupt document degrades to an empty catalog', () {

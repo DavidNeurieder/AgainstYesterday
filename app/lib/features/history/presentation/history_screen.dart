@@ -252,10 +252,74 @@ class _ActivityRow extends ConsumerWidget {
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
+              const SizedBox(width: AppSpacing.xs),
+              IconButton(
+                key: ValueKey('delete-activity-${activity.id}'),
+                onPressed: () => _confirmDeleteActivity(
+                  context,
+                  ref,
+                  activity: activity,
+                  label: routeName ?? 'New route',
+                ),
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete run',
+                color: AppColors.textMuted,
+              ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// Confirms, then deletes one activity from history (§24).
+///
+/// Route stats and PB badges are derived from the history list, so removing a
+/// run also drops it from the route's best and every `vs PB` delta.
+Future<void> _confirmDeleteActivity(
+  BuildContext context,
+  WidgetRef ref, {
+  required Activity activity,
+  required String label,
+}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete this run?'),
+      content: Text(
+        '$label from ${dateLabelFor(activity.startedAt.toLocal())} will be '
+        'permanently removed. There is no undo.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: ValueKey('confirm-delete-${activity.id}'),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.errorFill,
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) {
+    return;
+  }
+  AppHaptics.medium(ref);
+  final saved = await ref
+      .read(activityRepositoryProvider.notifier)
+      .deleteActivity(activity.id);
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        saved ? 'Run deleted.' : 'Run deleted — storage not updated.',
+      ),
+    ),
+  );
 }

@@ -256,5 +256,43 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('No runs match this filter.'), findsOneWidget);
     });
+
+    testWidgets('delete asks for confirmation, then removes the run',
+        (tester) async {
+      await tester.pumpWidget(pumpedApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(tab('History'));
+      await tester.pumpAndSettle();
+
+      Finder row(String name) => find.descendant(
+            of: find.byType(Card),
+            matching: find.text(name),
+          );
+
+      // Cancel keeps the run.
+      await tester.tap(
+        find.byKey(const ValueKey('delete-activity-act-003')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this run?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(row('River Loop'), findsOneWidget);
+
+      // Confirming removes it; the other run is untouched.
+      await tester.tap(
+        find.byKey(const ValueKey('delete-activity-act-003')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('confirm-delete-act-003')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(row('River Loop'), findsNothing);
+      expect(row('Park 5K'), findsOneWidget);
+      expect(find.text('Run deleted.'), findsOneWidget);
+    });
   });
 }
