@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The MapLibre map needs to fetch the style document and tiles (and
+         download offline regions); debug builds inherit this, release and
+         sideloaded APKs do not, so it must be declared here. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Live GPS recording: exact location while the app is in the foreground. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>

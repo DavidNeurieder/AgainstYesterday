@@ -189,6 +189,9 @@ renderer at build time, mirroring `USE_RUST_ENGINE`: unset/`false` keeps the
 self-contained painter (`RouteMap`, hermetic on host/tests), `true` requires
 the MapLibre renderer (`maplibre_gl`, the engine behind Organic Maps);
 `MAP_STYLE_URL` overrides the style document (default OpenFreeMap Liberty).
+The download button and the offline region list only exist when `MAP_VIEW=true`,
+so the device targets pass it for you: `make build`, `make install` and
+`make build-release` build with `MAP_VIEW=true` (plus `USE_DEVICE_GPS=true`).
 Android builds with MapLibre need JDK 21 — the Makefile exports a detected
 JDK 21 as `JAVA_HOME`, and CI pins Temurin 21.
 

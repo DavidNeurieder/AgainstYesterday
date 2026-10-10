@@ -258,6 +258,16 @@ documented here, grouped by the implementation milestones in
 
 ### Fixes
 
+- Installed phone artifacts could not download offline maps: the device build
+  targets (`make build`/`install`/`build-release`) never passed
+  `MAP_VIEW=true`, so the app rendered with the painter and the route-detail
+  download button plus the Settings region list never appeared. They now build
+  with `MAP_VIEW=true` (alongside `USE_DEVICE_GPS=true`).
+- Release/sideloaded APKs declared no `android.permission.INTERNET`, so the
+  MapLibre map could not fetch its style document or tiles (and region
+  downloads would fail); the main manifest now declares it explicitly. Debug
+  builds inherited it automatically, which is why this only bit installed
+  builds.
 - Attempt dates were labelled from *elapsed* time rather than calendar days, so
   on a daylight-saving day — when consecutive local midnights are 23 hours apart
   — a date that was clearly yesterday came out as "Today". Labelling now

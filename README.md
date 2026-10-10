@@ -152,9 +152,13 @@ cd app && flutter build apk --debug \
 self-contained painter (the hermetic host/test/desktop default), `true`
 requires the MapLibre renderer. `MAP_STYLE_URL` overrides the style document
 (default OpenFreeMap Liberty) — point it at a self-hosted tile server for
-anything beyond per-route downloads. Android builds with MapLibre need JDK 21
-(the plugin compiles with Java 21); the Makefile exports a detected JDK 21 as
-`JAVA_HOME` and CI pins Temurin 21, so `make build`/`install` just work.
+anything beyond per-route downloads. **Without `MAP_VIEW=true` the download
+button and the offline region list never appear**, so the device targets pass
+the define for you: `make build`, `make install` and `make build-release` all
+build with `MAP_VIEW=true` (plus `USE_DEVICE_GPS=true`). Android builds with
+MapLibre need JDK 21 (the plugin compiles with Java 21); the Makefile exports
+a detected JDK 21 as `JAVA_HOME` and CI pins Temurin 21, so `make
+build`/`install` just work.
 
 Offline regions are per-route, user-initiated and size-capped (zoom 12–15
 under a client-side tile budget), one download at a time, managed in Settings →

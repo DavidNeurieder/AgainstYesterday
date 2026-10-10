@@ -9,8 +9,10 @@
 # build-release and install.
 #
 # Device artifacts also read the live run from the phone's real GPS
-# (USE_DEVICE_GPS=true); a plain `flutter build` keeps the deterministic demo
-# timeline for hosts and the E2E.
+# (USE_DEVICE_GPS=true) and render with the MapLibre map
+# (MAP_VIEW=true, which is what makes offline region downloads available);
+# a plain `flutter build` keeps the deterministic demo timeline and the
+# painter for hosts and the E2E.
 
 # MapLibre (via maplibre_gl) compiles with Java 21, so the Android Gradle build
 # must run on JDK 21 even though the app itself targets Java 17. Prefer an
@@ -29,10 +31,12 @@ endif
         engine-android full-test clean
 
 build:
-	cd app && flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
+	cd app && flutter build apk --debug \
+		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 build-release: engine-android
-	cd app && flutter build apk --release --dart-define=USE_DEVICE_GPS=true
+	cd app && flutter build apk --release \
+		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 run:
 	cd app && flutter run

@@ -40,7 +40,8 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   `USE_DEVICE_GPS=true` reads the live run from the phone receiver via
   geolocator; without it the recording replays the deterministic demo timeline
   (the host/test/E2E default). `make build`/`install`/`build-release` pass the
-  define so installed phone artifacts record real GPS.
+  define (plus `MAP_VIEW=true`, see below) so installed phone artifacts record
+  real GPS and render with the MapLibre map.
 - Android cdylibs land in `app/android/app/src/main/jniLibs/<abi>/` via
   `app/tool/build_rust_engine_android.sh`; they are gitignored, so rerun the
   script after a clean checkout. `make install` and `make build-release` run
@@ -52,7 +53,10 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   (`lib/features/map/`), never a concrete map widget. `MAP_VIEW` selects the
   renderer at build time: unset/`false` = the self-contained painter
   (`RouteMap`), `true` = the MapLibre renderer (`maplibre_gl`). The painter is
-  the default, so host tests and desktop stay hermetic; device builds opt in.
+  the default, so host tests and desktop stay hermetic; device artifacts opt
+  in — `make build`/`install`/`build-release` pass `MAP_VIEW=true`, and
+  without it the route-detail download button and the offline region list
+  never appear (`offlineMapsAvailableProvider` is false).
 - `MAP_STYLE_URL` overrides the MapLibre style document (default OpenFreeMap
   Liberty). Map data is OpenStreetMap (ODbL) and must be attributed; offline
   regions are per-route downloads, not bundled (see
