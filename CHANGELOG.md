@@ -268,6 +268,12 @@ documented here, grouped by the implementation milestones in
   downloads would fail); the main manifest now declares it explicitly. Debug
   builds inherited it automatically, which is why this only bit installed
   builds.
+- Only the run's activity detail (reached from History) drew through the
+  MapLibre seam; the route-detail course map still used the self-contained
+  painter, so on a phone the Routes tab showed a dark polyline panel with no
+  map. The route thumbnail now renders through `MapSurface` too, so device
+  builds draw it with MapLibre exactly like the activity track and the live
+  run (host/test builds keep the painter).
 - Attempt dates were labelled from *elapsed* time rather than calendar days, so
   on a daylight-saving day — when consecutive local midnights are 23 hours apart
   — a date that was clearly yesterday came out as "Today". Labelling now

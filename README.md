@@ -150,7 +150,10 @@ cd app && flutter build apk --debug \
 
 `MAP_VIEW` is tri-state, mirroring `USE_RUST_ENGINE`: unset/`false` keeps the
 self-contained painter (the hermetic host/test/desktop default), `true`
-requires the MapLibre renderer. `MAP_STYLE_URL` overrides the style document
+requires the MapLibre renderer. Every map-bearing screen — the live run, the
+activity track and the route-detail course map — renders through the
+`MapSurface` seam, so a device build shows the MapLibre map everywhere while
+host/test builds stay hermetic. `MAP_STYLE_URL` overrides the style document
 (default OpenFreeMap Liberty) — point it at a self-hosted tile server for
 anything beyond per-route downloads. **Without `MAP_VIEW=true` the download
 button and the offline region list never appear**, so the device targets pass

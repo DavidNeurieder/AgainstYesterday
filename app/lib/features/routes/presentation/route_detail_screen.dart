@@ -21,7 +21,7 @@ import '../../../core/ui/app_buttons.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
-import '../../../widgets/route_map.dart';
+import '../../map/map_surface.dart';
 import '../../map/offline_region_repository.dart';
 import '../../map/offline_regions.dart';
 import '../../settings/application/haptics.dart';
@@ -54,13 +54,22 @@ class RouteDetailScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
+          // The course on the map: through the same seam as the activity track
+          // and the live run, so device builds (MAP_VIEW=true) render it with
+          // MapLibre and host/test builds keep the hermetic painter.
           SizedBox(
             height: 180,
-            child: RouteMap(
-              geometry: route.geometry,
-              you: route.geometry.first,
-              youProgress: 0,
-              staticView: true,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: ref.watch(mapSurfaceProvider).build(
+                context,
+                MapScene(
+                  geometry: route.geometry,
+                  you: route.geometry.first,
+                  youProgress: 0,
+                  staticView: true,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.md),
