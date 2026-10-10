@@ -208,6 +208,20 @@ documented here, grouped by the implementation milestones in
   button radii, duplicated gap lines and split rows across the complete /
   result / activity screens).
 
+### Fixed
+
+- Live GPS recording on Android no longer stops when the phone screen turns
+  off. On API 31+ a backgrounded app (stopped activity) receives no location
+  fixes, so while the device receiver is streaming, the recording controller
+  now runs a foreground `location` service
+  (`RecordingForegroundService`, driven over a
+  `dev.neurieder.against_yesterday/recording` platform channel) that keeps a
+  persistent "Recording your run" notification up for exactly as long as the
+  stream lives — started on START/RESUME, dropped on PAUSE/FINISH. The service
+  owns no GPS itself (the Dart geolocator stream still drives the recording);
+  it only keeps the process foreground in the OS's eyes. Scenario and host
+  runs never touch the channel (`recording_service_lifespan_test.dart`).
+
 ### Changed
 
 - The record-a-route screen's TIME is now a wall-clock stopwatch: it starts on

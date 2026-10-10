@@ -41,7 +41,14 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   geolocator; without it the recording replays the deterministic demo timeline
   (the host/test/E2E default). `make build`/`install`/`build-release` pass the
   define (plus `MAP_VIEW=true`, see below) so installed phone artifacts record
-  real GPS and render with the MapLibre map.
+  real GPS and render with the MapLibre map. While the receiver streams, the
+  controller keeps an Android foreground `location` service
+  (`RecordingForegroundService`, started/stopped over the
+  `dev.neurieder.against_yesterday/recording` platform channel) so fixes keep
+  arriving with the screen off — Android 12+ delivers no location to a
+  backgrounded app without one. The service holds no GPS logic of its own;
+  on non-Android hosts and scenario runs the `RunForegroundLifespan` seam is a
+  no-op.
 - Android cdylibs land in `app/android/app/src/main/jniLibs/<abi>/` via
   `app/tool/build_rust_engine_android.sh`; they are gitignored, so rerun the
   script after a clean checkout. `make install` and `make build-release` run

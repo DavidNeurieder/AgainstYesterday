@@ -33,6 +33,7 @@ import '../../../engine/device_gps_source.dart';
 import '../../../engine/fake_engine.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import 'run_foreground_lifespan.dart';
 
 /// Null until a run session exists; otherwise the current live state.
 final recordingControllerProvider =
@@ -75,6 +76,14 @@ class RecordingController extends Notifier<LiveRunState?> {
   /// [deviceGpsProvider].
   GpsSource? _gpsSource;
   StreamSubscription<GpsFix>? _gpsSub;
+
+  /// While the Android recording foreground service is up (see
+  /// `run_foreground_lifespan.dart`). Only flips on when a device source
+  /// actually streams, so scenario runs never touch the platform channel.
+  /// The instance is captured at start (a plain method call) because stop can
+  /// run from `ref.onDispose`, where reading providers is forbidden.
+  bool _foregroundActive = false;
+  RunForegroundLifespan? _foregroundLifespan;
 
   /// The completed run whose disk write failed (§33) — held so TRY AGAIN on
   /// the save-error block can rewrite it. `null` once the save has landed.
@@ -321,6 +330,14 @@ class RecordingController extends Notifier<LiveRunState?> {
     if (source == null) {
       return;
     }
+    // Screen-off recording: keep the Android location foreground service up
+    // for exactly as long as the receiver streams fixes (§28), so Android
+    // 12+ keeps delivering GPS once the activity is stopped.
+    if (!_foregroundActive) {
+      _foregroundActive = true;
+      _foregroundLifespan = ref.read(runForegroundLifespanProvider);
+      unawaited(_foregroundLifespan!.start());
+    }
     _gpsSub?.cancel();
     _gpsSub = source.fixes().listen(_onDeviceFix, onError: (Object e) {
       // A dropped receiver (service flipped off mid-run, dongle unplugged)
@@ -332,6 +349,12 @@ class RecordingController extends Notifier<LiveRunState?> {
   void _stopDeviceStream() {
     _gpsSub?.cancel();
     _gpsSub = null;
+    if (_foregroundActive) {
+      _foregroundActive = false;
+      final lifespan = _foregroundLifespan;
+      _foregroundLifespan = null;
+      unawaited(lifespan?.stop() ?? Future<void>.value());
+    }
   }
 
   /// Real-GPS driver: one receiver fix advances the session.

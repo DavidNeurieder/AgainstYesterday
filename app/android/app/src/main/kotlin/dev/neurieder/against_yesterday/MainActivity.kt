@@ -15,10 +15,14 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 /**
- * Hosts the app's channel for writing exported GPX tracks into the public
- * Downloads folder. On API 29+ this goes through `MediaStore.Downloads`, which
- * needs no permission; API 24–28 write the file directly and therefore ask for
- * the legacy `WRITE_EXTERNAL_STORAGE` grant first.
+ * Hosts the app's platform channels:
+ *
+ *  * writing exported GPX tracks into the public Downloads folder (API 29+
+ *    via `MediaStore.Downloads`, no permission; API 24–28 write the file
+ *    directly and therefore ask for the legacy `WRITE_EXTERNAL_STORAGE` grant
+ *    first);
+ *  * keeping the recording foreground service (`RecordingForegroundService`)
+ *    matched to the live GPS stream while the screen is off.
  */
 class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
@@ -39,6 +43,20 @@ class MainActivity : FlutterActivity() {
                     return@setMethodCallHandler
                 }
                 saveToDownloads(name, contents, result)
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, RECORDING_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startRecording" -> {
+                        RecordingForegroundService.start(this)
+                        result.success(null)
+                    }
+                    "stopRecording" -> {
+                        RecordingForegroundService.stop(this)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
             }
     }
 
@@ -160,6 +178,7 @@ class MainActivity : FlutterActivity() {
 
     private companion object {
         const val CHANNEL = "dev.neurieder.against_yesterday/files"
+        const val RECORDING_CHANNEL = "dev.neurieder.against_yesterday/recording"
         const val STORAGE_REQUEST = 5416
         const val MIME_TYPE_GPX = "application/gpx+xml"
     }
