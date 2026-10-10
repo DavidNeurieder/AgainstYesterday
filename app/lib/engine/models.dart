@@ -301,6 +301,7 @@ class LiveRunState {
     this.ghostPosition,
     this.startedAt,
     this.error,
+    this.rawFixCount = 0,
   });
 
   final RunStatus status;
@@ -347,6 +348,12 @@ class LiveRunState {
   /// Why the run failed to start, when the status is [RunStatus.error]. Lives
   /// only while the error state is live — cleared as soon as the run moves on.
   final RunError? error;
+
+  /// How many raw GPS fixes the session has received so far (M15 Phase 12).
+  /// The live "FIXES" readout shows the count climbing during a run, so a
+  /// weak or indoor receiver that delivers almost nothing is visible
+  /// immediately instead of as a surprise in the saved track.
+  final int rawFixCount;
 }
 
 /// Position along a polyline at [distanceMeters] from its start (linear

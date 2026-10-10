@@ -136,13 +136,26 @@ class LiveRunScreen extends ConsumerWidget {
                   vertical: AppSpacing.md,
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _Metric(label: 'PACE', value: state.pace.formatPaceWith(units)),
-                    _Metric(
-                      label: 'TIME',
-                      value: state.elapsed.format(),
-                      prominent: true,
+                    Expanded(
+                      child: _Metric(
+                        label: 'PACE',
+                        value: state.pace.formatPaceWith(units),
+                      ),
+                    ),
+                    Expanded(
+                      child: _Metric(
+                        label: 'TIME',
+                        value: state.elapsed.format(),
+                        prominent: true,
+                      ),
+                    ),
+                    Expanded(
+                      child: _Metric(
+                        key: const ValueKey('live-fixes'),
+                        label: 'FIXES',
+                        value: '${state.rawFixCount}',
+                      ),
                     ),
                   ],
                 ),
@@ -325,6 +338,7 @@ class _GpsPill extends StatelessWidget {
 
 class _Metric extends StatelessWidget {
   const _Metric({
+    super.key,
     required this.label,
     required this.value,
     this.prominent = false,

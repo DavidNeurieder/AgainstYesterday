@@ -8,12 +8,14 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/ui/split_row.dart';
+import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../map/map_surface.dart';
 import '../../result/application/splits.dart';
@@ -137,6 +139,13 @@ class ActivityDetailScreen extends ConsumerWidget {
             for (final split in splits)
               SplitRow(split: split),
           ],
+          // The raw recorded fixes, for anyone who wants the exact GPS output
+          // behind the track: coordinates, local time and altitude when the
+          // receiver reported it.
+          if (activity.track case final track? when track.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xl),
+            _RawGpsSection(points: track),
+          ],
           const SizedBox(height: AppSpacing.xl),
           Text(
             'Run on ${_formatDate(activity.startedAt)}',
@@ -152,6 +161,146 @@ class ActivityDetailScreen extends ConsumerWidget {
 String _formatDate(DateTime dt) {
   final d = dt.toLocal();
   return '${d.day}/${d.month}/${d.year}';
+}
+
+/// One persisted raw GPS fix, formatted as a plain coordinate line.
+String _fixToLine(TrackPoint p) {
+  final position = p.position;
+  final altitude = p.altitudeMeters;
+  return '${position.latitude.toStringAsFixed(6)}, '
+      '${position.longitude.toStringAsFixed(6)}, '
+      '${p.timestamp.toUtc().toIso8601String()}'
+      '${altitude == null ? '' : ', ${altitude.toStringAsFixed(1)} m'}';
+}
+
+/// Collapsible raw GPS readout on the activity detail screen.
+///
+/// Lists every recorded fix (lat/lon, local time, altitude when the receiver
+/// reported it) in a bounded scroller so a multi-thousand-point run stays
+/// cheap, and offers the whole track as copied text — one comma-separated
+/// line per fix, UTC timestamps — for pasting into a map tool or tracker.
+class _RawGpsSection extends StatefulWidget {
+  const _RawGpsSection({required this.points});
+
+  final List<TrackPoint> points;
+
+  @override
+  State<_RawGpsSection> createState() => _RawGpsSectionState();
+}
+
+class _RawGpsSectionState extends State<_RawGpsSection> {
+  Future<void> _copyCoordinates() async {
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(
+      ClipboardData(
+        text: [for (final p in widget.points) _fixToLine(p)].join('\n'),
+      ),
+    );
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Raw coordinates copied to clipboard.'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final points = widget.points;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        key: const ValueKey('raw-gps-section'),
+        title: Text(
+          'Raw GPS',
+          style: textTheme.titleMedium,
+        ),
+        subtitle: Text(
+          '${points.length} ${points.length == 1 ? 'fix' : 'fixes'}',
+          style: textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+        ),
+        childrenPadding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        children: [
+          SizedBox(
+            height: 260,
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: points.length,
+              itemBuilder: (context, index) {
+                final p = points[index];
+                final position = p.position;
+                final altitude = p.altitudeMeters;
+                final time = p.timestamp.toLocal();
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 40,
+                        child: Text(
+                          '${index + 1}.',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: AppColors.textMuted,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${position.latitude.toStringAsFixed(6)}, '
+                              '${position.longitude.toStringAsFixed(6)}',
+                              style: textTheme.bodyMedium?.copyWith(
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${time.hour.toString().padLeft(2, '0')}:'
+                              '${time.minute.toString().padLeft(2, '0')}:'
+                              '${time.second.toString().padLeft(2, '0')}'
+                              '${altitude == null ? '' : ' · ${altitude.toStringAsFixed(1)} m'}',
+                              style: textTheme.bodySmall?.copyWith(
+                                color: AppColors.textSecondary,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                key: const ValueKey('copy-raw-gps'),
+                onPressed: _copyCoordinates,
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                label: const Text('Copy coordinates'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _NotFoundScreen extends StatelessWidget {

@@ -987,6 +987,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       route: session.route,
       ghostPosition: ghostPosition ?? state?.ghostPosition,
       startedAt: session.startedAt,
+      rawFixCount: session.rawFixes.length,
     );
   }
 

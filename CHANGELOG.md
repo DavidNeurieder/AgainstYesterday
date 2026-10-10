@@ -29,6 +29,14 @@ documented here, grouped by the implementation milestones in
   seam (static view, no follow, no markers), so every run — including a free
   "New route" run — shows its trace, and runs recorded before the map kept no
   track fall back to the previous layout.
+- Activity detail also exposes the raw GPS behind the track: a collapsible
+  "Raw GPS" card lists every recorded fix (lat/lon, local time, altitude when
+  the receiver reported it) in a bounded scroller, and "Copy coordinates"
+  puts one comma-separated line per fix — UTC timestamps — on the clipboard
+  for pasting into map tools. The live run screen gains a small FIXES
+  readout fed by the controller's raw-fix count, so a receiver that is
+  delivering almost nothing (indoors, pocket, no lock) is visible mid-run
+  rather than as a surprise in the saved track.
 - Offline regions (Phase 3 of `ideas/offline_map_plan.txt`): each route can be
   downloaded for offline use from the route detail page ("Download offline
   map") and managed in Settings → Map — progress while it downloads, delete
