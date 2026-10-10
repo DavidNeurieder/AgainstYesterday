@@ -46,9 +46,14 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   (`RecordingForegroundService`, started/stopped over the
   `dev.neurieder.against_yesterday/recording` platform channel) so fixes keep
   arriving with the screen off — Android 12+ delivers no location to a
-  backgrounded app without one. The service holds no GPS logic of its own;
-  on non-Android hosts and scenario runs the `RunForegroundLifespan` seam is a
-  no-op.
+  backgrounded app without one. Startup is observable: a typed failure
+  (`RunForegroundLifespan`, `ForegroundStartFailure`) becomes a
+  `BackgroundProtection.unavailable` banner and a diagnostics row; the run
+  itself keeps recording screen-on. Process death is explicitly unsupported:
+  the service is `START_NOT_STICKY` and recording does not survive a kill.
+  The service holds no GPS logic of its own; on non-Android hosts and
+  scenario runs the `RunForegroundLifespan` seam is a no-op (see
+  `docs/android_foreground_recording.md`).
 - Android cdylibs land in `app/android/app/src/main/jniLibs/<abi>/` via
   `app/tool/build_rust_engine_android.sh`; they are gitignored, so rerun the
   script after a clean checkout. `make install` and `make build-release` run

@@ -85,6 +85,10 @@ class RecordingController extends Notifier<LiveRunState?> {
   bool _foregroundActive = false;
   RunForegroundLifespan? _foregroundLifespan;
 
+  /// Foreground-service protection, separate from the recorded run state so a
+  /// failed start can never masquerade as a GPS or run failure.
+  BackgroundProtection _protection = BackgroundProtection.inactive;
+
   /// The completed run whose disk write failed (§33) — held so TRY AGAIN on
   /// the save-error block can rewrite it. `null` once the save has landed.
   Activity? _lastFinishedActivity;
@@ -332,11 +336,15 @@ class RecordingController extends Notifier<LiveRunState?> {
     }
     // Screen-off recording: keep the Android location foreground service up
     // for exactly as long as the receiver streams fixes (§28), so Android
-    // 12+ keeps delivering GPS once the activity is stopped.
+    // 12+ keeps delivering GPS once the activity is stopped. Startup is
+    // observable: the outcome lands in [BackgroundProtection] instead of being
+    // assumed.
     if (!_foregroundActive) {
       _foregroundActive = true;
       _foregroundLifespan = ref.read(runForegroundLifespanProvider);
-      unawaited(_foregroundLifespan!.start());
+      _protection = BackgroundProtection.starting;
+      _refreshState();
+      unawaited(_ensureForegroundService());
     }
     _gpsSub?.cancel();
     _gpsSub = source.fixes().listen(_onDeviceFix, onError: (Object e) {
@@ -346,6 +354,52 @@ class RecordingController extends Notifier<LiveRunState?> {
     });
   }
 
+  /// Asks the platform to elevate the recording, then records the outcome in
+  /// [_protection]. A failure is logged and surfaced, never silently assumed
+  /// away — but it is also deliberately *not* fatal: GNSS recording with the
+  /// screen on works without the service, so the run continues and simply
+  /// reports that screen-off protection is off.
+  Future<void> _ensureForegroundService() async {
+    final lifespan = _foregroundLifespan;
+    if (lifespan == null) {
+      return;
+    }
+    ForegroundStartFailure? failure;
+    try {
+      failure = await lifespan.start();
+    } catch (error, stack) {
+      // A buggy seam must not hang the run, but it must be loud.
+      debugPrint('Foreground recording service start threw: $error\n$stack');
+      failure = ForegroundStartFailure.unknown;
+    }
+    if (lifespan != _foregroundLifespan) {
+      // A stop (or a newer start) superseded this request while it was in
+      // flight, so the outcome no longer describes the current state.
+      return;
+    }
+    if (failure == null) {
+      _protection = BackgroundProtection.active;
+    } else {
+      debugPrint('Foreground recording service could not start: '
+          '${failure.message}');
+      // Allow a later resume to try again; nothing is up to stop.
+      _foregroundActive = false;
+      _foregroundLifespan = null;
+      _protection = BackgroundProtection.unavailable;
+    }
+    _refreshState();
+  }
+
+  /// Re-emits the current status so protection changes reach the UI between
+  /// the regular ~2 Hz ticks, preserving the live pace. No-op when no state
+  /// has been emitted yet.
+  void _refreshState() {
+    final current = state;
+    if (current != null) {
+      _emit(status: current.status, pace: current.pace);
+    }
+  }
+
   void _stopDeviceStream() {
     _gpsSub?.cancel();
     _gpsSub = null;
@@ -353,6 +407,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       _foregroundActive = false;
       final lifespan = _foregroundLifespan;
       _foregroundLifespan = null;
+      _protection = BackgroundProtection.inactive;
       unawaited(lifespan?.stop() ?? Future<void>.value());
     }
   }
@@ -1011,6 +1066,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       ghostPosition: ghostPosition ?? state?.ghostPosition,
       startedAt: session.startedAt,
       rawFixCount: session.rawFixes.length,
+      backgroundProtection: _protection,
     );
   }
 

@@ -61,6 +61,14 @@ class LiveRunScreen extends ConsumerWidget {
                 const _WeakGpsBanner(),
                 const SizedBox(height: AppSpacing.md),
               ],
+              // A failed foreground-service start is said out loud: recording
+              // may continue with the screen on, but the UI never claims it is
+              // protected with the screen off.
+              if (state.backgroundProtection ==
+                  BackgroundProtection.unavailable) ...[
+                const _ProtectionBanner(),
+                const SizedBox(height: AppSpacing.md),
+              ],
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 transitionBuilder: (child, animation) =>
@@ -192,6 +200,55 @@ class LiveRunScreen extends ConsumerWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Screen-off protection failed to start. The run may keep recording with the
+/// screen on, but Android will not deliver GPS while the screen is off — say
+/// it out loud instead of pretending the recording is protected.
+class _ProtectionBanner extends StatelessWidget {
+  const _ProtectionBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: AppColors.gpsWarning.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.gpsWarning),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.phonelink_lock, color: AppColors.gpsWarning),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SCREEN-OFF RECORDING NOT PROTECTED',
+                    style: textTheme.titleSmall?.copyWith(
+                      color: AppColors.gpsWarning,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'The run is still recording while the screen is on.',
+                    style: textTheme.bodySmall
+                        ?.copyWith(color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

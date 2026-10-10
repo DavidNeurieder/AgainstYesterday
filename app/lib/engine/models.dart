@@ -284,6 +284,34 @@ class RunError {
 ///
 /// The UI is a pure projection of this state (§9): every screen reads it and
 /// derives what to show — it never mutates recording logic itself.
+/// Whether Android is keeping the GPS pipeline alive when the phone screen is
+/// off (foreground `location` service). Deliberately separate from [RunStatus]:
+/// GNSS may still record perfectly with the screen on even when protection is
+/// unavailable, and the UI must never claim protection it does not have.
+enum BackgroundProtection {
+  /// No elevation requested — idle, paused, a scenario run, or after a clean
+  /// stop.
+  inactive,
+
+  /// Elevation requested; the platform's answer is still pending.
+  starting,
+
+  /// The platform confirmed the foreground service is running: screen-off
+  /// recording is protected.
+  active,
+
+  /// The last elevation attempt failed. The run may keep recording with the
+  /// screen on, but screen-off recording is NOT protected.
+  unavailable;
+
+  String get label => switch (this) {
+    BackgroundProtection.inactive => 'inactive',
+    BackgroundProtection.starting => 'starting',
+    BackgroundProtection.active => 'active',
+    BackgroundProtection.unavailable => 'unavailable',
+  };
+}
+
 class LiveRunState {
   const LiveRunState({
     required this.status,
@@ -302,6 +330,7 @@ class LiveRunState {
     this.startedAt,
     this.error,
     this.rawFixCount = 0,
+    this.backgroundProtection = BackgroundProtection.inactive,
   });
 
   final RunStatus status;
@@ -354,6 +383,10 @@ class LiveRunState {
   /// weak or indoor receiver that delivers almost nothing is visible
   /// immediately instead of as a surprise in the saved track.
   final int rawFixCount;
+
+  /// Foreground-service protection for screen-off recording, kept separate
+  /// from the run status (see [BackgroundProtection]).
+  final BackgroundProtection backgroundProtection;
 }
 
 /// Position along a polyline at [distanceMeters] from its start (linear

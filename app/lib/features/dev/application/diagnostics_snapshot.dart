@@ -45,6 +45,7 @@ class DiagnosticsSnapshot {
     required this.distanceDescription,
     required this.rawFixCount,
     required this.processedPointCount,
+    required this.backgroundProtectionDescription,
     required this.routeName,
     required this.routeProgress,
     required this.routeGeometryPoints,
@@ -74,6 +75,9 @@ class DiagnosticsSnapshot {
 
   /// Processed points the run would be persisted with.
   final int processedPointCount;
+
+  /// Foreground-service protection state, in words a developer can trust.
+  final String backgroundProtectionDescription;
 
   /// `null` means "new route" (no route recognised).
   final String? routeName;
@@ -126,6 +130,15 @@ final diagnosticsSnapshotProvider = Provider.autoDispose<DiagnosticsSnapshot>((
     distanceDescription: live?.distance.format() ?? '—',
     rawFixCount: liveFixes?.length ?? 0,
     processedPointCount: processed?.length ?? 0,
+    backgroundProtectionDescription: switch (live?.backgroundProtection) {
+      BackgroundProtection.active =>
+        'active — screen-off recording protected',
+      BackgroundProtection.starting => 'starting',
+      BackgroundProtection.unavailable =>
+        'unavailable — screen-off recording not protected',
+      BackgroundProtection.inactive => 'inactive — no device stream',
+      null => '—',
+    },
     routeName: live?.route?.name,
     routeProgress: live?.routeProgress ?? 0,
     routeGeometryPoints: live?.route?.geometry.length ?? 0,

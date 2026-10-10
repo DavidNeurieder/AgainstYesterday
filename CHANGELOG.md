@@ -221,6 +221,24 @@ documented here, grouped by the implementation milestones in
   owns no GPS itself (the Dart geolocator stream still drives the recording);
   it only keeps the process foreground in the OS's eyes. Scenario and host
   runs never touch the channel (`recording_service_lifespan_test.dart`).
+- The screen-off service is now *observable* and honest (phases 1–3 of
+  `ideas/android_plan.txt`): startup reports a typed result — success,
+  `permission-denied`, `location-disabled`, `not-allowed`, or a generic
+  failure — recorded as a `BackgroundProtection` deliberately separate from
+  the run status. A failed start no longer silently assumes protection: the
+  live screen shows a "SCREEN-OFF RECORDING NOT PROTECTED" banner and the
+  developer diagnostics add a `Foreground service` row, while the run itself
+  keeps recording (screen-on GNSS never needed the service; the cause is
+  logged with context). Lifecycle hardening: start/pause/resume/finish/
+  dispose are idempotent, a finish while startup is still pending leaves no
+  orphaned service (the in-flight start is superseded), and process death is
+  explicitly unsupported — the service is `START_NOT_STICKY` so the OS never
+  resurfaces a "Recording your run" notification for a recording that no
+  longer exists. Verifies:
+  `recording_service_lifespan_test.dart` (lifecycle, failure surfacing, no
+  orphan, idempotency), `run_foreground_channel_test.dart` (native code →
+  typed failure mapping), `live_run_protection_banner_test.dart`; full design
+  and compatibility notes in `docs/android_foreground_recording.md`.
 
 ### Changed
 

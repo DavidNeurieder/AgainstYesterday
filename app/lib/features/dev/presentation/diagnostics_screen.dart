@@ -74,6 +74,10 @@ class _DiagnosticsScreenState extends ConsumerState<DiagnosticsScreen> {
                 _row('Distance', snapshot.distanceDescription),
                 _row('Raw fixes', '${snapshot.rawFixCount}'),
                 _row('Session points', '${snapshot.processedPointCount}'),
+                _row(
+                  'Foreground service',
+                  snapshot.backgroundProtectionDescription,
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.md),

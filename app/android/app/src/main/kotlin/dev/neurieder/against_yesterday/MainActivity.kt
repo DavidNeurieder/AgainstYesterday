@@ -6,6 +6,7 @@ package dev.neurieder.against_yesterday
 import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -47,10 +48,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, RECORDING_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "startRecording" -> {
-                        RecordingForegroundService.start(this)
-                        result.success(null)
-                    }
+                    "startRecording" -> startRecordingService(result)
                     "stopRecording" -> {
                         RecordingForegroundService.stop(this)
                         result.success(null)
@@ -58,6 +56,66 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * Starts the location foreground service, failing with a typed channel
+     * error instead of crashing the run when Android will not allow it. The
+     * Dart side maps the code back onto a user-visible reason and surfaces it,
+     * never assuming screen-off protection it does not have.
+     */
+    private fun startRecordingService(result: MethodChannel.Result) {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            result.error(
+                "permission-denied",
+                "Location permission is missing.",
+                null,
+            )
+            return
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val manager = getSystemService(LocationManager::class.java)
+            if (!manager.isLocationEnabled) {
+                result.error(
+                    "location-disabled",
+                    "Location services are off.",
+                    null,
+                )
+                return
+            }
+        }
+        try {
+            RecordingForegroundService.start(this)
+            result.success(null)
+        } catch (error: SecurityException) {
+            result.error(
+                "security",
+                error.message ?: "Location permission was revoked.",
+                null,
+            )
+        } catch (error: RuntimeException) {
+            // API 31+ throws ForegroundServiceStartNotAllowedException for a
+            // start the app's state does not permit; the class only exists on
+            // 31+, so match it by name to stay safe on older runtimes.
+            if (error.javaClass.name ==
+                "android.app.ForegroundServiceStartNotAllowedException"
+            ) {
+                result.error(
+                    "not-allowed",
+                    "Android refused to start the recording service "
+                        + "from the background.",
+                    null,
+                )
+            } else {
+                result.error(
+                    "start-failed",
+                    error.message ?: "The recording service could not start.",
+                    null,
+                )
+            }
+        }
     }
 
     private fun saveToDownloads(

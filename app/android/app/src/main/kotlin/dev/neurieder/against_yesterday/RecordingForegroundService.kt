@@ -28,6 +28,12 @@ import android.os.IBinder
  * (visible as a persistent notification) for exactly as long as the device
  * stream lives; the controller starts it in `_startDeviceStream` and stops it
  * in `_stopDeviceStream`.
+ *
+ * Process-death scope (Phase 2, Option A): recording does *not* survive a
+ * process kill or force-stop. If the OS reaps the process, the Dart session is
+ * gone, so the service deliberately does not resurrect itself (`START_NOT
+ * _STICKY`): it must not show a "Recording your run" notification for a
+ * recording that no longer exists.
  */
 class RecordingForegroundService : Service() {
 
@@ -50,9 +56,10 @@ class RecordingForegroundService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, buildNotification())
         }
-        // The OS may reap the service at any time; START_STICKY restarts it
-        // (with a null intent) so a run survives a low-memory kill.
-        return START_STICKY
+        // Deliberately NOT START_STICKY: process death ends the Dart recording
+        // too, and a resurrected service would only show a misleading
+        // notification (see the class comment).
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
