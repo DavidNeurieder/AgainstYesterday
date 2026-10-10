@@ -4,8 +4,9 @@
 /// The offline MapLibre renderer behind [MapSurface].
 ///
 /// Draws the scene as GeoJSON line layers over a vector style — the full route
-/// faint, the travelled portion in the YOU color — plus circle markers for YOU
-/// and the PB ghost. The camera follows YOU on a live run until the user pans,
+/// faint, the travelled portion in a track green that contrasts with the light
+/// map style — plus circle markers for YOU and the PB ghost. The camera
+/// follows YOU on a live run until the user pans,
 /// when a recenter button re-attaches it; a static thumbnail fits the whole
 /// geometry instead. The style URL comes from `MAP_STYLE_URL` so a self-hosted
 /// tile server can replace the default without a code change.
@@ -52,6 +53,10 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
 
   /// `AppColors.ghost` (#8593A7); map layers take CSS color strings.
   static const String _routeColor = '#8593A7';
+
+  /// `AppColors.track` (#34C77B): the travelled GPS path, kept green so it
+  /// stands out over the light OpenFreeMap style.
+  static const String _traveledColor = '#34C77B';
 
   /// `AppColors.you` (#F2F4F8) and `AppColors.background` (#0E1116).
   static const String _youColor = '#F2F4F8';
@@ -156,7 +161,7 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       _traveledSourceId,
       _traveledLayerId,
       const LineLayerProperties(
-        lineColor: _youColor,
+        lineColor: _traveledColor,
         lineWidth: 4,
         lineJoin: 'round',
         lineCap: 'round',

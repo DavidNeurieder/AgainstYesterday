@@ -430,7 +430,7 @@ class _MapPainter extends CustomPainter {
     final traveled = _traveledPath(full, youProgress.clamp(0.0, 1.0));
     if (traveled.length >= 2) {
       final youLine = Paint()
-        ..color = AppColors.you
+        ..color = AppColors.track
         ..strokeWidth = 3
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round

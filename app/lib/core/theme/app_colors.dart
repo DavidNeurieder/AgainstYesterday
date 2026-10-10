@@ -40,6 +40,12 @@ abstract final class AppColors {
   /// YOU — the live run (white primary, like the plan's "Primary white").
   static const Color you = Color(0xFFF2F4F8);
 
+  /// The travelled part of the route on a map — the GPS path you have actually
+  /// run. A saturated green (the same hue family as [ahead]) so it stays
+  /// legible over both the dark painter surface and the light MapLibre style;
+  /// the full route behind it remains the faint [ghost] trace.
+  static const Color track = Color(0xFF34C77B);
+
   /// GHOST — the reference attempt. AA on every surface (M28).
   static const Color ghost = Color(0xFF8593A7);
 
