@@ -285,8 +285,67 @@ const GpsScenario gpsOutage = GpsScenario(
   ],
 );
 
+/// Two fixes, a 90 s hole, then two more: the hole is wider than the engine's
+/// 60 s gap ceiling, so a free run must not bridge it. The pre-hole and
+/// post-hole strides are each real ground; only the hole's straight line is
+/// dropped.
+final GpsScenario gpsDropout = GpsScenario(
+  name: 'gps_dropout',
+  expectedDistanceMeters: 2 * _meridianMeters(0.001),
+  expectedAcceptedFixes: 2,
+  samples: [
+    GpsSample(
+      after: Duration(seconds: 10),
+      position: GeoPoint(latitude: 52.5000, longitude: 13.4000),
+    ),
+    GpsSample(
+      after: Duration(seconds: 10),
+      position: GeoPoint(latitude: 52.5010, longitude: 13.4000),
+    ),
+    // The receiver drops out: the next fix is 90 s later, far up the road.
+    GpsSample(
+      after: Duration(seconds: 90),
+      position: GeoPoint(latitude: 52.5100, longitude: 13.4000),
+    ),
+    GpsSample(
+      after: Duration(seconds: 10),
+      position: GeoPoint(latitude: 52.5110, longitude: 13.4000),
+    ),
+  ],
+);
+
+/// A steady walk with one wild sample: the receiver jumps ~680 m east for a
+/// single fix, then returns to the line. The spike may add no distance, and
+/// the next genuine fix is measured from the last trusted position, not the
+/// spike — so the run keeps only the two real strides.
+final GpsScenario gpsSpike = GpsScenario(
+  name: 'gps_spike',
+  expectedDistanceMeters: 2 * _meridianMeters(0.001),
+  expectedAcceptedFixes: 2,
+  samples: [
+    GpsSample(
+      after: Duration(seconds: 10),
+      position: GeoPoint(latitude: 52.5000, longitude: 13.4000),
+    ),
+    GpsSample(
+      after: Duration(seconds: 10),
+      position: GeoPoint(latitude: 52.5010, longitude: 13.4000),
+    ),
+    GpsSample(
+      after: Duration(seconds: 10),
+      position: GeoPoint(latitude: 52.5010, longitude: 13.4100),
+    ),
+    GpsSample(
+      after: Duration(seconds: 10),
+      position: GeoPoint(latitude: 52.5020, longitude: 13.4000),
+    ),
+  ],
+);
+
 /// A cached initial fix timestamped 30 s in the past, then fresh fixes: the
-/// stale sample must not be read as movement back at the start line.
+/// stale sample must not be read as movement back at the start line. The fresh
+/// step covers 111 m over ten seconds — a fast but *plausible* stride, so the
+/// discontinuity guard does not mistake it for a spike.
 final GpsScenario staleInitialFix = GpsScenario(
   name: 'stale_initial_fix',
   samples: const [
@@ -302,7 +361,7 @@ final GpsScenario staleInitialFix = GpsScenario(
       speedMetersPerSecond: 3.0,
     ),
     GpsSample(
-      after: Duration(seconds: 1),
+      after: Duration(seconds: 10),
       position: GeoPoint(latitude: 52.5010, longitude: 13.4000),
       speedMetersPerSecond: 3.0,
     ),

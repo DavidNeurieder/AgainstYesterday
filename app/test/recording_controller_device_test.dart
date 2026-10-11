@@ -109,8 +109,11 @@ void main() {
         c.read(recordingControllerProvider.notifier).beginRun();
         async.flushMicrotasks();
 
+        // A ~4.4 m stride over 1.2 s (3.7 m/s): plausible ground, so the
+        // free-run discontinuity guard accepts it rather than reading it as a
+        // spike.
         const a = GeoPoint(latitude: 52.5000, longitude: 13.3700);
-        const b = GeoPoint(latitude: 52.5025, longitude: 13.3700);
+        const b = GeoPoint(latitude: 52.50004, longitude: 13.3700);
         async.elapse(const Duration(milliseconds: 1200));
         stream.add(_fix(a.latitude, a.longitude));
         async.flushMicrotasks();
@@ -214,7 +217,7 @@ void main() {
 
         // A genuine step afterwards resumes the run from the last heard fix.
         async.elapse(const Duration(milliseconds: 1200));
-        stream.add(_fix(52.5003, 13.3700));
+        stream.add(_fix(52.50004, 13.3700));
         async.flushMicrotasks();
 
         final moved = state(c)!;

@@ -201,9 +201,10 @@ void main() {
         );
 
         // And the run itself keeps recording — GNSS with the screen on does
-        // not need the service — so fixes still advance distance.
+        // not need the service — so fixes still advance distance. A ~4.4 m
+        // stride over 1.2 s is plausible ground, not a rejected spike.
         const a = GeoPoint(latitude: 52.5000, longitude: 13.3700);
-        const b = GeoPoint(latitude: 52.5025, longitude: 13.3700);
+        const b = GeoPoint(latitude: 52.50004, longitude: 13.3700);
         async.elapse(const Duration(milliseconds: 1200));
         stream.add(
           GpsFix(

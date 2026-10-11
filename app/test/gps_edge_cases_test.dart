@@ -217,6 +217,44 @@ void main() {
     });
   });
 
+  group('dropouts and spikes', () {
+    test('a dropout wider than the gap ceiling is not bridged', () {
+      fakeAsync((async) {
+        final h = harness();
+        record(h, async, gpsDropout);
+        final s = live(h.container);
+        // Only the two connected strides count: the 90 s hole's straight line
+        // — a kilometre the receiver never reported — is dropped rather than
+        // fabricated.
+        expect(
+          s.distance.meters,
+          closeTo(gpsDropout.expectedDistanceMeters!, 1.0),
+        );
+        // The hole adds no moving time either; only the two 10 s strides do.
+        expect(s.elapsed.seconds, closeTo(20, 1e-6));
+        // Every raw fix is still retained for the audit.
+        expect(controller(h.container).currentFixes(), hasLength(4));
+      });
+    });
+
+    test('an implausible spike adds no distance or moving time', () {
+      fakeAsync((async) {
+        final h = harness();
+        record(h, async, gpsSpike);
+        final s = live(h.container);
+        // The ~680 m spike is rejected, and the next genuine fix is measured
+        // from the last trusted position — so the run keeps exactly its two
+        // real 111 m strides.
+        expect(
+          s.distance.meters,
+          closeTo(gpsSpike.expectedDistanceMeters!, 1.0),
+        );
+        expect(s.elapsed.seconds, closeTo(20, 1e-6));
+        expect(controller(h.container).currentFixes(), hasLength(4));
+      });
+    });
+  });
+
   group('GPS quality and missing fields', () {
     test('poor accuracy is flagged while the movement still counts', () {
       fakeAsync((async) {

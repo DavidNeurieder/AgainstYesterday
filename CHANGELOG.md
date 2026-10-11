@@ -252,6 +252,21 @@ documented here, grouped by the implementation milestones in
   (Xiaomi/OnePlus/Samsung/Huawei-style power managers kill even foreground
   services at screen-off) — the standard tracker stack
   (`docs/android_foreground_recording.md`).
+- A *free* device recording no longer fabricates distance across a GPS hole or
+  a re-acquisition spike. The live path added the straight line
+  `haversine(prev, this)` between consecutive raw fixes, so a dropout became a
+  chord the receiver never walked (undercounted on a curve or a loop back to
+  the start) and a spike became kilometres that were never run. The device
+  driver now drops a free-run segment as *discontinuous* when the hole is
+  wider than the engine's 60 s gap ceiling, when its implied speed exceeds the
+  engine's 90 km/h `max_speed`, or when the receiver itself reports a speed
+  past that ceiling: the raw fix is still kept for the Raw GPS view and the
+  dot still tracks, but the segment adds neither distance nor moving time. A
+  dropout re-anchors on the fresh fix; a spike keeps the last trusted position,
+  so the next genuine fix is measured locally instead of from the bad one.
+  Route runs are unchanged — they read the distance straight off the recognised
+  geometry, which is absolute and already immune to both
+  (`gps_edge_cases_test.dart`: `gps_dropout`, `gps_spike`).
 
 ### Changed
 

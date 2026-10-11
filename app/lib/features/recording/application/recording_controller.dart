@@ -67,6 +67,17 @@ class RecordingController extends Notifier<LiveRunState?> {
   /// run, adds moving time, or shows a phantom pace.
   static const double _motionFloorMps = 0.5;
 
+  /// A hole longer than this between fixes is a dropout, not bridgeable
+  /// ground (the engine's `FilterConfig::max_time_gap`). A free run never
+  /// fabricates the straight line across it.
+  static const double _maxFixGapSeconds = 60.0;
+
+  /// Plausibility ceiling for a free-running segment (the engine's
+  /// `FilterConfig::max_speed`, 90 km/h): far above any run or ride, far below
+  /// a GPS artifact. A faster segment — implied by the ground or reported by
+  /// the receiver — is a spike, not distance.
+  static const double _maxPlausibleSpeedMps = 25.0;
+
   Timer? _timer;
   _RecSession? _session;
   final math.Random _random = math.Random(7);
@@ -418,6 +429,15 @@ class RecordingController extends Notifier<LiveRunState?> {
   /// phone sits still — even when the receiver serves a stale cached speed —
   /// the fix lands in the raw buffer and tracks the map position, but never
   /// adds moving time, distance, or a phantom cruise pace.
+  ///
+  /// A free run additionally drops *discontinuous* segments ([_isDiscontinuity]):
+  /// a dropout longer than [_maxFixGapSeconds] or a spike faster than
+  /// [_maxPlausibleSpeedMps] is real receiver output that keeps its raw fix and
+  /// dot, but never fabricates distance or moving time — otherwise a GPS hole
+  /// becomes a straight line `haversine(prev, this)` and a re-acquisition spike
+  /// becomes kilometres that were never run. Route runs instead read the
+  /// distance straight off the recognised geometry, which is absolute and thus
+  /// already immune to both.
   void _onDeviceFix(GpsFix fix) {
     if (state?.status != RunStatus.running) {
       return; // paused / finishing ignore late fixes
@@ -435,9 +455,27 @@ class RecordingController extends Notifier<LiveRunState?> {
     final onRoute = projected != null && session.route != null;
 
     // Ground covered since the previous fix (0 for the very first).
-    final groundMeters = _prevRawPosition == null
+    final previousPosition = _prevRawPosition;
+    final groundMeters = previousPosition == null
         ? 0.0
-        : haversineMeters(_prevRawPosition!, position);
+        : haversineMeters(previousPosition, position);
+
+    if (!onRoute &&
+        _isDiscontinuity(fix, groundMeters, deltaSeconds)) {
+      // Keep the fix (it is auditable receiver output) but let it move neither
+      // distance nor moving time. A dropout re-anchors on the fresh fix — the
+      // runner really did move during the hole, we just do not bridge it. A
+      // spike keeps the last trusted position, so the *next* genuine fix is
+      // measured locally instead of from the bad one (the engine anchors on
+      // the last surviving point for the same reason).
+      if (deltaSeconds > _maxFixGapSeconds) {
+        _prevRawPosition = position;
+      }
+      _recordDeviceFix(fix);
+      _emit(status: RunStatus.running, position: position, pace: Speed.zero());
+      _snapshotThrottled();
+      return;
+    }
     _prevRawPosition = position;
 
     if (!_isMoving(fix, groundMeters, deltaSeconds)) {
@@ -482,6 +520,30 @@ class RecordingController extends Notifier<LiveRunState?> {
       pace: _fixPace(fix, groundMeters, deltaSeconds),
     );
     _snapshotThrottled();
+  }
+
+  /// Whether a free-running fix is discontinuous with the last trusted one: a
+  /// dropout or an implausible jump. The ceilings mirror the engine's
+  /// `FilterConfig` defaults, so the live path drops the same junk the Rust
+  /// pipeline would.
+  ///
+  /// A reported speed over the ceiling is junk even when the ground is too
+  /// small to corroborate it (a receiver serving a stale cached spike). The
+  /// implied-speed rule only applies across a *connected* segment: once a hole
+  /// is wider than [_maxFixGapSeconds] the drop itself is the discontinuity,
+  /// and the separation across it must not be read as speed.
+  bool _isDiscontinuity(GpsFix fix, double groundMeters, double deltaSeconds) {
+    if (deltaSeconds > _maxFixGapSeconds) {
+      return true;
+    }
+    final reported = fix.speedMetersPerSecond;
+    if (reported != null && reported > _maxPlausibleSpeedMps) {
+      return true;
+    }
+    if (deltaSeconds <= 0) {
+      return false;
+    }
+    return groundMeters / deltaSeconds > _maxPlausibleSpeedMps;
   }
 
   /// Whether a fix plausibly moved the runner. The ground covered between

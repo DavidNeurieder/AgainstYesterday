@@ -173,7 +173,11 @@ flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
 `make build`, `make install` and `make build-release` pass the define for you.
 On a recognised route the live fix snaps onto that route's geometry for the
 ghost gap (never rewinding accumulated distance); an unrecognised line
-accumulates ground distance as a new route. The Android manifest carries
+accumulates ground distance as a new route. A free run refuses two kinds of
+junk segment — a dropout wider than the engine's 60 s gap ceiling (its straight
+line is never bridged) and a fix implying more than 90 km/h (a re-acquisition
+spike) — keeping the raw fix but moving neither distance nor moving time, the
+same ceilings the Rust filter applies. The Android manifest carries
 `ACCESS_FINE_LOCATION`/`ACCESS_COARSE_LOCATION`, and `Info.plist` declares
 `NSLocationWhenInUseUsageDescription`. Refusals (services off, permission
 denied) surface as the recoverable `RunStatus.error` (M14). Host tests never
