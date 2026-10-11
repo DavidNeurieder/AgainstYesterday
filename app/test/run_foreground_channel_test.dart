@@ -40,6 +40,7 @@ void main() {
       'not-allowed': ForegroundStartFailure.notAllowed,
       'permission-denied': ForegroundStartFailure.denied,
       'security': ForegroundStartFailure.denied,
+      'background-denied': ForegroundStartFailure.backgroundDenied,
       'location-disabled': ForegroundStartFailure.locationDisabled,
       'start-failed': ForegroundStartFailure.platform,
       'some-unexpected-code': ForegroundStartFailure.unknown,

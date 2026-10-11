@@ -239,6 +239,19 @@ documented here, grouped by the implementation milestones in
   orphan, idempotency), `run_foreground_channel_test.dart` (native code →
   typed failure mapping), `live_run_protection_banner_test.dart`; full design
   and compatibility notes in `docs/android_foreground_recording.md`.
+- Screen-off GPS recording now covers the two cases the foreground service
+  alone could not: the app declares `ACCESS_BACKGROUND_LOCATION` and the
+  native start fails with a typed `background-denied` on Android 10/11
+  (API 29/30) when the user has not chosen "Allow all the time" — the
+  foreground-service exemption only exists on Android 12+, so on 10/11 the
+  UI now reports `BackgroundProtection.unavailable` instead of silently
+  claiming protection that cannot exist. The recording service also holds a
+  partial wake lock for the duration of a run (Doze cannot suspend the CPU
+  underneath the fix pipeline) and asks once per install for the OEM
+  battery-optimization exemption via `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
+  (Xiaomi/OnePlus/Samsung/Huawei-style power managers kill even foreground
+  services at screen-off) — the standard tracker stack
+  (`docs/android_foreground_recording.md`).
 
 ### Changed
 

@@ -11,6 +11,19 @@
          FOREGROUND_SERVICE_LOCATION permission is required from API 34. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <!-- Android 10/11 (API 29/30) still gate background location behind
+         ACCESS_BACKGROUND_LOCATION ("Allow all the time") — the foreground
+         service only exempts an app from that restriction on Android 12+.
+         Declaring it is also what makes the "Allow all the time" option
+         appear in the permission UI on Android 11. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <!-- The recording service holds a partial wake lock while a run is live,
+         so Doze cannot suspend the CPU underneath the GPS pipeline. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- OEM power managers (Xiaomi, OnePlus, Samsung, Huawei, ...) kill even
+         foreground services when the screen goes off; the app asks once for
+         the battery-optimization exemption, the standard tracker behaviour. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- GPX export on API 24–28 writes the public Downloads folder directly;
          API 29+ uses MediaStore and needs no permission. -->
     <uses-permission

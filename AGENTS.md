@@ -49,10 +49,15 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   backgrounded app without one. Startup is observable: a typed failure
   (`RunForegroundLifespan`, `ForegroundStartFailure`) becomes a
   `BackgroundProtection.unavailable` banner and a diagnostics row; the run
-  itself keeps recording screen-on. Process death is explicitly unsupported:
-  the service is `START_NOT_STICKY` and recording does not survive a kill.
-  The service holds no GPS logic of its own; on non-Android hosts and
-  scenario runs the `RunForegroundLifespan` seam is a no-op (see
+  itself keeps recording screen-on. Because the foreground-service exemption
+  only exists on Android 12+, the app also declares
+  `ACCESS_BACKGROUND_LOCATION` — on Android 10/11 a missing "Allow all the
+  time" grant is a typed `background-denied` start failure, and the service
+  holds a partial wake lock + asks once for the battery-optimization
+  exemption (the OEM power-manager killer). Process death is explicitly
+  unsupported: the service is `START_NOT_STICKY` and recording does not
+  survive a kill. The service holds no GPS logic of its own; on non-Android
+  hosts and scenario runs the `RunForegroundLifespan` seam is a no-op (see
   `docs/android_foreground_recording.md`).
 - Android cdylibs land in `app/android/app/src/main/jniLibs/<abi>/` via
   `app/tool/build_rust_engine_android.sh`; they are gitignored, so rerun the

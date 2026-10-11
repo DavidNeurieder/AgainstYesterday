@@ -93,12 +93,43 @@ Manifest (`app/android/app/src/main/AndroidManifest.xml`):
 
 - `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_LOCATION` (the latter required
   to *declare* location type from API 34).
+- `ACCESS_BACKGROUND_LOCATION` — see "The Android 10/11 gap" below.
+- `WAKE_LOCK` — the service holds a partial wake lock for the duration of a
+  run so Doze cannot suspend the CPU underneath the fix pipeline (standard
+  tracking-app behaviour).
+- `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` — asked once per install (see
+  "OEM power managers" below).
 - `<service android:name=".RecordingForegroundService"
   android:exported="false" android:foregroundServiceType="location"/>`.
 - Pre-run acquisition (`DeviceGpsSource.ensureAvailable`) already gates the
   recording on the location permission and location services being on; the
   native start re-checks both (`permission-denied` / `location-disabled`) as
   defence in depth.
+
+### The Android 10/11 gap
+
+The foreground service grants background location **only on Android 12+
+(API 31+)**. On Android 10 and 11 (API 29/30) the OS blocks location updates
+for a backgrounded app entirely unless the app holds
+`ACCESS_BACKGROUND_LOCATION` — and on Android 11 that permission's
+"Allow all the time" option does not even appear in the permission UI unless
+the manifest declares it. Our Android 12+ foreground-service work therefore
+could never work on Android 10/11; the manifest now declares the permission
+and the native start fails with a typed `background-denied` code on API
+29/30 when it is not granted, so the UI reports
+`BackgroundProtection.unavailable` instead of claiming protection.
+Android 8/9 (API 24–28) have no background-location restriction at all, so
+API 24–28, 29–30 with the grant, and 31+ all record with the screen off.
+
+### OEM power managers
+
+Xiaomi, OnePlus, Samsung, Huawei and friends kill even foreground services
+when the screen goes off — the notification and wake lock do not help there.
+`MainActivity` therefore fires the standard
+`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` request once per install (the
+same ask Strava/Komoot/Runkeeper make); declined users can enable
+"Unrestricted"/"No restrictions" for the app in the OEM's battery settings
+manually.
 
 Version behaviour:
 

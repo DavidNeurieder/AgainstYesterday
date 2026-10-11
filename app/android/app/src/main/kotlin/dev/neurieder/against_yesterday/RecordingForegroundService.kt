@@ -13,6 +13,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 
 /**
  * Keeps the GPS pipeline alive while the phone screen is off.
@@ -37,6 +38,8 @@ import android.os.IBinder
  */
 class RecordingForegroundService : Service() {
 
+    private var wakeLock: PowerManager.WakeLock? = null
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
@@ -56,6 +59,7 @@ class RecordingForegroundService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, buildNotification())
         }
+        holdCpuAwake()
         // Deliberately NOT START_STICKY: process death ends the Dart recording
         // too, and a resurrected service would only show a misleading
         // notification (see the class comment).
@@ -63,6 +67,7 @@ class RecordingForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        releaseCpuAwake()
         super.onDestroy()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -70,6 +75,30 @@ class RecordingForegroundService : Service() {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
+    }
+
+    /**
+     * Doze suspends CPU activity for backgrounded apps; a partial wake lock
+     * held for the lifetime of the run keeps the Dart fix pipeline live (the
+     * same belt-and-braces every tracking app uses). Released in onDestroy.
+     */
+    private fun holdCpuAwake() {
+        if (wakeLock != null) return
+        val manager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = manager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "AgainstYesterday:Recording",
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+    }
+
+    private fun releaseCpuAwake() {
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        wakeLock = null
     }
 
     private fun createChannel() {

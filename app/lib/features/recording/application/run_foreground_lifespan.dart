@@ -45,6 +45,15 @@ enum ForegroundStartFailure {
   /// `security`).
   denied('Location permission is missing, so screen-off recording is off.'),
 
+  /// Android 10/11 (API 29/30) gate background location behind
+  /// ACCESS_BACKGROUND_LOCATION (`background-denied`): the foreground service
+  /// only exempts an app from that restriction on Android 12+, so a
+  /// "while in use" grant is a real, typed failure there.
+  backgroundDenied(
+    'Location is not "allowed all the time", which screen-off recording '
+        'needs on Android 10/11.',
+  ),
+
   /// Android reports location services as disabled.
   locationDisabled('Location services are off.'),
 
@@ -123,6 +132,7 @@ class AndroidRunForegroundLifespan implements RunForegroundLifespan {
 ForegroundStartFailure mapForegroundStartFailure(PlatformException error) {
   return switch (error.code) {
     'permission-denied' || 'security' => ForegroundStartFailure.denied,
+    'background-denied' => ForegroundStartFailure.backgroundDenied,
     'location-disabled' => ForegroundStartFailure.locationDisabled,
     'not-allowed' => ForegroundStartFailure.notAllowed,
     'start-failed' => ForegroundStartFailure.platform,

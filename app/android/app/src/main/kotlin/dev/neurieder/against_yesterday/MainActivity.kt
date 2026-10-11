@@ -5,11 +5,16 @@ package dev.neurieder.against_yesterday
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.PowerManager
 import android.provider.MediaStore
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -86,6 +91,25 @@ class MainActivity : FlutterActivity() {
                 return
             }
         }
+        // Android 10/11 (API 29/30) still gate background location behind
+        // ACCESS_BACKGROUND_LOCATION: the foreground service only exempts an
+        // app from that restriction on Android 12+, so a missing "Allow all
+        // the time" grant is a real, typed failure there — never a silent
+        // claim of protection. Android 12+ needs no such check (the FGS's
+        // temporary background access covers the runtime duration).
+        if (Build.VERSION.SDK_INT in Build.VERSION_CODES.Q..Build.VERSION_CODES.R &&
+            checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) !=
+                PackageManager.PERMISSION_GRANTED
+        ) {
+            result.error(
+                "background-denied",
+                "Location is not \"allowed all the time\", which screen-off "
+                    + "recording needs on Android 10/11.",
+                null,
+            )
+            return
+        }
+        requestBatteryOptimizationExemption()
         try {
             RecordingForegroundService.start(this)
             result.success(null)
@@ -115,6 +139,33 @@ class MainActivity : FlutterActivity() {
                     null,
                 )
             }
+        }
+    }
+
+    /**
+     * OEM power managers (Xiaomi, OnePlus, Samsung, Huawei, ...) kill even
+     * foreground services once the screen goes off — the wake lock and the
+     * notification do not help there. Ask once per install for the standard
+     * battery-optimization exemption (what every tracking app does); the user
+     * can decline and enable it manually in Settings later.
+     */
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val prefs = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(BATTERY_OPT_ASKED, false)) return
+        val power = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (power.isIgnoringBatteryOptimizations(packageName)) return
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName"),
+                ),
+            )
+            prefs.edit().putBoolean(BATTERY_OPT_ASKED, true).apply()
+        } catch (_: Exception) {
+            // No settings activity can handle the request (rare OEMs); the
+            // foreground service + wake lock still cover well-behaved devices.
         }
     }
 
@@ -239,5 +290,7 @@ class MainActivity : FlutterActivity() {
         const val RECORDING_CHANNEL = "dev.neurieder.against_yesterday/recording"
         const val STORAGE_REQUEST = 5416
         const val MIME_TYPE_GPX = "application/gpx+xml"
+        const val PREFS = "against_yesterday"
+        const val BATTERY_OPT_ASKED = "battery_optimization_asked"
     }
 }
