@@ -18,6 +18,7 @@ import '../../../core/ui/app_sections.dart';
 import '../../../persistence/persistence.dart';
 import '../../map/map_settings_section.dart';
 import '../application/gpx_export.dart';
+import '../application/link_launcher.dart';
 import '../application/settings_controller.dart';
 import '../application/track_export.dart';
 
@@ -130,6 +131,29 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const Divider(height: 1, color: AppColors.outline),
               ListTile(
+                key: const ValueKey('github-link'),
+                leading: const Icon(Icons.code),
+                title: const Text('GitHub'),
+                subtitle: const Text('Source code and releases'),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => _openLink(context, ref, kGitHubUrl, 'GitHub'),
+              ),
+              const Divider(height: 1, color: AppColors.outline),
+              ListTile(
+                key: const ValueKey('issues-link'),
+                leading: const Icon(Icons.bug_report_outlined),
+                title: const Text('Report an issue'),
+                subtitle: const Text('Bugs and feature requests'),
+                trailing: const Icon(Icons.open_in_new),
+                onTap: () => _openLink(
+                  context,
+                  ref,
+                  kIssuesUrl,
+                  'the issue tracker',
+                ),
+              ),
+              const Divider(height: 1, color: AppColors.outline),
+              ListTile(
                 leading: const Icon(Icons.privacy_tip_outlined),
                 title: const Text('Privacy'),
                 onTap: () => _showPrivacy(context),
@@ -224,6 +248,21 @@ class SettingsScreen extends ConsumerWidget {
     ref.read(activityRepositoryProvider.notifier).clear();
     await ref.read(runSnapshotProvider.notifier).save(null);
     await ref.read(settingsRepositoryProvider.notifier).resetToDefaults();
+  }
+
+  /// Hands a link to the platform's browser; the About card's GitHub and
+  /// issue rows are the only outward-facing actions Settings has.
+  Future<void> _openLink(
+    BuildContext context,
+    WidgetRef ref,
+    String url,
+    String label,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final opened = await ref.read(linkLauncherProvider).open(Uri.parse(url));
+    if (!opened) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not open $label.')));
+    }
   }
 
   void _showPrivacy(BuildContext context) {

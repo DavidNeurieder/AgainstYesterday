@@ -11,6 +11,15 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Settings → About gains two outward links: **GitHub** (the source repository,
+  `github.com/DavidNeurieder/AgainstYesterday`) and **Report an issue** (its
+  issue tracker). Tapping a row hands the URL to the platform's default browser
+  through `url_launcher` in `LaunchMode.externalApplication`; a launcher that
+  cannot open it (no handler, or a hermetic host) surfaces a "Could not open …"
+  snackbar instead of failing silently. Both sit behind a `LinkLauncher`
+  provider seam (`features/settings/application/link_launcher.dart`) so the
+  hermetic suites inject a recording fake, and the About card remains the only
+  place Settings leaves the phone. See `settings_test.dart`.
 - Map renderer behind the offline map: screens draw route and track geometry
   through a `MapSurface` seam (`lib/features/map/`) whose concrete renderer is
   picked at build time by `MAP_VIEW` — unset/`false` keeps the self-contained

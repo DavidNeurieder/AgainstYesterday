@@ -8,6 +8,7 @@ library;
 
 import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/features/settings/application/link_launcher.dart';
 import 'package:against_yesterday/features/settings/application/settings_controller.dart';
 import 'package:against_yesterday/features/settings/application/track_export.dart';
 import 'package:against_yesterday/features/settings/domain/settings.dart';
@@ -19,13 +20,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'test_catalog.dart';
 
 void main() {
-  Widget pumpedApp({TrackExporter? exporter}) => ProviderScope(
+  Widget pumpedApp({
+    TrackExporter? exporter,
+    LinkLauncher? linkLauncher,
+  }) =>
+      ProviderScope(
         overrides: [
           persistenceStoreProvider.overrideWithValue(
             seededStore(routes: demoRoutes, activities: demoActivities()),
           ),
           if (exporter != null)
             trackExporterProvider.overrideWithValue(exporter),
+          if (linkLauncher != null)
+            linkLauncherProvider.overrideWithValue(linkLauncher),
         ],
         child: const AgainstYesterdayApp(),
       );
@@ -33,10 +40,27 @@ void main() {
   Future<void> openSettings(
     WidgetTester tester, {
     TrackExporter? exporter,
+    LinkLauncher? linkLauncher,
   }) async {
-    await tester.pumpWidget(pumpedApp(exporter: exporter));
+    await tester.pumpWidget(
+      pumpedApp(exporter: exporter, linkLauncher: linkLauncher),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+  }
+
+  /// Scrolls the Settings list down to an About row, then taps it — the About
+  /// section sits below the fold on the test viewport.
+  Future<void> tapAboutRow(WidgetTester tester, String key) async {
+    final target = find.byKey(ValueKey<String>(key));
+    await tester.scrollUntilVisible(
+      target,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(target);
     await tester.pumpAndSettle();
   }
 
@@ -153,6 +177,29 @@ void main() {
     expect(find.byIcon(Icons.directions_run), findsNothing);
   });
 
+  testWidgets('the About card opens GitHub and the issue tracker',
+      (tester) async {
+    final launcher = _RecordingLinkLauncher();
+    await openSettings(tester, linkLauncher: launcher);
+
+    await tapAboutRow(tester, 'github-link');
+    await tapAboutRow(tester, 'issues-link');
+
+    expect(launcher.uris, <Uri>[
+      Uri.parse(kGitHubUrl),
+      Uri.parse(kIssuesUrl),
+    ]);
+  });
+
+  testWidgets('a link that cannot open says so', (tester) async {
+    final launcher = _RecordingLinkLauncher(canOpen: false);
+    await openSettings(tester, linkLauncher: launcher);
+
+    await tapAboutRow(tester, 'github-link');
+
+    expect(find.text('Could not open GitHub.'), findsOneWidget);
+  });
+
   test('settings round-trip through the store codec', () {
     const custom = AppSettings(
       hapticsEnabled: false,
@@ -204,5 +251,20 @@ class _RecordingTrackExporter implements TrackExporter {
       throw const TrackExportException('Downloads is not writable.');
     }
     return 'Download/$fileName';
+  }
+}
+
+/// A [LinkLauncher] that records the URLs the About card opened, and can be
+/// told to report that nothing could handle them.
+class _RecordingLinkLauncher implements LinkLauncher {
+  _RecordingLinkLauncher({this.canOpen = true});
+
+  final bool canOpen;
+  final uris = <Uri>[];
+
+  @override
+  Future<bool> open(Uri uri) async {
+    uris.add(uri);
+    return canOpen;
   }
 }
