@@ -45,7 +45,10 @@ class HomeScreen extends ConsumerWidget {
                 delay: const Duration(milliseconds: 80),
                 child: EmptyHomeState(onRecord: () {
                   AppHaptics.medium(ref);
-                  context.go('/record-route');
+                  // Pushed, not replaced: the flow is a full-screen route over
+                  // the shell, so its AppBar back button (and the system back
+                  // gesture) returns here instead of exiting the app.
+                  context.push('/record-route');
                 }),
               )
             else ...[

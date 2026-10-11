@@ -42,7 +42,11 @@ class RoutesScreen extends ConsumerWidget {
             child: OutlinedButton.icon(
               onPressed: () {
                 AppHaptics.selection(ref);
-                context.go('/record-route');
+                // Pushed, not replaced: the record-a-route flow is a
+                // full-screen route over the shell, so its AppBar back button
+                // (and the system back gesture) returns to the tab instead of
+                // exiting the app.
+                context.push('/record-route');
               },
               icon: const Icon(Icons.add_road),
               label: const Text('Record Route'),

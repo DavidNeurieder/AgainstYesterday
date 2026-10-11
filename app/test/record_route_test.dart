@@ -57,6 +57,20 @@ void main() {
   String time(WidgetTester tester) =>
       tester.widget<Text>(find.byKey(const ValueKey('record-time'))).data!;
 
+  testWidgets('the prep screen can go back to the main screen',
+      (tester) async {
+    await openRecording(tester);
+
+    // The flow is a pushed full-screen route over the shell, so its AppBar
+    // carries a back button and the system back gesture pops back to Home
+    // instead of exiting the app.
+    expect(find.byType(BackButton), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'RECORD ROUTE'), findsOneWidget);
+  });
+
   testWidgets('records, names and saves a new route with a first PB',
       (tester) async {
     await openRecording(tester);

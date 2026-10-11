@@ -210,6 +210,15 @@ documented here, grouped by the implementation milestones in
 
 ### Fixed
 
+- The record-a-route flow is now a *pushed* full-screen route — Home and the
+  Routes tab open it with `context.push` instead of `context.go`, which had
+  replaced the navigation stack. With nothing beneath to pop, the flow's AppBar
+  showed no back button and the Android system back gesture exited the app, so
+  the prep screen trapped the runner with no way back to the main screen. It is
+  pushed now (matching the router's stated "pushed full-screen flow on top of
+  the shell" design), so the AppBar back button and the system back gesture
+  return to the shell; onboarding still replaces, since it has no trail to keep
+  (`record_route_test.dart`).
 - Live GPS recording on Android no longer stops when the phone screen turns
   off. On API 31+ a backgrounded app (stopped activity) receives no location
   fixes, so while the device receiver is streaming, the recording controller
