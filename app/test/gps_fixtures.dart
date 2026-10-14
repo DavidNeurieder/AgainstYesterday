@@ -286,13 +286,14 @@ const GpsScenario gpsOutage = GpsScenario(
 );
 
 /// Two fixes, a 90 s hole, then two more: the hole is wider than the engine's
-/// 60 s gap ceiling, so a free run must not bridge it. The pre-hole and
-/// post-hole strides are each real ground; only the hole's straight line is
-/// dropped.
+/// 60 s gap ceiling, so the separation across it is never read as *speed* — but
+/// the engine's `distance_after` still keeps the chord between the surviving
+/// fixes. A free run therefore bridges the hole (the runner really did move
+/// during it) and drops only an *isolated* spike, exactly like `gps-engine`.
 final GpsScenario gpsDropout = GpsScenario(
   name: 'gps_dropout',
-  expectedDistanceMeters: 2 * _meridianMeters(0.001),
-  expectedAcceptedFixes: 2,
+  expectedDistanceMeters: _meridianMeters(0.011),
+  expectedAcceptedFixes: 3,
   samples: [
     GpsSample(
       after: Duration(seconds: 10),
@@ -315,9 +316,10 @@ final GpsScenario gpsDropout = GpsScenario(
 );
 
 /// A steady walk with one wild sample: the receiver jumps ~680 m east for a
-/// single fix, then returns to the line. The spike may add no distance, and
-/// the next genuine fix is measured from the last trusted position, not the
-/// spike — so the run keeps only the two real strides.
+/// single fix, then returns to the line. The spike is an *isolated* jump — both
+/// its incoming and outgoing steps are implausible — so the engine drops it and
+/// keeps the anchor, leaving the two real ~111 m strides (measured from the last
+/// trusted position, as `gps-engine` does).
 final GpsScenario gpsSpike = GpsScenario(
   name: 'gps_spike',
   expectedDistanceMeters: 2 * _meridianMeters(0.001),

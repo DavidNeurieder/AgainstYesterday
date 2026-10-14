@@ -32,6 +32,7 @@ import '../../../core/units.dart';
 import '../../../engine/device_gps_source.dart';
 import '../../../engine/fake_engine.dart';
 import '../../../engine/models.dart';
+import '../../../engine/track_filter.dart';
 import '../../../persistence/persistence.dart';
 import 'run_foreground_lifespan.dart';
 
@@ -67,16 +68,30 @@ class RecordingController extends Notifier<LiveRunState?> {
   /// run, adds moving time, or shows a phantom pace.
   static const double _motionFloorMps = 0.5;
 
-  /// A hole longer than this between fixes is a dropout, not bridgeable
-  /// ground (the engine's `FilterConfig::max_time_gap`). A free run never
-  /// fabricates the straight line across it.
+  /// A hole longer than this between fixes is a pause (the engine's
+  /// `FilterConfig::max_time_gap`): the separation across it is never read as
+  /// speed. It still counts as ground — the engine's `distance_after` keeps the
+  /// chord — but is not itself a jump.
   static const double _maxFixGapSeconds = 60.0;
 
   /// Plausibility ceiling for a free-running segment (the engine's
   /// `FilterConfig::max_speed`, 90 km/h): far above any run or ride, far below
   /// a GPS artifact. A faster segment — implied by the ground or reported by
-  /// the receiver — is a spike, not distance.
+  /// the receiver — is a jump, not distance.
   static const double _maxPlausibleSpeedMps = 25.0;
+
+  /// The free-run distance/moving-time filter: the Dart mirror of the engine's
+  /// two-pass track filter (`TrackFilterConfig` defaults). A teleport survives
+  /// it, an isolated spike does not, so a free run reports the engine's own
+  /// `distance_after` instead of the over-eager hole-dropping or the raw
+  /// consecutive-fix chord sum.
+  static const TrackFilterConfig _freeRunConfig = TrackFilterConfig(
+    maxAccuracyMeters: 50.0,
+    maxSpeedMps: _maxPlausibleSpeedMps,
+    maxJumpMeters: 200.0,
+    maxTimeGapSeconds: _maxFixGapSeconds,
+    motionFloorMps: _motionFloorMps,
+  );
 
   Timer? _timer;
   _RecSession? _session;
@@ -105,10 +120,17 @@ class RecordingController extends Notifier<LiveRunState?> {
   Activity? _lastFinishedActivity;
 
   /// Previous raw position, used to measure the ground travelled between
-  /// consecutive fixes. Anchored on every observation so a later move always
-  /// measures from the last heard fix; free-run distance accumulates only for
-  /// fixes that clear the motion floor.
+  /// consecutive fixes for the pace readout. Anchored on every observation so a
+  /// later move always measures from the last heard fix.
   GeoPoint? _prevRawPosition;
+
+  /// The engine-mirroring free-run axis. Distance and moving time are booked
+  /// from the *filtered* fixes ([_freeRunConfig]); the `_applied*` anchors hold
+  /// what has already been added to the session so each fix books only the
+  /// newly-earned increment.
+  final TrackFilter _freeRun = TrackFilter(config: _freeRunConfig);
+  double _appliedFreeRunMeters = 0;
+  double _appliedFreeRunSeconds = 0;
 
   /// Wall-clock anchor for the last tick (M13): elapsed time is derived from
   /// the real clock rather than assuming each timer tick is exactly 500 ms,
@@ -147,6 +169,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     );
     _gpsSource = ref.read(deviceGpsProvider);
     _prevRawPosition = null;
+    _resetFreeRun();
     _beginAcquisition();
   }
 
@@ -179,6 +202,9 @@ class RecordingController extends Notifier<LiveRunState?> {
     }
     _flushClock();
     _stopDeviceStream();
+    // A deliberate pause is not a hole to bridge: start the next stretch of the
+    // free-run axis fresh so the first fix after resuming anchors on arrival.
+    _resetFreeRun();
     _emit(status: RunStatus.paused);
   }
 
@@ -224,6 +250,8 @@ class RecordingController extends Notifier<LiveRunState?> {
     }
     // Freeze the stopwatch at the finish line before sealing the run.
     _flushClock();
+    // Keep the final filtered point so the closing segment is not lost.
+    _flushFreeRun();
     _emit(status: RunStatus.finishing);
     // Seal the run now, not on the next 500 ms tick: pressing FINISH is a
     // commitment, and a dismissal in the finishing→complete gap used to cancel
@@ -236,6 +264,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     _timer?.cancel();
     _timer = null;
     _stopDeviceStream();
+    _resetFreeRun();
     _runningSince = null;
     _session = null;
     state = null;
@@ -425,19 +454,18 @@ class RecordingController extends Notifier<LiveRunState?> {
 
   /// Real-GPS driver: one receiver fix advances the session.
   ///
-  /// Only fixes that actually clear the motion floor move the run: while a
-  /// phone sits still — even when the receiver serves a stale cached speed —
-  /// the fix lands in the raw buffer and tracks the map position, but never
-  /// adds moving time, distance, or a phantom cruise pace.
+  /// The fix always lands in the raw buffer and moves the map dot. A free run's
+  /// distance and moving time are the geodesic axis of the *filtered* track
+  /// ([_freeRun], the Dart mirror of the engine's `FilterConfig`): a GPS hole or
+  /// a re-acquisition teleport keeps the ground the engine's
+  /// `ProcessingReport::distance_after` would, while an isolated spike — or a
+  /// fix the receiver marks worse than 50 m — is dropped instead of stalling
+  /// every later fix. Route runs instead read the distance straight off the
+  /// recognised geometry, which is absolute and thus already immune to both.
   ///
-  /// A free run additionally drops *discontinuous* segments ([_isDiscontinuity]):
-  /// a dropout longer than [_maxFixGapSeconds] or a spike faster than
-  /// [_maxPlausibleSpeedMps] is real receiver output that keeps its raw fix and
-  /// dot, but never fabricates distance or moving time — otherwise a GPS hole
-  /// becomes a straight line `haversine(prev, this)` and a re-acquisition spike
-  /// becomes kilometres that were never run. Route runs instead read the
-  /// distance straight off the recognised geometry, which is absolute and thus
-  /// already immune to both.
+  /// The pace readout still honours the motion floor ([_isMoving]): a phone that
+  /// sits still — even when the receiver serves a stale cached speed — shows
+  /// "— /km" rather than a phantom cruise pace.
   void _onDeviceFix(GpsFix fix) {
     if (state?.status != RunStatus.running) {
       return; // paused / finishing ignore late fixes
@@ -454,52 +482,39 @@ class RecordingController extends Notifier<LiveRunState?> {
     final projected = projectOnPolyline(session.geometry, position);
     final onRoute = projected != null && session.route != null;
 
-    // Ground covered since the previous fix (0 for the very first).
+    // Ground covered since the previous fix (0 for the very first), used only
+    // for the pace readout now that distance comes from the filter.
     final previousPosition = _prevRawPosition;
     final groundMeters = previousPosition == null
         ? 0.0
         : haversineMeters(previousPosition, position);
-
-    if (!onRoute &&
-        _isDiscontinuity(fix, groundMeters, deltaSeconds)) {
-      // Keep the fix (it is auditable receiver output) but let it move neither
-      // distance nor moving time. A dropout re-anchors on the fresh fix — the
-      // runner really did move during the hole, we just do not bridge it. A
-      // spike keeps the last trusted position, so the *next* genuine fix is
-      // measured locally instead of from the bad one (the engine anchors on
-      // the last surviving point for the same reason).
-      if (deltaSeconds > _maxFixGapSeconds) {
-        _prevRawPosition = position;
-      }
-      _recordDeviceFix(fix);
-      _emit(status: RunStatus.running, position: position, pace: Speed.zero());
-      _snapshotThrottled();
-      return;
-    }
     _prevRawPosition = position;
 
-    if (!_isMoving(fix, groundMeters, deltaSeconds)) {
-      _recordDeviceFix(fix);
-      _emit(status: RunStatus.running, position: position, pace: Speed.zero());
-      _snapshotThrottled();
-      return;
-    }
+    final moving = _isMoving(fix, groundMeters, deltaSeconds);
 
+    Speed pace;
     if (onRoute) {
       // On a recognised route: the distance axis follows the geometry — the
       // runner never loses ground to receiver jump, and a loop crossing must
       // not rewind accumulated progress.
-      if (projected.distanceM > session.distanceM) {
-        session.distanceM = projected.distanceM;
+      if (moving) {
+        if (projected.distanceM > session.distanceM) {
+          session.distanceM = projected.distanceM;
+        }
+        if (deltaSeconds > 0) {
+          session.moving = session.moving + Elapsed.seconds(deltaSeconds);
+        }
+        pace = _fixPace(fix, groundMeters, deltaSeconds);
+      } else {
+        pace = Speed.zero();
       }
     } else {
-      // Free-running (no route, or off the geometry): accumulate the travelled
-      // ground distance between consecutive raw fixes.
-      session.distanceM += groundMeters;
-    }
-
-    if (deltaSeconds > 0) {
-      session.moving = session.moving + Elapsed.seconds(deltaSeconds);
+      // Free-running (no route, or off the geometry): book the engine-filtered
+      // ground and time. A discontinuous fix never shows a phantom pace.
+      _applyFreeRun(fix);
+      pace = moving && !_isDiscontinuity(fix, groundMeters, deltaSeconds)
+          ? _fixPace(fix, groundMeters, deltaSeconds)
+          : Speed.zero();
     }
 
     _recordDeviceFix(fix);
@@ -517,15 +532,59 @@ class RecordingController extends Notifier<LiveRunState?> {
       position: position,
       gap: gap,
       ghostPosition: ghostPosition,
-      pace: _fixPace(fix, groundMeters, deltaSeconds),
+      pace: pace,
     );
     _snapshotThrottled();
   }
 
-  /// Whether a free-running fix is discontinuous with the last trusted one: a
-  /// dropout or an implausible jump. The ceilings mirror the engine's
-  /// `FilterConfig` defaults, so the live path drops the same junk the Rust
-  /// pipeline would.
+  /// Feeds one free-run fix into the engine filter and books the newly-earned
+  /// ground and time onto the session.
+  void _applyFreeRun(GpsFix fix) {
+    _freeRun.add(fix);
+    _commitFreeRun();
+  }
+
+  /// Keeps the last fed free-run fix (the engine always keeps the final point)
+  /// and books it — called at FINISH so a withheld closing segment is not lost.
+  void _flushFreeRun() {
+    _freeRun.flush();
+    _commitFreeRun();
+  }
+
+  /// Adds the filter's progress since the last call to the session. The axis can
+  /// dip when a withheld spike is retracted, so the increment is signed; the
+  /// session keeps its floor at zero.
+  void _commitFreeRun() {
+    final session = _requireSession();
+    final meters = _freeRun.distanceMeters;
+    final seconds = _freeRun.movingSeconds;
+    final earnedMeters = meters - _appliedFreeRunMeters;
+    final earnedSeconds = seconds - _appliedFreeRunSeconds;
+    if (earnedMeters != 0) {
+      session.distanceM = math.max(0.0, session.distanceM + earnedMeters);
+    }
+    if (earnedSeconds != 0) {
+      session.moving = Elapsed.seconds(
+        math.max(0.0, session.moving.seconds + earnedSeconds),
+      );
+    }
+    _appliedFreeRunMeters = meters;
+    _appliedFreeRunSeconds = seconds;
+  }
+
+  /// Clears the free-run filter axis. Called when a fresh stream starts (a new
+  /// session, a resume) or on pause — a deliberate stop is not a hole to bridge.
+  void _resetFreeRun() {
+    _freeRun.reset();
+    _appliedFreeRunMeters = 0;
+    _appliedFreeRunSeconds = 0;
+  }
+
+  /// Whether a free-running fix's *segment* is too unreliable to show a pace:
+  /// a dropout or an implausible jump. The ceilings mirror the engine's
+  /// `FilterConfig` defaults. This only gates the pace readout now — distance
+  /// and moving time come from [_freeRun], which keeps a teleport and drops an
+  /// isolated spike.
   ///
   /// A reported speed over the ceiling is junk even when the ground is too
   /// small to corroborate it (a receiver serving a stale cached spike). The
@@ -766,6 +825,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     );
     _gpsSource = ref.read(deviceGpsProvider);
     _prevRawPosition = null;
+    _resetFreeRun();
     try {
       await _prepareGhost();
     } catch (_) {

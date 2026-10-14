@@ -270,21 +270,26 @@ documented here, grouped by the implementation milestones in
   (Xiaomi/OnePlus/Samsung/Huawei-style power managers kill even foreground
   services at screen-off) — the standard tracker stack
   (`docs/android_foreground_recording.md`).
-- A *free* device recording no longer fabricates distance across a GPS hole or
-  a re-acquisition spike. The live path added the straight line
-  `haversine(prev, this)` between consecutive raw fixes, so a dropout became a
-  chord the receiver never walked (undercounted on a curve or a loop back to
-  the start) and a spike became kilometres that were never run. The device
-  driver now drops a free-run segment as *discontinuous* when the hole is
-  wider than the engine's 60 s gap ceiling, when its implied speed exceeds the
-  engine's 90 km/h `max_speed`, or when the receiver itself reports a speed
-  past that ceiling: the raw fix is still kept for the Raw GPS view and the
-  dot still tracks, but the segment adds neither distance nor moving time. A
-  dropout re-anchors on the fresh fix; a spike keeps the last trusted position,
-  so the next genuine fix is measured locally instead of from the bad one.
-  Route runs are unchanged — they read the distance straight off the recognised
-  geometry, which is absolute and already immune to both
-  (`gps_edge_cases_test.dart`: `gps_dropout`, `gps_spike`).
+- A *free* device recording now reports the engine's own distance instead of a
+  raw consecutive-fix sum or an over-eager dropout drop. The live path either
+  fabricated the straight line `haversine(prev, this)` between every pair of
+  raw fixes — so a spike became kilometres that were never run — or, after an
+  earlier guard, dropped the chord across any gap wider than the engine's 60 s
+  ceiling and stopped re-anchoring a spike, which stalled *all* later distance:
+  a real 2.8 km track collapsed to a few dozen metres. The device driver now
+  runs an incremental mirror of `gps-engine`'s two-pass track filter
+  (`lib/engine/track_filter.dart`, `TrackFilter`): pass 1 ignores a fix the
+  receiver marks worse than the 50 m `max_accuracy` or faster than the 90 km/h
+  `max_speed`; pass 2 drops a fix only when *both* its neighbouring segments are
+  implausible jumps (past `max_jump`, or an implied speed past `max_speed`),
+  anchored on the last surviving point, so a re-acquisition teleport survives
+  and only an isolated spike is removed. Distance and moving time are the
+  geodesic axis of those survivors — exactly `ProcessingReport::distance_after`
+  — so a GPS hole or a teleport keeps the ground the engine would, and a spike
+  is retracted rather than stalling the run. Route runs are unchanged: they read
+  the distance straight off the recognised geometry, which is absolute and
+  already immune to both (`gps_edge_cases_test.dart`: `gps_dropout`,
+  `gps_spike`; `track_filter_test.dart`).
 
 ### Changed
 

@@ -218,38 +218,41 @@ void main() {
   });
 
   group('dropouts and spikes', () {
-    test('a dropout wider than the gap ceiling is not bridged', () {
+    test('a dropout bridges the ground the engine keeps, not a runaway', () {
       fakeAsync((async) {
         final h = harness();
         record(h, async, gpsDropout);
         final s = live(h.container);
-        // Only the two connected strides count: the 90 s hole's straight line
-        // — a kilometre the receiver never reported — is dropped rather than
-        // fabricated.
+        // The 90 s hole is wider than the gap ceiling, so its separation is
+        // never read as speed — but its chord is still ground the engine's
+        // `distance_after` keeps. The run bridges the hole instead of dropping
+        // it (and every later fix) on the way across.
         expect(
           s.distance.meters,
           closeTo(gpsDropout.expectedDistanceMeters!, 1.0),
         );
-        // The hole adds no moving time either; only the two 10 s strides do.
-        expect(s.elapsed.seconds, closeTo(20, 1e-6));
+        // The hole's elapsed time is real moving time too: the filtered axis
+        // spans 10 + 90 + 10 s.
+        expect(s.elapsed.seconds, closeTo(110, 1e-6));
         // Every raw fix is still retained for the audit.
         expect(controller(h.container).currentFixes(), hasLength(4));
       });
     });
 
-    test('an implausible spike adds no distance or moving time', () {
+    test('an isolated spike adds no distance', () {
       fakeAsync((async) {
         final h = harness();
         record(h, async, gpsSpike);
         final s = live(h.container);
-        // The ~680 m spike is rejected, and the next genuine fix is measured
-        // from the last trusted position — so the run keeps exactly its two
-        // real 111 m strides.
+        // The ~680 m spike is an isolated jump (both neighbouring steps are
+        // implausible), so the engine drops it and measures the next genuine fix
+        // from the last trusted position — the run keeps exactly two 111 m
+        // strides.
         expect(
           s.distance.meters,
           closeTo(gpsSpike.expectedDistanceMeters!, 1.0),
         );
-        expect(s.elapsed.seconds, closeTo(20, 1e-6));
+        expect(s.elapsed.seconds, closeTo(30, 1e-6));
         expect(controller(h.container).currentFixes(), hasLength(4));
       });
     });

@@ -13,4 +13,7 @@ testdata/real/*.gpx
 # build_rust_engine_android.sh regenerates them into the jniLibs tree.
 app/android/app/src/main/jniLibs/
 
+# Local-only scratch: planning notes and the GPX files exported from the app
+# for inspection (they carry the user's real coordinates).
 ideas/
+Download/
