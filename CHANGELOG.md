@@ -219,6 +219,11 @@ documented here, grouped by the implementation milestones in
 
 ### Fixed
 
+- The on-device record-a-route test waits for the saved screen to leave the
+  navigation stack before asserting the Home tile. The shell is only revealed
+  while that transition drains, and both screens render the route name in the
+  same centred `titleLarge` style, so the assertion sampled mid-transition and
+  found two (`device_gps_test.dart`).
 - The on-device distance helpers in the integration harness read the meter
   label again. `_metersOrNull` took a raw `ValueKey`, which typed each call
   site's `const ValueKey('live-distance')` / `const ValueKey('record-distance')`

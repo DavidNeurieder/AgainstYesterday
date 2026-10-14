@@ -128,6 +128,15 @@ void main() {
     // asserting the tile.
     await tester.tap(find.text('DONE'));
     await waitForText(tester, 'Run against yesterday');
+    // DONE sends the shell back to the top, but the saved screen carries the
+    // same name until its removal transition drains — wait for the settled
+    // count before asserting the tile (the host journey settles first in
+    // record_route_test.dart).
+    await waitForCondition(
+      tester,
+      () => find.text('Device GPS Loop').evaluate().length == 1,
+      'the saved screen to leave the stack',
+    );
     expect(find.text('Device GPS Loop'), findsOneWidget);
   }, skip: _useDeviceGps != 'true');
 
