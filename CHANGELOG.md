@@ -219,6 +219,16 @@ documented here, grouped by the implementation milestones in
 
 ### Fixed
 
+- The on-device distance helpers in the integration harness read the meter
+  label again. `_metersOrNull` took a raw `ValueKey`, which typed each call
+  site's `const ValueKey('live-distance')` / `const ValueKey('record-distance')`
+  as `ValueKey<dynamic>`; `ValueKey.==` rejects a mismatched type argument, so
+  `find.byKey` never matched, `tester.any` was always false and every
+  `displayedMeters` probe read a silent 0 — which timed out the demo suite's two
+  "the distance to advance" tests on every emulator (the host suites read the
+  key directly and never saw it). The parameter is a plain `Key` now, and
+  `integration_helpers_test.dart` guards the helpers from the host, where the
+  trap is otherwise invisible (`integration_test/support.dart`).
 - Racing a route is entered the same way — Home's hero, a courses-tab card, a
   route detail's RACE YOUR BEST and the result's RACE AGAIN now `context.push`
   the `/race/:id` flow instead of replacing the navigation stack. With nothing

@@ -33,7 +33,12 @@ int parseDistanceLabel(String text) {
 /// Not mounted is a normal polling state (the countdown before the live
 /// screen, the recorder before START), so it maps to null; a mounted but
 /// unreadable label still fails through [parseDistanceLabel].
-int? _metersOrNull(WidgetTester tester, ValueKey key) {
+///
+/// [key] is a plain [Key] on purpose: a parameter typed `ValueKey` would give
+/// the const at each call site the static context `ValueKey<dynamic>`, and
+/// `ValueKey.operator==` rejects a mismatched type argument, so the lookup
+/// would never match and every caller would silently read 0.
+int? _metersOrNull(WidgetTester tester, Key key) {
   final finder = find.byKey(key);
   if (!tester.any(finder)) {
     return null;
