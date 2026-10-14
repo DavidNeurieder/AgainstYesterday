@@ -219,6 +219,13 @@ documented here, grouped by the implementation milestones in
 
 ### Fixed
 
+- Racing a route is entered the same way — Home's hero, a courses-tab card, a
+  route detail's RACE YOUR BEST and the result's RACE AGAIN now `context.push`
+  the `/race/:id` flow instead of replacing the navigation stack. With nothing
+  beneath to pop, the race pre-race's AppBar showed no back button and the
+  system back gesture exited the app, stranding the runner on the pre-race; it
+  is pushed now, so back returns to where the race was started — Home, the
+  courses tab, the detail page, or the result (`race_flow_test.dart`).
 - The record-a-route flow is now a *pushed* full-screen route — Home and the
   Routes tab open it with `context.push` instead of `context.go`, which had
   replaced the navigation stack. With nothing beneath to pop, the flow's AppBar

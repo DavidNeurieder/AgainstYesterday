@@ -77,7 +77,8 @@ class RoutesScreen extends ConsumerWidget {
               },
               onRace: () {
                 AppHaptics.medium(ref);
-                context.go('/race/${route.id}');
+                // Pushed over the shell so back returns to the courses tab.
+                context.push('/race/${route.id}');
               },
             ),
             const SizedBox(height: AppSpacing.sm),

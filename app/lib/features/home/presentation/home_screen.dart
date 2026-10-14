@@ -62,7 +62,10 @@ class HomeScreen extends ConsumerWidget {
                   route: routes.first,
                   onRace: () {
                     AppHaptics.medium(ref);
-                    context.go('/race/${routes.first.id}');
+                    // Pushed over the shell (like record-a-route): the race's
+                    // AppBar back button and the system back gesture return
+                    // here instead of exiting the app.
+                    context.push('/race/${routes.first.id}');
                   },
                 ),
               ),

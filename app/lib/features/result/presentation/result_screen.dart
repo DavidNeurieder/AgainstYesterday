@@ -197,7 +197,9 @@ class ResultScreen extends ConsumerWidget {
                 onPressed: () {
                   AppHaptics.medium(ref);
                   ref.read(recordingControllerProvider.notifier).dismissRun();
-                  context.go('/race/${route.id}');
+                  // Pushed over the shell so back returns to the result
+                  // instead of exiting the app.
+                  context.push('/race/${route.id}');
                 },
               ),
             ),

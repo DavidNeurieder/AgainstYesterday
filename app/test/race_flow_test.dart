@@ -73,6 +73,57 @@ void main() {
     expect(find.text('GO!'), findsNothing);
   });
 
+  testWidgets('the race pre-race can go back to the main screen',
+      (tester) async {
+    await tester.pumpWidget(app(routes: demoRoutes));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await waitReady(tester);
+    expect(find.text('READY TO RUN'), findsOneWidget);
+
+    // The race is a pushed full-screen route over the shell, so its AppBar
+    // carries a back button and the system back gesture pops back to Home
+    // instead of exiting the app.
+    expect(find.byType(BackButton), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(FilledButton, 'RACE YOUR BEST'), findsOneWidget);
+    expect(find.text('READY TO RUN'), findsNothing);
+  });
+
+  testWidgets('a courses-tab race can go back to the courses tab',
+      (tester) async {
+    await tester.pumpWidget(app(routes: demoRoutes));
+    await tester.pumpAndSettle();
+    await tester.tap(find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('Routes'),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.descendant(
+      of: find.widgetWithText(Card, 'Park 5K'),
+      matching: find.text('RACE'),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await waitReady(tester);
+    expect(find.text('READY TO RUN'), findsOneWidget);
+
+    expect(find.byType(BackButton), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Back on the courses tab: the card is listed again, not stranded on the
+    // race's pre-race.
+    expect(find.text('READY TO RUN'), findsNothing);
+    expect(find.text('Park 5K'), findsWidgets);
+  });
+
   testWidgets('a routes-tab card races exactly its own route', (tester) async {
     await tester.pumpWidget(app(routes: demoRoutes));
     await tester.pumpAndSettle();

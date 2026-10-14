@@ -93,7 +93,8 @@ class RouteDetailScreen extends ConsumerWidget {
             icon: Icons.play_arrow_rounded,
             onPressed: () {
               AppHaptics.medium(ref);
-              context.go('/race/${route.id}');
+              // Pushed over the shell so back returns to this detail page.
+              context.push('/race/${route.id}');
             },
           ),
           const SizedBox(height: AppSpacing.lg),
