@@ -123,7 +123,7 @@ impl ConfusionMatrix {
 /// resample to a 25 m cadence. Used by the CLI and the evaluator so matching
 /// always sees comparable geometry.
 pub fn standard_pipeline(track: &Track) -> Track {
-    let (filtered, _report) = crate::filter(track, &crate::FilterConfig::default());
+    let (filtered, _report) = crate::filter(track, &crate::FilterConfig::matching());
     let simplified = crate::simplify(&filtered, &crate::SimplifyConfig::default());
     simplified
         .resample_by_distance(Distance::from_meters(25.0))

@@ -279,7 +279,7 @@ documented here, grouped by the implementation milestones in
   a real 2.8 km track collapsed to a few dozen metres. The device driver now
   runs an incremental mirror of `gps-engine`'s two-pass track filter
   (`lib/engine/track_filter.dart`, `TrackFilter`): pass 1 ignores a fix the
-  receiver marks worse than the 50 m `max_accuracy` or faster than the 90 km/h
+  receiver marks worse than the 50 m `max_accuracy` or faster than the 500 km/h
   `max_speed`; pass 2 drops a fix only when *both* its neighbouring segments are
   implausible jumps (past `max_jump`, or an implied speed past `max_speed`),
   anchored on the last surviving point, so a re-acquisition teleport survives
@@ -293,6 +293,25 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- The engine's GPS speed ceiling was raised from 90 km/h to 500 km/h, so the app
+  records cars and trains instead of mangling them. `FilterConfig::max_speed`
+  (default) and its Dart mirror (`TrackFilterConfig.maxSpeedMps`) both use it: a
+  fix the receiver reports faster than 500 km/h is ignored, and a step implying a
+  faster-than-500 km/h movement is a jump. 90 km/h sat *below* a motorway or a
+  high-speed train — every interior fix of such a track was rejected, collapsing
+  its distance to the end-to-end chord — while 500 km/h still clears every road
+  and rail vehicle (high-speed rail included) and stays below a genuine GPS
+  artifact. The live spike-hold now triggers on the whole *jump* rule rather than
+  the speed rule alone, so a large-but-slow isolated jump (a 680 m spike) is
+  still held back until the next fix refutes it, and the pace readout is
+  suppressed for any step the filter is withholding (never a phantom pace). The
+  route-matching recipe (`standard_pipeline` and the CLI's
+  `compare`/`discover`/`evaluate`) keeps a tighter 90 km/h denoiser via
+  `FilterConfig::matching()`: it is measured on run/ride recordings and is
+  sensitive to the spikes a car/train ceiling would let through. The engine's
+  `gps_jump` fixture now displaces its outliers past the 200 m jump ceiling, so
+  it still exercises the spike rule under the broader default. `gps_fixtures.dart`
+  is unchanged; see `track_filter_test.dart` and the engine's `filtering.rs`.
 - The record-a-route screen's TIME is now a wall-clock stopwatch: it starts on
   START RECORDING, pauses with PAUSE and resumes with RESUME, so the timer
   reads a live value even while the runner stands still — no more watching

@@ -143,7 +143,12 @@ fn main() {
         &SyntheticConfig {
             position_noise: Distance::from_meters(2.0),
             outlier_probability: 0.05,
-            outlier_distance: Distance::from_meters(150.0),
+            // A genuinely far-off fix (> the 200 m jump ceiling). The default
+            // 500 km/h plausibility is high enough that a *medium* displacement
+            // at a 2 s cadence (e.g. 150 m → 75 m/s) is indistinguishable from a
+            // car or train, so the jump fixture must overshoot the spatial
+            // ceiling to still exercise the spike rule.
+            outlier_distance: Distance::from_meters(400.0),
             gap_probability: 0.0,
             stop_probability: 0.0,
             seed: 3,

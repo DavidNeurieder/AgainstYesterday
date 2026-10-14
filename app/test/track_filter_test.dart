@@ -70,7 +70,7 @@ void main() {
         timestamp: DateTime.utc(2026, 1, 1, 10, 0, 2),
         latitude: 52.50010,
         longitude: 13.40000,
-        speedMetersPerSecond: 40, // > 25 m/s reported
+        speedMetersPerSecond: 200, // > 500 km/h reported
       ),
     ]) {
       final filter = TrackFilter();
@@ -91,11 +91,11 @@ void main() {
     expect(filter.distanceMeters, 0);
   });
 
-  test('a speed spike is withheld until the next fix refutes it', () {
+  test('an implausible jump is withheld until the next fix refutes it', () {
     final filter = TrackFilter();
     filter.add(_fix(52.50000, 13.40000, atSecond: 1));
     filter.add(_fix(52.50100, 13.40000, atSecond: 11));
-    // The ~680 m spike (68 m/s) is withheld, so the axis does not overshoot.
+    // The ~680 m spike is withheld, so the axis does not overshoot.
     filter.add(_fix(52.50100, 13.41000, atSecond: 21));
     expect(filter.distanceMeters, closeTo(0.001 * _metersPerDegree, 1.0));
     // Back on the line: the spike is retracted and the real stride lands.
@@ -103,12 +103,38 @@ void main() {
     expect(filter.distanceMeters, closeTo(2 * 0.001 * _metersPerDegree, 1.0));
   });
 
-  test('flush keeps the final point even when its step looked like a spike', () {
+  test('a step longer than the jump ceiling is withheld, however slow', () {
+    // The hold triggers on the *jump* rule, not just speed: a 222 m step spread
+    // over 30 s implies only 7.4 m/s, yet the engine will re-decide it against
+    // the next fix, so the live axis must not count it yet.
     final filter = TrackFilter();
     filter.add(_fix(52.50000, 13.40000, atSecond: 1));
-    filter.add(_fix(52.50200, 13.40000, atSecond: 3)); // a lone 111 m/s jump
+    filter.add(_fix(52.50200, 13.40000, atSecond: 31));
+    expect(filter.distanceMeters, 0);
+    // A normal step thereafter commits the bridge; the last point is kept.
+    filter.add(_fix(52.50210, 13.40000, atSecond: 32));
+    expect(filter.distanceMeters, closeTo(0.0021 * _metersPerDegree, 1.0));
+  });
+
+  test('flush keeps the final point even when its step looked like a jump', () {
+    final filter = TrackFilter();
+    filter.add(_fix(52.50000, 13.40000, atSecond: 1));
+    filter.add(_fix(52.50200, 13.40000, atSecond: 3)); // a lone 222 m jump
     expect(filter.distanceMeters, 0); // withheld for want of an outgoing step
     filter.flush();
     expect(filter.distanceMeters, closeTo(0.002 * _metersPerDegree, 1.0));
+  });
+
+  test('a car or train step is kept, not read as a spike', () {
+    // 80 m/s ≈ 288 km/h: above any run, below the 500 km/h ceiling, so neither
+    // the reported-speed check nor the jump rule touches it.
+    final filter = TrackFilter();
+    const stepMeters = 80.0;
+    const stepDegrees = stepMeters / _metersPerDegree;
+    for (var i = 0; i < 10; i++) {
+      filter.add(_fix(52.5 + i * stepDegrees, 13.40000, atSecond: i + 1));
+    }
+    // Nine real 80 m steps: every point survives.
+    expect(filter.distanceMeters, closeTo(9 * stepMeters, 1.0));
   });
 }

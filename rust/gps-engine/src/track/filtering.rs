@@ -36,10 +36,30 @@ impl Default for FilterConfig {
     fn default() -> Self {
         FilterConfig {
             max_accuracy: Some(Distance::from_meters(50.0)),
-            // 90 km/h: far above any run or ride, far below GPS artifacts.
-            max_speed: Some(Speed::from_kmh(90.0)),
+            // 500 km/h: far above any car or train (high-speed rail included),
+            // still below GPS artifacts.
+            max_speed: Some(Speed::from_kmh(500.0)),
             max_jump: Some(Distance::from_meters(200.0)),
             max_time_gap: Some(Duration::from_secs(60.0)),
+        }
+    }
+}
+
+impl FilterConfig {
+    /// The tighter denoising profile the matching recipe uses
+    /// ([`crate::standard_pipeline`] and the CLI's `compare`/`discover`/
+    /// `evaluate` commands).
+    ///
+    /// Matching a run or a ride wants aggressive spike removal — a single GPS
+    /// spike swings the geometry and drops the overlap ratio — so it filters at
+    /// a run/ride ceiling far below [`FilterConfig::default`], which also has to
+    /// admit cars and trains. Keeping the two apart lets recordings of every
+    /// vehicle survive the filter while the matcher stays tuned for the
+    /// run/ride corpus it is measured on.
+    pub fn matching() -> Self {
+        FilterConfig {
+            max_speed: Some(Speed::from_kmh(90.0)),
+            ..FilterConfig::default()
         }
     }
 }

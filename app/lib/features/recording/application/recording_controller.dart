@@ -75,10 +75,11 @@ class RecordingController extends Notifier<LiveRunState?> {
   static const double _maxFixGapSeconds = 60.0;
 
   /// Plausibility ceiling for a free-running segment (the engine's
-  /// `FilterConfig::max_speed`, 90 km/h): far above any run or ride, far below
-  /// a GPS artifact. A faster segment — implied by the ground or reported by
-  /// the receiver — is a jump, not distance.
-  static const double _maxPlausibleSpeedMps = 25.0;
+  /// `FilterConfig::max_speed`, 500 km/h): far above any car or train
+  /// (high-speed rail included), still below a GPS artifact. A faster segment —
+  /// implied by the ground or reported by the receiver — is a jump, not
+  /// distance.
+  static const double _maxPlausibleSpeedMps = 500.0 / 3.6;
 
   /// The free-run distance/moving-time filter: the Dart mirror of the engine's
   /// two-pass track filter (`TrackFilterConfig` defaults). A teleport survives
@@ -581,22 +582,27 @@ class RecordingController extends Notifier<LiveRunState?> {
   }
 
   /// Whether a free-running fix's *segment* is too unreliable to show a pace:
-  /// a dropout or an implausible jump. The ceilings mirror the engine's
-  /// `FilterConfig` defaults. This only gates the pace readout now — distance
-  /// and moving time come from [_freeRun], which keeps a teleport and drops an
-  /// isolated spike.
+  /// a dropout, a sensor-rejected fix, or a step [_freeRun] is holding back as
+  /// an implausible jump. The ceilings mirror the engine's `FilterConfig`
+  /// defaults. This only gates the pace readout — distance and moving time come
+  /// from [_freeRun], which keeps a teleport and drops an isolated spike.
   ///
   /// A reported speed over the ceiling is junk even when the ground is too
-  /// small to corroborate it (a receiver serving a stale cached spike). The
-  /// implied-speed rule only applies across a *connected* segment: once a hole
-  /// is wider than [_maxFixGapSeconds] the drop itself is the discontinuity,
-  /// and the separation across it must not be read as speed.
+  /// small to corroborate it (a receiver serving a stale cached spike). A step
+  /// the filter is *withholding* (its ground not yet counted) must not flash a
+  /// phantom pace either. The implied-speed rule only applies across a
+  /// *connected* segment: once a hole is wider than [_maxFixGapSeconds] the drop
+  /// itself is the discontinuity, and the separation across it must not be read
+  /// as speed.
   bool _isDiscontinuity(GpsFix fix, double groundMeters, double deltaSeconds) {
     if (deltaSeconds > _maxFixGapSeconds) {
       return true;
     }
     final reported = fix.speedMetersPerSecond;
     if (reported != null && reported > _maxPlausibleSpeedMps) {
+      return true;
+    }
+    if (_freeRun.isHoldingJump) {
       return true;
     }
     if (deltaSeconds <= 0) {

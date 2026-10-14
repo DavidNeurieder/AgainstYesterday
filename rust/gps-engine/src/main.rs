@@ -68,10 +68,22 @@ usage:
 
 type CmdResult = Result<(), String>;
 
-/// Standard processing pipeline used throughout the CLI (and by the matching
-/// tests): filter, simplify, resample to a 25 m cadence.
+/// Matching pipeline used by `compare`/`discover`/`evaluate`/`benchmark`:
+/// denoise with the run/ride profile so matching always sees comparable
+/// geometry, then simplify and resample to a 25 m cadence.
 fn process(track: &Track) -> (Track, ProcessingReport) {
-    let (filtered, report) = filter(track, &FilterConfig::default());
+    pipeline(track, &FilterConfig::matching())
+}
+
+/// Recording pipeline for the `process` command: keep the engine's general
+/// plausibility (cars and trains included) so a fast track is cleaned, not
+/// collapsed to its endpoints.
+fn process_recording(track: &Track) -> (Track, ProcessingReport) {
+    pipeline(track, &FilterConfig::default())
+}
+
+fn pipeline(track: &Track, config: &FilterConfig) -> (Track, ProcessingReport) {
+    let (filtered, report) = filter(track, config);
     let simplified = simplify(&filtered, &SimplifyConfig::default());
     let resampled = resample_by_distance(&simplified, Distance::from_meters(25.0))
         .expect("resampling a processed track keeps it valid");
@@ -144,7 +156,7 @@ fn cmd_inspect(args: &[String]) -> CmdResult {
 fn cmd_process(args: &[String]) -> CmdResult {
     let (path, out) = split_out(args)?;
     let raw = load_gpx(Path::new(&path))?;
-    let (processed, report) = process(&raw);
+    let (processed, report) = process_recording(&raw);
 
     println!("Processing  {path}");
     println!("──────────────────────────────────────────────");

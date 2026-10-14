@@ -71,13 +71,14 @@ fn assert_all_points_accuracy_none_or_ok(track: &Track) {
 
 #[test]
 fn reported_too_fast_point_is_removed() {
+    // 200 m/s = 720 km/h: past the 500 km/h ceiling, so junk.
     let track = Track::new(vec![
         point(0, 0.0, 0.0),
         TrackPoint::new(
             Timestamp::from_unix_ms(1_000),
             Coordinate::new(0.001, 0.0).unwrap(),
         )
-        .with_speed(100.0)
+        .with_speed(200.0)
         .unwrap(),
         point(2_000, 0.002, 0.0),
     ])
@@ -89,7 +90,7 @@ fn reported_too_fast_point_is_removed() {
 
 #[test]
 fn legitimate_fast_cycling_is_kept() {
-    // 15 m/s ≈ 54 km/h: well below the 90 km/h threshold.
+    // 15 m/s ≈ 54 km/h: well below the 500 km/h ceiling.
     let mut pts = Vec::new();
     let mut ms = 0;
     let dt_s = 1.0;
@@ -101,6 +102,27 @@ fn legitimate_fast_cycling_is_kept() {
     let track = Track::new(pts).unwrap();
     let (filtered, report) = track.filter(&FilterConfig::default());
     assert_eq!(report.removed_points, 0, "cycling must not be filtered");
+    assert_eq!(filtered.points().len(), 10);
+}
+
+#[test]
+fn legitimate_car_or_train_is_kept() {
+    // 80 m/s ≈ 288 km/h, regionally on a motorway or high-speed rail: below the
+    // 500 km/h ceiling, so neither segment is a jump and nothing is dropped.
+    let mut pts = Vec::new();
+    let mut ms = 0;
+    let dt_s = 1.0;
+    for i in 0..10 {
+        let lat = 80.0 * dt_s * (i as f64) / 111_195.0;
+        pts.push(point(ms, lat, 0.0));
+        ms += (dt_s * 1000.0) as i64;
+    }
+    let track = Track::new(pts).unwrap();
+    let (filtered, report) = track.filter(&FilterConfig::default());
+    assert_eq!(
+        report.removed_points, 0,
+        "a car or train must not be filtered"
+    );
     assert_eq!(filtered.points().len(), 10);
 }
 

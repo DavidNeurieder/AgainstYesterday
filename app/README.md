@@ -176,9 +176,9 @@ ghost gap (never rewinding accumulated distance); an unrecognised line
 accumulates ground distance as a new route. A free run's distance and moving
 time are the geodesic axis of the fixes surviving an incremental mirror of the
 engine's track filter (`lib/engine/track_filter.dart`): a fix the receiver
-marks worse than 50 m or faster than 90 km/h is ignored, a fix is dropped only
+marks worse than 50 m or faster than 500 km/h is ignored, a fix is dropped only
 when both its neighbouring segments are implausible jumps (past 200 m, or an
-implied speed past 90 km/h), anchored on the last survivor — so a GPS hole or a
+implied speed past 500 km/h), anchored on the last survivor — so a GPS hole or a
 re-acquisition teleport keeps the ground `gps-engine`'s `distance_after` would,
 and only an isolated spike is removed instead of stalling every later fix. The
 Android manifest carries

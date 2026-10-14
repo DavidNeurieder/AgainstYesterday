@@ -336,16 +336,19 @@ void main() {
     test('crossing the date line does not fabricate a planet-sized jump', () {
       fakeAsync((async) {
         final h = harness();
+        // Two fixes 0.0015° apart straddling 180°: ~167 m of real ground, under
+        // the 200 m jump ceiling so the step is not withheld pending
+        // corroboration. Naive longitude subtraction would read ~40 000 km.
         const scenario = GpsScenario(
           name: 'antimeridian',
           samples: [
             GpsSample(
               after: Duration(seconds: 10),
-              position: GeoPoint(latitude: 0.0, longitude: 179.9990),
+              position: GeoPoint(latitude: 0.0, longitude: 179.99925),
             ),
             GpsSample(
               after: Duration(seconds: 10),
-              position: GeoPoint(latitude: 0.0, longitude: -179.9990),
+              position: GeoPoint(latitude: 0.0, longitude: -179.99925),
             ),
           ],
         );

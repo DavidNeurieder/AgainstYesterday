@@ -25,7 +25,7 @@ import 'models.dart';
 class TrackFilterConfig {
   const TrackFilterConfig({
     this.maxAccuracyMeters = 50.0,
-    this.maxSpeedMps = 25.0,
+    this.maxSpeedMps = 500.0 / 3.6,
     this.maxJumpMeters = 200.0,
     this.maxTimeGapSeconds = 60.0,
     this.motionFloorMps = 0.5,
@@ -34,7 +34,8 @@ class TrackFilterConfig {
   /// A fix reporting a horizontal accuracy worse than this (metres) is junk.
   final double? maxAccuracyMeters;
 
-  /// Ground speed past this (m/s, ~90 km/h) is a GPS artifact, not motion.
+  /// A fix reporting ground speed past this (m/s, ~500 km/h) is a GPS artifact,
+  /// not motion.
   final double? maxSpeedMps;
 
   /// A single step longer than this (metres) is a jump.
@@ -95,33 +96,12 @@ bool trackIsJump(GpsFix a, GpsFix b, TrackFilterConfig config) {
 GeoPoint _pointOf(GpsFix fix) =>
     GeoPoint(latitude: fix.latitude, longitude: fix.longitude);
 
-/// Whether the step from [a] to [b] is an implausible-*speed* jump: ground the
-/// receiver's own timing says could not have been covered. The engine drops such
-/// a step only when it is isolated (see [trackIsJump]); the live axis also
-/// *withholds* it until the next fix corroborates it as a real teleport or
-/// refutes it as a spike, so a spike never makes the distance overshoot.
-bool trackIsSpike(GpsFix a, GpsFix b, TrackFilterConfig config) {
-  final delta = b.timestamp.difference(a.timestamp).inMilliseconds / 1000.0;
-  if (delta <= 0) {
-    return false;
-  }
-  final maxGap = config.maxTimeGapSeconds;
-  if (maxGap != null && delta > maxGap) {
-    return false;
-  }
-  final maxSpeed = config.maxSpeedMps;
-  if (maxSpeed == null) {
-    return false;
-  }
-  return haversineMeters(_pointOf(a), _pointOf(b)) / delta > maxSpeed;
-}
-
 /// Incremental `distance_after`: feed raw fixes in timestamp order.
 ///
 /// At any moment [distanceMeters] tracks the engine's `distance_after` for the
 /// fixes seen *so far*. Because the engine keeps the last point unconditionally,
-/// the undecided final segment is counted too — unless its implied speed is
-/// itself implausible ([trackIsSpike]), in which case it is withheld until the
+/// the undecided final segment is counted too — unless its step is an
+/// implausible jump ([trackIsJump]), in which case it is withheld until the
 /// next fix corroborates it as a real teleport or refutes it as a spike (which
 /// is then retracted).
 class TrackFilter {
@@ -135,7 +115,6 @@ class TrackFilter {
   /// The latest sensor-clean fix whose outgoing segment is not yet known.
   GpsFix? _pending;
   bool _pendingIsJump = false;
-  bool _pendingIsSpike = false;
 
   double _committedMeters = 0;
   double _committedSeconds = 0;
@@ -147,6 +126,10 @@ class TrackFilter {
 
   /// Moving seconds spanned by those surviving segments.
   double get movingSeconds => _committedSeconds + _pendingSeconds;
+
+  /// Whether the latest step is an implausible jump still withheld from the
+  /// axis.
+  bool get isHoldingJump => _pending != null && _pendingIsJump;
 
   /// Feeds one raw fix. A fix the sensor itself rejects is ignored entirely: it
   /// neither bridges nor breaks the chain (engine pass 1).
@@ -169,13 +152,12 @@ class TrackFilter {
     // next genuine fix is measured locally instead of from the bad one.
     _pending = fix;
     _pendingIsJump = trackIsJump(_anchor!, fix, config);
-    _pendingIsSpike = trackIsSpike(_anchor!, fix, config);
     _recomputePending();
   }
 
   /// Closes the chain at FINISH. The engine always keeps the final point, so a
-  /// withheld closing chord (its step looked like a spike) is counted here
-  /// rather than lost — the free run ends on the same `distance_after` the batch
+  /// withheld closing chord (its step looked like a jump) is counted here rather
+  /// than lost — the free run ends on the same `distance_after` the batch
   /// filter would produce. Calling this does not double-count a segment that was
   /// already counted.
   void flush() {
@@ -186,7 +168,6 @@ class TrackFilter {
     }
     _pending = null;
     _pendingIsJump = false;
-    _pendingIsSpike = false;
     _recomputePending();
   }
 
@@ -195,7 +176,6 @@ class TrackFilter {
     _anchor = null;
     _pending = null;
     _pendingIsJump = false;
-    _pendingIsSpike = false;
     _committedMeters = 0;
     _committedSeconds = 0;
     _pendingMeters = 0;
@@ -210,8 +190,8 @@ class TrackFilter {
 
   void _recomputePending() {
     final pending = _pending;
-    if (pending == null || _pendingIsSpike) {
-      // A spike's ground is withheld until the next fix corroborates it.
+    if (pending == null || _pendingIsJump) {
+      // An implausible jump is withheld until the next fix corroborates it.
       _pendingMeters = 0;
       _pendingSeconds = 0;
       return;
