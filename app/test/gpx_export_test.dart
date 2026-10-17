@@ -103,4 +103,140 @@ void main() {
       expect(name, 'against-yesterday-2026-01-02-030405.gpx');
     });
   });
+
+  // §33 "activity → export GPX": History's per-run export. The run starts are
+  // built as *local* `DateTime`s so `toLocal()` is the identity and the name's
+  // stamp is deterministic on any machine (the UTC fixture above is not).
+  Activity localActivity({List<TrackPoint>? track}) => Activity(
+        id: 'act-010',
+        routeId: 'river-loop',
+        startedAt: DateTime(2026, 1, 2, 3, 4, 5),
+        track: track ?? [TrackPoint(position: const GeoPoint(latitude: 52.5, longitude: 13.4), timestamp: _epoch)],
+      );
+
+  group('buildActivityGpx', () {
+    test('is null when the run has no track', () {
+      expect(
+        buildActivityGpx(activity: activityWithTrack(track: const [])),
+        isNull,
+      );
+      expect(
+        buildActivityGpx(activity: Activity(id: 'a', startedAt: _epoch)),
+        isNull,
+      );
+    });
+
+    test('names the single <trk> after the route and the run start', () {
+      final gpx = buildActivityGpx(
+        activity: localActivity(),
+        routeName: 'River Loop',
+      )!;
+      expect(gpx, startsWith('<?xml version="1.0" encoding="UTF-8"?>'));
+      expect('<trk>'.allMatches(gpx).length, 1);
+      expect(gpx, contains('<name>River Loop · 2026-01-02 03:04</name>'));
+    });
+
+    test('writes each point time as UTC ISO-8601', () {
+      final gpx = buildActivityGpx(
+        activity: localActivity(),
+        routeName: 'River Loop',
+      )!;
+      expect(gpx, contains('<trkpt lat="52.5" lon="13.4">'));
+      expect(gpx, contains('<time>2026-01-01T00:00:00.000Z</time>'));
+    });
+
+    test('writes elevation only when the receiver reported it', () {
+      final withEle = buildActivityGpx(
+        activity: localActivity(track: [
+          TrackPoint(
+            position: const GeoPoint(latitude: 52.5, longitude: 13.4),
+            altitudeMeters: 42.5,
+            timestamp: _epoch,
+          ),
+        ]),
+        routeName: 'River Loop',
+      )!;
+      expect(withEle, contains('<ele>42.5</ele>'));
+
+      final withoutEle = buildActivityGpx(
+        activity: localActivity(),
+        routeName: 'River Loop',
+      )!;
+      expect(withoutEle, isNot(contains('<ele>')));
+    });
+
+    test('falls back to the stored route id, then a generic label', () {
+      final byId = buildActivityGpx(activity: localActivity())!;
+      expect(byId, contains('<name>river-loop · '));
+
+      final unnamed = buildActivityGpx(
+        activity: Activity(
+          id: 'a',
+          startedAt: DateTime(2026, 1, 2),
+          track: [
+            TrackPoint(
+              position: const GeoPoint(latitude: 1, longitude: 2),
+              timestamp: _epoch,
+            ),
+          ],
+        ),
+      )!;
+      expect(unnamed, contains('<name>Run · 2026-01-02 00:00</name>'));
+    });
+
+    test('escapes XML-special characters in the run name', () {
+      final gpx = buildActivityGpx(
+        activity: localActivity(),
+        routeName: 'Tom & Jerry <"Lakes">',
+      )!;
+      expect(
+        gpx,
+        contains('<name>Tom &amp; Jerry &lt;&quot;Lakes&quot;&gt; · '),
+      );
+    });
+  });
+
+  group('gpxActivityFileName', () {
+    Activity run({required DateTime startedAt, String? routeId}) => Activity(
+          id: 'act-011',
+          routeId: routeId,
+          startedAt: startedAt,
+        );
+
+    test('slugs the route and stamps the run start', () {
+      expect(
+        gpxActivityFileName(
+          activity: run(startedAt: DateTime(2026, 1, 2, 3, 4, 5)),
+          routeName: 'River Loop',
+        ),
+        'against-yesterday-river-loop-2026-01-02-030405.gpx',
+      );
+    });
+
+    test('folds accents and collapses punctuation', () {
+      expect(
+        gpxActivityFileName(
+          activity: run(startedAt: DateTime(2026, 1, 2, 3, 4, 5)),
+          routeName: 'Hügelrunde (North)!',
+        ),
+        'against-yesterday-hugelrunde-north-2026-01-02-030405.gpx',
+      );
+    });
+
+    test('falls back to the stored route id, then to the bare stamp', () {
+      expect(
+        gpxActivityFileName(
+          activity: run(
+            startedAt: DateTime(2026, 1, 2, 3, 4, 5),
+            routeId: 'park-5k',
+          ),
+        ),
+        'against-yesterday-park-5k-2026-01-02-030405.gpx',
+      );
+      expect(
+        gpxActivityFileName(activity: run(startedAt: DateTime(2026, 1, 2, 3, 4, 5))),
+        'against-yesterday-2026-01-02-030405.gpx',
+      );
+    });
+  });
 }

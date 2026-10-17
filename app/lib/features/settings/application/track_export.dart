@@ -1,7 +1,8 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// Where Settings → Export GPX puts its file (M21, §26).
+/// Where the GPX exports put their file (Settings → Export GPX, M21 §26;
+/// History's per-run export, §33).
 ///
 /// The GPX document itself is built by `gpx_export.dart`; this layer only
 /// owns *where it lands*. On Android the public Downloads folder is written
@@ -19,6 +20,8 @@ import 'package:flutter/services.dart'
     show MethodChannel, MissingPluginException, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+
+import '../../../engine/models.dart';
 
 /// The channel `MainActivity` registers to write files into Downloads.
 const MethodChannel trackFilesChannel =
@@ -102,10 +105,60 @@ final trackExporterProvider = Provider<TrackExporter>(
 
 /// A collision-free GPX name derived from [now], so repeated exports never
 /// clobber each other: `against-yesterday-2026-10-09-141530.gpx`.
-String gpxFileName(DateTime now) {
-  final local = now.toLocal();
+String gpxFileName(DateTime now) =>
+    'against-yesterday-${_stamp(now)}.gpx';
+
+/// The file name for a single run's export: the route slug plus the run's own
+/// start, so the file says what it holds rather than when it was written —
+/// `against-yesterday-river-loop-2026-01-02-030405.gpx`.
+///
+/// Falls back to the stored route id when no [routeName] is known, and to the
+/// bare stamp when there is neither. Re-exporting the same run lands on the
+/// same name; Android's `MediaStore` de-duplicates it.
+String gpxActivityFileName({
+  required Activity activity,
+  String? routeName,
+}) {
+  final slug = _slug(routeName ?? activity.routeId ?? '');
+  final stamp = _stamp(activity.startedAt);
+  return slug.isEmpty
+      ? 'against-yesterday-$stamp.gpx'
+      : 'against-yesterday-$slug-$stamp.gpx';
+}
+
+String _stamp(DateTime when) {
+  final local = when.toLocal();
   String two(int value) => value.toString().padLeft(2, '0');
-  return 'against-yesterday-'
-      '${local.year}-${two(local.month)}-${two(local.day)}-'
-      '${two(local.hour)}${two(local.minute)}${two(local.second)}.gpx';
+  return '${local.year}-${two(local.month)}-${two(local.day)}-'
+      '${two(local.hour)}${two(local.minute)}${two(local.second)}';
+}
+
+/// Folds the accented letters the route names in this app actually use, so a
+/// German route keeps its spelling in ASCII.
+const _foldings = {
+  'ä': 'a',
+  'ö': 'o',
+  'ü': 'u',
+  'ß': 'ss',
+  'á': 'a',
+  'à': 'a',
+  'â': 'a',
+  'é': 'e',
+  'è': 'e',
+  'ç': 'c',
+  'ñ': 'n',
+};
+
+/// Lowercases [value] and folds everything that is not a plain ASCII letter or
+/// digit into single dashes, so `Hügelrunde (North)` becomes `hugelrunde-north`.
+String _slug(String value) {
+  final folded = StringBuffer();
+  for (final rune in value.toLowerCase().runes) {
+    final char = String.fromCharCode(rune);
+    folded.write(_foldings[char] ?? char);
+  }
+  return folded
+      .toString()
+      .replaceAll(RegExp('[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
 }

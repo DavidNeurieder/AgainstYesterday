@@ -11,6 +11,14 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- History gains a per-run **Export GPX** action (§33 "activity → export GPX"):
+  each row whose run has a recorded track gets a share button that writes that
+  run's GPX to Downloads, the same destination Settings → Export GPX uses. The
+  file is named after the route and the run's own start
+  (`against-yesterday-river-loop-2026-01-02-030405.gpx`) and each point carries
+  its `<time>` and `<ele>`; a run with no track offers no button. The write
+  reuses the existing `TrackExporter` seam, so the hermetic suites inject a
+  recording fake. See `history_test.dart`.
 - Settings → About gains two outward links: **GitHub** (the source repository,
   `github.com/DavidNeurieder/AgainstYesterday`) and **Report an issue** (its
   issue tracker). Tapping a row hands the URL to the platform's default browser

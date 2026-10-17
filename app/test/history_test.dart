@@ -8,6 +8,7 @@ import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/history/application/history_grouping.dart';
+import 'package:against_yesterday/features/settings/application/track_export.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'test_catalog.dart';
@@ -17,11 +18,20 @@ void main() {
       find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
 
   /// The app behind the seeded catalog; History shows the two demo runs.
-  Widget pumpedApp() => ProviderScope(
+  ///
+  /// [activities] replaces the demo history (which carries no tracks), and
+  /// [exporter] captures the per-run GPX export instead of writing to disk.
+  Widget pumpedApp({List<Activity>? activities, TrackExporter? exporter}) =>
+      ProviderScope(
         overrides: [
           persistenceStoreProvider.overrideWithValue(
-            seededStore(routes: demoRoutes, activities: demoActivities()),
+            seededStore(
+              routes: demoRoutes,
+              activities: activities ?? demoActivities(),
+            ),
           ),
+          if (exporter != null)
+            trackExporterProvider.overrideWithValue(exporter),
         ],
         child: const AgainstYesterdayApp(),
       );
@@ -295,4 +305,103 @@ void main() {
       expect(find.text('Run deleted.'), findsOneWidget);
     });
   });
+
+  // §33 "activity → export GPX": each row writes its own run to Downloads.
+  group('History export', () {
+    final track = [
+      TrackPoint(
+        position: const GeoPoint(latitude: 52.5, longitude: 13.4),
+        timestamp: DateTime.utc(2026, 1, 2, 3, 4, 5),
+      ),
+    ];
+
+    testWidgets('exports the run to Downloads', (tester) async {
+      final exporter = _RecordingTrackExporter();
+      await tester.pumpWidget(
+        pumpedApp(
+          activities: [seedActivity(id: 'act-track', track: track)],
+          exporter: exporter,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(tab('History'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('export-activity-act-track')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(exporter.calls, hasLength(1));
+      final saved = exporter.calls.single;
+      expect(saved.fileName, startsWith('against-yesterday-river-loop-'));
+      expect(saved.fileName, endsWith('.gpx'));
+      expect(saved.contents, contains('<name>River Loop · '));
+      expect(saved.contents, contains('<trkpt lat="52.5" lon="13.4">'));
+      expect(
+        find.text('Saved ${saved.fileName} to Downloads.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a run with no track offers no export button', (tester) async {
+      await tester.pumpWidget(pumpedApp());
+      await tester.pumpAndSettle();
+      await tester.tap(tab('History'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('export-activity-act-003')),
+        findsNothing,
+      );
+      // The delete affordance is unaffected.
+      expect(
+        find.byKey(const ValueKey('delete-activity-act-003')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('reports a failed write', (tester) async {
+      final exporter = _RecordingTrackExporter(fail: true);
+      await tester.pumpWidget(
+        pumpedApp(
+          activities: [seedActivity(id: 'act-track', track: track)],
+          exporter: exporter,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(tab('History'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('export-activity-act-track')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Export failed: Downloads is not writable.'),
+        findsOneWidget,
+      );
+    });
+  });
+}
+
+/// A [TrackExporter] that records what History asked it to save.
+class _RecordingTrackExporter implements TrackExporter {
+  _RecordingTrackExporter({this.fail = false});
+
+  final bool fail;
+  final calls = <({String fileName, String contents})>[];
+
+  @override
+  Future<String> saveToDownloads({
+    required String fileName,
+    required String contents,
+  }) async {
+    calls.add((fileName: fileName, contents: contents));
+    if (fail) {
+      throw const TrackExportException('Downloads is not writable.');
+    }
+    return 'Download/$fileName';
+  }
 }

@@ -57,7 +57,11 @@ const Route hillLoopRoute = Route(
 );
 
 /// A partial activity for tests that need recent history on Home.
-Activity seedActivity({String id = 'act-001', String routeId = 'river-loop'}) =>
+Activity seedActivity({
+  String id = 'act-001',
+  String routeId = 'river-loop',
+  List<TrackPoint>? track,
+}) =>
     Activity(
       id: id,
       routeId: routeId,
@@ -65,6 +69,7 @@ Activity seedActivity({String id = 'act-001', String routeId = 'river-loop'}) =>
       duration: const Elapsed.seconds(1502),
       distance: const Distance.kilometers(4.75),
       performance: '24:22 · 1st',
+      track: track,
     );
 
 /// The three-entry route catalog most library/home tests render.

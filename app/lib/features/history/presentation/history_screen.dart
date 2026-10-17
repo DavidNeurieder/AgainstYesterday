@@ -21,8 +21,10 @@ import '../../../core/ui/app_states.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import '../../settings/application/gpx_export.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../settings/application/track_export.dart';
 import '../application/history_grouping.dart';
 
 class HistoryScreen extends ConsumerStatefulWidget {
@@ -103,7 +105,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                               child: SectionHeader(title: group.label),
                             ),
                             for (final activity in group.activities) ...[
-                              _ActivityRow(activity: activity, pb: pb),
+                              _ActivityRow(
+                                key: ValueKey(activity.id),
+                                activity: activity,
+                                pb: pb,
+                              ),
                               const SizedBox(height: AppSpacing.sm),
                             ],
                           ],
@@ -172,14 +178,29 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-class _ActivityRow extends ConsumerWidget {
-  const _ActivityRow({required this.activity, required this.pb});
+class _ActivityRow extends ConsumerStatefulWidget {
+  const _ActivityRow({
+    super.key,
+    required this.activity,
+    required this.pb,
+  });
 
   final Activity activity;
   final HistoryPb pb;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ActivityRow> createState() => _ActivityRowState();
+}
+
+class _ActivityRowState extends ConsumerState<_ActivityRow> {
+  /// Guards the per-run export against a double tap while the write is in
+  /// flight — the button sits beside Delete in a scrolling list.
+  bool _exporting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final activity = widget.activity;
+    final pb = widget.pb;
     final textTheme = Theme.of(context).textTheme;
     final units = ref.watch(displayUnitProvider);
     final routes = ref.watch(routeRepositoryProvider);
@@ -253,6 +274,14 @@ class _ActivityRow extends ConsumerWidget {
                   ),
                 ),
               const SizedBox(width: AppSpacing.xs),
+              if (activity.track?.isNotEmpty ?? false)
+                IconButton(
+                  key: ValueKey('export-activity-${activity.id}'),
+                  onPressed: _exporting ? null : () => _export(routeName),
+                  icon: const Icon(Icons.ios_share_outlined),
+                  tooltip: 'Export GPX',
+                  color: AppColors.textMuted,
+                ),
               IconButton(
                 key: ValueKey('delete-activity-${activity.id}'),
                 onPressed: () => _confirmDeleteActivity(
@@ -270,6 +299,48 @@ class _ActivityRow extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Saves this run's GPX to Downloads (§33 "activity → export GPX"), the same
+  /// destination Settings → Export GPX uses.
+  Future<void> _export(String? routeName) async {
+    final activity = widget.activity;
+    final messenger = ScaffoldMessenger.of(context);
+    AppHaptics.light(ref);
+    final gpx = buildActivityGpx(activity: activity, routeName: routeName);
+    if (gpx == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Nothing to export yet.')),
+      );
+      return;
+    }
+    final fileName = gpxActivityFileName(
+      activity: activity,
+      routeName: routeName,
+    );
+    setState(() => _exporting = true);
+    try {
+      await ref
+          .read(trackExporterProvider)
+          .saveToDownloads(fileName: fileName, contents: gpx);
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Saved $fileName to Downloads.')),
+      );
+    } on TrackExportException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Export failed: ${error.message}')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _exporting = false);
+      }
+    }
   }
 }
 
