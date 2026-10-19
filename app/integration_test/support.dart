@@ -119,3 +119,17 @@ Future<void> waitForCondition(
   fail('Timed out waiting for $description'
       '${diagnostics == null ? '' : '\n${diagnostics()}'}');
 }
+
+/// Ends a live run the way a user does: taps FINISH, then confirms the §12
+/// dialog that follows. The confirm is polled for because the dialog mounts on
+/// the next real frame on the live binding.
+Future<void> finishAndConfirm(WidgetTester tester) async {
+  await tester.tap(find.text('FINISH'));
+  await waitForCondition(
+    tester,
+    () => tester.any(find.byKey(const ValueKey('confirm-finish'))),
+    'the finish confirmation dialog',
+  );
+  await tester.tap(find.byKey(const ValueKey('confirm-finish')));
+  await tester.pump();
+}

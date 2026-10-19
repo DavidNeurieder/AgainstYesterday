@@ -79,7 +79,7 @@ void main() {
     await tester.tap(find.text('RESUME'));
     await tester.pumpAndSettle();
     await pumpFor(tester, const Duration(milliseconds: 800));
-    await tester.tap(find.text('FINISH'));
+    await finishAndConfirm(tester);
     await waitForText(tester, 'VIEW RESULT');
 
     // M11: a short demo run may land on either completion header.
@@ -248,7 +248,7 @@ void main() {
     // Finishing the restored run clears the interrupted-run snapshot — but
     // only after the background save chain lands, so poll instead of guessing
     // how long that takes.
-    await tester.tap(find.text('FINISH'));
+    await finishAndConfirm(tester);
     await waitForText(tester, 'VIEW RESULT');
     await waitForCondition(
       tester,

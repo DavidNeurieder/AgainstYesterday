@@ -104,6 +104,10 @@ void main() {
     // Finish completes the run.
     await tester.tap(find.text('FINISH'));
     await tester.pump();
+    // FINISH confirms first (§12).
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('confirm-finish')));
+    await tester.pump();
     // Let the phase crossfade (M14 AnimatedSwitcher) finish so the live
     // screen and its gap are fully gone.
     await tester.pump(const Duration(milliseconds: 300));

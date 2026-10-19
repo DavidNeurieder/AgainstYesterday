@@ -4,7 +4,8 @@
 /// Live run screen — running and paused phases (§12, §13).
 ///
 /// The **gap is the hero metric**: a big ahead/behind readout, then distance,
-/// pace and moving time, then the pause/finish controls.
+/// pace and moving time, then the pause/finish controls. FINISH confirms
+/// before it ends the run, so a stray tap mid-stride cannot seal the session.
 library;
 
 import 'package:flutter/material.dart';
@@ -187,11 +188,7 @@ class LiveRunScreen extends ConsumerWidget {
                     child: _ActionButton(
                       label: 'FINISH',
                       icon: Icons.stop,
-                      onPressed: () {
-                        // M14 haptics: firm confirm when the run ends.
-                        AppHaptics.heavy(ref);
-                        controller.finishRun();
-                      },
+                      onPressed: () => _confirmFinish(context, ref),
                       foreground: AppColors.background,
                       background: AppColors.you,
                     ),
@@ -204,6 +201,39 @@ class LiveRunScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// §12: FINISH seals the session — the clock stops, the run is saved, and the
+/// live screen is gone — so it asks first. A runner glancing at the phone
+/// mid-stride should not end the run with a stray tap.
+Future<void> _confirmFinish(BuildContext context, WidgetRef ref) async {
+  final controller = ref.read(recordingControllerProvider.notifier);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Finish this run?'),
+      content: const Text(
+        'The clock stops and the run is saved. You can still view the result.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Keep running'),
+        ),
+        FilledButton(
+          key: const ValueKey('confirm-finish'),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Finish'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) {
+    return;
+  }
+  // M14 haptics: firm confirm when the run ends.
+  AppHaptics.heavy(ref);
+  controller.finishRun();
 }
 
 /// Screen-off protection failed to start. The run may keep recording with the

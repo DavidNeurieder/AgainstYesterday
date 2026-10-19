@@ -108,6 +108,35 @@ void main() {
     expect(find.text('PAUSE'), findsNothing);
   });
 
+  testWidgets('FINISH asks first; keeping running leaves the run live',
+      (tester) async {
+    await openRecordFlow(tester);
+    await waitReady(tester);
+
+    await tester.tap(find.text('START'));
+    await countdown(tester);
+    await tester.pump(const Duration(seconds: 2));
+
+    // §12: a stray tap mid-run must not seal the session, so FINISH asks.
+    await tester.tap(find.text('FINISH'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Finish this run?'), findsOneWidget);
+    expect(find.byKey(const ValueKey('confirm-finish')), findsOneWidget);
+    // The live screen is still there behind the dialog.
+    expect(find.text('FINISH'), findsOneWidget);
+    expect(find.text('VIEW RESULT'), findsNothing);
+
+    // Backing out keeps recording: the run is untouched.
+    await tester.tap(find.text('Keep running'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Finish this run?'), findsNothing);
+    expect(find.byKey(const ValueKey('confirm-finish')), findsNothing);
+    expect(find.text('FINISH'), findsOneWidget);
+    expect(find.text('VIEW RESULT'), findsNothing);
+  });
+
   testWidgets('completed shows neither pause nor resume nor finish',
       (tester) async {
     await openRecordFlow(tester);
@@ -117,6 +146,10 @@ void main() {
     await countdown(tester);
     await tester.pump(const Duration(seconds: 2));
     await tester.tap(find.text('FINISH'));
+    // §12: FINISH asks first — confirm in the dialog, then the run ends.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('confirm-finish')));
     await tester.pump(); // AnimatedSwitcher starts the crossfade.
     // Let the phase crossfade (250 ms) and the headline springs in.
     await tester.pump(const Duration(milliseconds: 400));

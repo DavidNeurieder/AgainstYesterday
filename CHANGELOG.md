@@ -323,6 +323,12 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- The live run's **FINISH** now asks first: a confirmation dialog ("Finish this
+  run?") offers *Keep running* and *Finish*, so a stray tap while the phone is
+  in hand mid-stride can no longer end the run. Confirming ends the run exactly
+  as before — the firm haptic simply moved from the tap to the confirmation —
+  and the on-device suites end a run through the shared `finishAndConfirm`
+  helper. See `ui_state_test.dart`.
 - The engine's GPS speed ceiling was raised from 90 km/h to 500 km/h, so the app
   records cars and trains instead of mangling them. `FilterConfig::max_speed`
   (default) and its Dart mirror (`TrackFilterConfig.maxSpeedMps`) both use it: a

@@ -197,6 +197,9 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.tap(find.text('FINISH'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('confirm-finish')));
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.text('VIEW RESULT'));
     await tester.pumpAndSettle();
@@ -234,6 +237,9 @@ void main() {
     // finishing ahead of the pace is a PB every time.
     await tester.pump(const Duration(seconds: 120));
     await tester.tap(find.text('FINISH'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('confirm-finish')));
     await tester.pumpAndSettle();
 
     expect(find.text('NEW PERSONAL BEST'), findsOneWidget);

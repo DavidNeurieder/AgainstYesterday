@@ -183,7 +183,7 @@ void main() {
     );
 
     // Finish on the device clock; a short real run completes normally.
-    await tester.tap(find.text('FINISH'));
+    await finishAndConfirm(tester);
     await waitForText(tester, 'VIEW RESULT');
     final header = tester.any(find.text('RUN COMPLETE')) ||
         tester.any(find.text('NEW PERSONAL BEST'));
