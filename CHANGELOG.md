@@ -241,6 +241,12 @@ documented here, grouped by the implementation milestones in
 
 ### Fixed
 
+- The screens survive a raised **system font scale** (§7, §31). Label/value rows
+  — the shared `StatRow` and the route detail's stat and attempt rows — now give
+  the label the slack and let it wrap instead of pushing the value off the end
+  of the row. At Android's 2.0× setting the route detail's stat row overflowed
+  by 150 px; it was the only failure when the whole browse-and-race journey was
+  pumped at 1.3× and 2.0×, which `responsive_test.dart` now does.
 - The on-device record-a-route test waits for the saved screen to leave the
   navigation stack before asserting the Home tile. The shell is only revealed
   while that transition drains, and both screens render the route name in the

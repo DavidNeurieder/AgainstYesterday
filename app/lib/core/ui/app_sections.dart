@@ -41,12 +41,15 @@ class StatRow extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      // §7: at a large system font scale the label takes the slack and wraps,
+      // so the value can never be pushed off the end of the row.
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: textTheme.bodyMedium),
+          Expanded(child: Text(label, style: textTheme.bodyMedium)),
+          const SizedBox(width: AppSpacing.sm),
           Text(
             value,
+            textAlign: TextAlign.right,
             style: tabular(
               textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600) ??
                   const TextStyle(),

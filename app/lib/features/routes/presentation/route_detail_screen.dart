@@ -150,15 +150,22 @@ class _StatRow extends StatelessWidget {
     final value = this.value;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
+      // §7: a large system font scale must not clip either end of the row —
+      // the label takes the slack and wraps, the value keeps its own width.
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          Expanded(
+            child: Text(
+              label,
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
+          const SizedBox(width: AppSpacing.sm),
           Text(
             value?.format() ?? '—',
+            textAlign: TextAlign.right,
             style: textTheme.titleSmall?.copyWith(
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
@@ -307,15 +314,22 @@ class _AttemptRow extends StatelessWidget {
     final duration = attempt.duration!;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
+      // §7: the date wraps instead of pushing the duration off the row at a
+      // large system font scale.
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            dateLabelFor(attempt.startedAt.toLocal()),
-            style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          Expanded(
+            child: Text(
+              dateLabelFor(attempt.startedAt.toLocal()),
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
           ),
+          const SizedBox(width: AppSpacing.sm),
           Text(
             duration.format(),
+            textAlign: TextAlign.right,
             style: textTheme.titleSmall?.copyWith(
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
