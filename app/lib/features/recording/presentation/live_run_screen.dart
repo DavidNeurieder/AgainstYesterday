@@ -3,9 +3,11 @@
 
 /// Live run screen — running and paused phases (§12, §13).
 ///
-/// The **gap is the hero metric**: a big ahead/behind readout, then distance,
-/// pace and moving time, then the pause/finish controls. FINISH confirms
-/// before it ends the run, so a stray tap mid-stride cannot seal the session.
+/// The **gap is the hero metric**: a big ahead/behind readout at full size
+/// (the only number that answers "am I winning?"), with distance beside it as
+/// the supporting read, then pace, moving time and fix count, then the
+/// pause/finish controls. FINISH confirms before it ends the run, so a stray
+/// tap mid-stride cannot seal the session.
 library;
 
 import 'package:flutter/material.dart';
@@ -88,31 +90,36 @@ class LiveRunScreen extends ConsumerWidget {
                     : const SizedBox(key: ValueKey('resumed')),
               ),
               const SizedBox(height: AppSpacing.md),
+              // §2: the gap leads — it is the one number that answers "am I
+              // winning?" — so it gets the hero type at its natural size
+              // instead of being squeezed into a fixed 168 px box beside a
+              // larger distance. Distance stays on screen as the supporting
+              // read, muted so the ahead/behind colour owns the row.
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: Text(
-                      state.distance.formatWith(units),
-                      key: const ValueKey('live-distance'),
-                      style: textTheme.displayMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ),
-                  if (state.ghostGap case final gap?)
-                    SizedBox(
-                      width: 168,
+                  if (state.ghostGap case final gap?) ...[
+                    _DistanceReadout(state.distance, units, secondary: true),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      // §2: the gap owns the rest of the row at its natural
+                      // size; scaleDown only steps in on the narrowest phones,
+                      // so an hour-long gap can never wrap mid-digit.
                       child: FittedBox(
                         alignment: Alignment.centerRight,
                         fit: BoxFit.scaleDown,
                         child: PerformanceGap(
+                          key: const ValueKey('live-gap'),
                           difference: gap.timeDifference,
                           distance: gap.distance,
                           state: gapState,
                         ),
                       ),
+                    ),
+                  ] else
+                    // No ghost to race: distance *is* the hero readout.
+                    Expanded(
+                      child: _DistanceReadout(state.distance, units),
                     ),
                 ],
               ),
@@ -418,6 +425,36 @@ class _GpsPill extends StatelessWidget {
                 ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The live distance read (§2): the hero number of a free run, and the
+/// supporting readout beside a race's hero gap — smaller and muted so the
+/// ahead/behind colours stay the first thing the eye finds.
+class _DistanceReadout extends StatelessWidget {
+  const _DistanceReadout(
+    this.distance,
+    this.units, {
+    this.secondary = false,
+  });
+
+  final Distance distance;
+  final Units units;
+  final bool secondary;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Text(
+      distance.formatWith(units),
+      key: const ValueKey('live-distance'),
+      style: (secondary ? textTheme.headlineSmall : textTheme.displayMedium)
+          ?.copyWith(
+        fontWeight: FontWeight.w700,
+        color: secondary ? AppColors.textSecondary : null,
+        fontFeatures: const [FontFeature.tabularFigures()],
       ),
     );
   }

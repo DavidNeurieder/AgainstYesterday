@@ -337,6 +337,12 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- The live run screen now leads with the **PB gap** (§2, checklist 1): the gap
+  is drawn at its full hero size in the whole row left over, with the distance
+  demoted beside it instead of the gap being squeezed into a fixed 168 px box
+  next to a larger distance. A free run — no ghost to race — keeps distance as
+  the hero readout, and the gap still scales down rather than wrapping on the
+  narrowest phones (a "+1:08:21" gap at 320 px). See `live_run_hero_test.dart`.
 - The live run's **FINISH** now asks first: a confirmation dialog ("Finish this
   run?") offers *Keep running* and *Finish*, so a stray tap while the phone is
   in hand mid-stride can no longer end the run. Confirming ends the run exactly
