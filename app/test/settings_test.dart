@@ -206,6 +206,7 @@ void main() {
       countdownEnabled: false,
       units: Units.miles,
       onboardingSeen: false,
+      locationRationaleSeen: false,
     );
     expect(parseAppSettings(appSettingsToJson(custom)), custom);
     expect(parseAppSettings(appSettingsToJson(AppSettings.defaults)),

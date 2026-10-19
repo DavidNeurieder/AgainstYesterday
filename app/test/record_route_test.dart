@@ -19,6 +19,9 @@ class _ParkedGpsSource implements GpsSource {
   Future<String?> ensureAvailable() async => null;
 
   @override
+  Future<bool> canAskPermission() async => false;
+
+  @override
   Stream<GpsFix> fixes() => const Stream<GpsFix>.empty();
 
   @override

@@ -83,6 +83,10 @@ void main() {
     await tester.tap(find.text('RECORD ROUTE'));
     await tester.pumpAndSettle();
 
+    // §33: a cold install can still meet the location explanation before the
+    // permission dialog; accept it if it is there.
+    await acceptLocationRationaleIfShown(tester, 'GPS READY');
+
     // The prep gate runs the real permission/service checks; the harness
     // keeps the grant alive, so READY must show on its own.
     await waitForCondition(
@@ -155,6 +159,9 @@ void main() {
     // Same pre-run gate as the demo suite, but fed by the real receiver.
     await tester.tap(find.text('RACE YOUR BEST'));
     await tester.pumpAndSettle();
+    // §33: the explanation is shown once per install; the record leg above
+    // takes it, so this is normally a no-op — but keep the race leg robust.
+    await acceptLocationRationaleIfShown(tester, 'READY TO RUN');
     await waitForCondition(
       tester,
       () => tester.any(find.text('READY TO RUN')),

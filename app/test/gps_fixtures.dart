@@ -413,6 +413,11 @@ class ScriptedGpsSource implements GpsSource {
   @override
   Future<String?> ensureAvailable() async => acquisition;
 
+  /// The §33 rationale only appears on a real install; the scripts never model
+  /// it, so the flows keep their plain path.
+  @override
+  Future<bool> canAskPermission() async => false;
+
   @override
   Stream<GpsFix> fixes() => _controller.stream;
 

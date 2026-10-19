@@ -69,6 +69,9 @@ class _RefusingGpsSource implements GpsSource {
   Future<String?> ensureAvailable() async => reason;
 
   @override
+  Future<bool> canAskPermission() async => false;
+
+  @override
   Stream<GpsFix> fixes() => const Stream.empty();
 
   @override

@@ -51,6 +51,14 @@ abstract interface class GpsSource {
   /// otherwise the failure reason the recording surfaces on the error screen.
   Future<String?> ensureAvailable();
 
+  /// Whether Android would still show its own location-permission dialog:
+  /// permission is missing but not permanently denied.
+  ///
+  /// The UI gives the §33 explanation *before* that dialog can appear, so it
+  /// asks this first — a granted permission means there is nothing to explain,
+  /// and a permanently denied one means no dialog will appear to explain.
+  Future<bool> canAskPermission();
+
   /// Unprocessed fixes from the receiver. The app is expected to remain
   /// subscribed for the whole session and ignore anything arriving while the
   /// run is paused or finishing.
@@ -90,6 +98,18 @@ class DeviceGpsSource implements GpsSource {
           'Against Yesterday, then try again.';
     }
     return null;
+  }
+
+  @override
+  Future<bool> canAskPermission() async {
+    // The GMS-backed check can hang on an offline/uncertified emulator (see
+    // [ensureAvailable]); a hang is treated as "no dialog to explain", which
+    // is the conservative answer — the run proceeds exactly as before.
+    final permission = await Geolocator.checkPermission().timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => LocationPermission.deniedForever,
+    );
+    return permission == LocationPermission.denied;
   }
 
   @override

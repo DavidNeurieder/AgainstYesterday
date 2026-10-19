@@ -17,6 +17,7 @@ class AppSettings {
     required this.countdownEnabled,
     required this.units,
     required this.onboardingSeen,
+    required this.locationRationaleSeen,
   });
 
   /// Vibrate on interactions (start, finish, phase changes, …).
@@ -36,11 +37,22 @@ class AppSettings {
   /// corrupt store or a settings reset never re-shows the intro.
   final bool onboardingSeen;
 
+  /// Whether the one-time explanation of *why* the app needs location (§33)
+  /// has been given.
+  ///
+  /// Shown once per install, right before Android's own permission dialog can
+  /// appear (`locationRationaleSeenProvider`). Like [`onboardingSeen`], the
+  /// default keeps `true` so a corrupt store or a settings reset never shows
+  /// it again — only a store with no document at all (a fresh install) trips
+  /// it.
+  final bool locationRationaleSeen;
+
   static const AppSettings defaults = AppSettings(
     hapticsEnabled: true,
     countdownEnabled: true,
     units: Units.kilometers,
     onboardingSeen: true,
+    locationRationaleSeen: true,
   );
 
   AppSettings copyWith({
@@ -48,12 +60,14 @@ class AppSettings {
     bool? countdownEnabled,
     Units? units,
     bool? onboardingSeen,
+    bool? locationRationaleSeen,
   }) =>
       AppSettings(
         hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
         countdownEnabled: countdownEnabled ?? this.countdownEnabled,
         units: units ?? this.units,
         onboardingSeen: onboardingSeen ?? this.onboardingSeen,
+        locationRationaleSeen: locationRationaleSeen ?? this.locationRationaleSeen,
       );
 
   @override
@@ -62,9 +76,15 @@ class AppSettings {
       other.hapticsEnabled == hapticsEnabled &&
       other.countdownEnabled == countdownEnabled &&
       other.units == units &&
-      other.onboardingSeen == onboardingSeen;
+      other.onboardingSeen == onboardingSeen &&
+      other.locationRationaleSeen == locationRationaleSeen;
 
   @override
-  int get hashCode =>
-      Object.hash(hapticsEnabled, countdownEnabled, units, onboardingSeen);
+  int get hashCode => Object.hash(
+    hapticsEnabled,
+    countdownEnabled,
+    units,
+    onboardingSeen,
+    locationRationaleSeen,
+  );
 }

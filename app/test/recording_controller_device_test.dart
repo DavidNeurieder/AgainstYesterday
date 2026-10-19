@@ -47,6 +47,9 @@ class _FakeGpsSource implements GpsSource {
   Future<String?> ensureAvailable() async => acquisition;
 
   @override
+  Future<bool> canAskPermission() async => false;
+
+  @override
   Stream<GpsFix> fixes() => stream;
 
   @override

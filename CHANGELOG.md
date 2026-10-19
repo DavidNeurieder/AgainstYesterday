@@ -11,6 +11,20 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- Both run flows explain **why the app needs location** *before* Android's own
+  permission dialog can appear (§33): a one-time "Why location?" note ("Against
+  Yesterday records your run from your phone's GPS receiver: the track you
+  cover, your pace, and the ghost you race. Android will ask you to allow
+  location access next.") shown when a run flow opens on an install that has
+  not given the explanation yet. It is informational, never a gate — the
+  runner continues and meets the system dialog with its reason already told,
+  and a denial is still recovered on the run-start error screen. It appears
+  only where a system dialog can still be shown (`GpsSource.canAskPermission`:
+  permission missing but not permanently denied) and only on a real install
+  (`locationRationaleSeenProvider`, mirroring the first-launch intro's gate),
+  so the demo timeline, the hermetic suites and an already-granted receiver
+  are never interrupted; the flag lives in the settings document alongside
+  `onboardingSeen`. See `location_rationale_test.dart`.
 - History gains a per-run **Export GPX** action (§33 "activity → export GPX"):
   each row whose run has a recorded track gets a share button that writes that
   run's GPX to Downloads, the same destination Settings → Export GPX uses. The

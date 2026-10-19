@@ -8,11 +8,14 @@
 /// (never a resumed race): prep → recording → name-and-save → saved.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../engine/models.dart';
 import '../application/recording_controller.dart';
+import 'location_rationale.dart';
 import 'route_record_prep_screen.dart';
 import 'route_record_recorder_screen.dart';
 import 'route_record_save_screen.dart';
@@ -49,8 +52,29 @@ class _RouteRecordFlowScreenState extends ConsumerState<RouteRecordFlowScreen> {
     if (current?.status == RunStatus.completed) {
       notifier.dismissRun();
     }
-    if (ref.read(recordingControllerProvider) == null) {
+    if (ref.read(recordingControllerProvider) != null) {
+      return;
+    }
+    // §33: the same pre-permission explanation the race flow gives, so
+    // recording a route meets Android's dialog with its reason already told.
+    if (!locationRationalePending(ref)) {
       notifier.ensureSession(const []);
+      return;
+    }
+    // initState has no Navigator to show a dialog on yet — wait for the frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_explain()));
+  }
+
+  Future<void> _explain() async {
+    if (!mounted) {
+      return;
+    }
+    await showLocationRationale(context, ref);
+    if (!mounted) {
+      return;
+    }
+    if (ref.read(recordingControllerProvider) == null) {
+      ref.read(recordingControllerProvider.notifier).ensureSession(const []);
     }
   }
 

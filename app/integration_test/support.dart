@@ -133,3 +133,28 @@ Future<void> finishAndConfirm(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('confirm-finish')));
   await tester.pump();
 }
+
+/// Accepts the §33 location explanation when the flow opens with one.
+///
+/// The explanation, when it comes at all, precedes preparation — so this
+/// settles for whichever lands first: the dialog itself, or [nextScreenText],
+/// the screen the flow shows once it is past the gate. The device harness
+/// grants location in a retry loop, so on a warm run there is no dialog and
+/// this returns as soon as the flow reaches [nextScreenText].
+Future<void> acceptLocationRationaleIfShown(
+  WidgetTester tester,
+  String nextScreenText,
+) async {
+  final continueButton = find.byKey(
+    const ValueKey('location-rationale-continue'),
+  );
+  await waitForCondition(
+    tester,
+    () => tester.any(continueButton) || tester.any(find.text(nextScreenText)),
+    'the location explanation or "$nextScreenText"',
+  );
+  if (tester.any(continueButton)) {
+    await tester.tap(continueButton);
+    await tester.pump();
+  }
+}

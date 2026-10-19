@@ -25,6 +25,7 @@ import '../../../persistence/persistence.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
 import 'live_run_screen.dart';
+import 'location_rationale.dart';
 import 'pre_run_screen.dart';
 import 'run_complete_screen.dart';
 import 'run_error_screen.dart';
@@ -74,6 +75,33 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
   }
 
   void _ensure() {
+    if (ref.read(recordingControllerProvider) != null) {
+      return;
+    }
+    // §33: explain why location is needed before Android's own dialog. The
+    // ordinary path (demo timeline, permission settled, explanation given) is
+    // synchronous and unchanged; only a fresh install's first run takes the
+    // dialog detour below.
+    if (!locationRationalePending(ref)) {
+      _openSession();
+      return;
+    }
+    // initState has no Navigator to show a dialog on yet — wait for the frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_explain()));
+  }
+
+  Future<void> _explain() async {
+    if (!mounted) {
+      return;
+    }
+    await showLocationRationale(context, ref);
+    if (!mounted) {
+      return;
+    }
+    _openSession();
+  }
+
+  void _openSession() {
     final controller = ref.read(recordingControllerProvider.notifier);
     if (ref.read(recordingControllerProvider) == null) {
       final snapshot = ref.read(runSnapshotProvider);
