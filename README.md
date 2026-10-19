@@ -206,8 +206,8 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 355 tests (1 skipped: Rust FFI)
-cargo test                                   # Rust: 204 tests + property cases
+cd app && flutter analyze && flutter test   # Flutter: 416 tests (1 skipped: Rust FFI)
+cargo test                                   # Rust: 205 tests (property cases included)
 
 # the same Flutter suite against the real Rust engine over FFI
 cargo build --release                        # produces target/release/libgps_engine.so
