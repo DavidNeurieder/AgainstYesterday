@@ -25,6 +25,7 @@ String appSettingsToJson(AppSettings settings) => const JsonEncoder().convert({
   'units': settings.units.name,
   'onboarding': settings.onboardingSeen,
   'locationRationale': settings.locationRationaleSeen,
+  'theme': settings.themeMode.name,
 });
 
 AppSettings parseAppSettings(String json) {
@@ -42,6 +43,10 @@ AppSettings parseAppSettings(String json) {
     // Likewise the §33 location explanation: an install old enough to have a
     // settings document has already met Android's permission dialog.
     locationRationaleSeen: map['locationRationale'] as bool? ?? true,
+    themeMode: AppThemeMode.values.firstWhere(
+      (m) => m.name == map['theme'],
+      orElse: () => AppSettings.defaults.themeMode,
+    ),
   );
 }
 
@@ -60,6 +65,11 @@ final countdownEnabledProvider = Provider<bool>((ref) =>
 /// The unit used to format distance, pace and speed across the app.
 final displayUnitProvider = Provider<Units>(
   (ref) => ref.watch(settingsRepositoryProvider).units,
+);
+
+/// Which theme the app follows (§6).
+final themeModeProvider = Provider<AppThemeMode>(
+  (ref) => ref.watch(settingsRepositoryProvider).themeMode,
 );
 
 /// Whether the first-launch intro (§34) still has to be shown.

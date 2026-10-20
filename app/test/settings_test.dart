@@ -153,6 +153,8 @@ void main() {
   testWidgets('delete all data empties the catalog after a confirm',
       (tester) async {
     await openSettings(tester);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('delete-all')), 200);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('delete-all')));
     await tester.pumpAndSettle();
     expect(find.text('Delete all data?'), findsOneWidget);

@@ -9,7 +9,28 @@
 /// launch deliberately detects from a missing settings document (§34).
 library;
 
+import 'package:flutter/material.dart';
+
 import '../../../core/units.dart';
+
+/// Which theme the app should follow (§6).
+enum AppThemeMode {
+  system,
+  light,
+  dark;
+
+  ThemeMode get themeMode => switch (this) {
+        AppThemeMode.system => ThemeMode.system,
+        AppThemeMode.light => ThemeMode.light,
+        AppThemeMode.dark => ThemeMode.dark,
+      };
+
+  String get label => switch (this) {
+        AppThemeMode.system => 'System',
+        AppThemeMode.light => 'Light',
+        AppThemeMode.dark => 'Dark',
+      };
+}
 
 class AppSettings {
   const AppSettings({
@@ -18,6 +39,7 @@ class AppSettings {
     required this.units,
     required this.onboardingSeen,
     required this.locationRationaleSeen,
+    this.themeMode = AppThemeMode.dark,
   });
 
   /// Vibrate on interactions (start, finish, phase changes, …).
@@ -47,12 +69,17 @@ class AppSettings {
   /// it.
   final bool locationRationaleSeen;
 
+  /// Light/dark/system theme (§6). Defaults to dark to preserve the shipped
+  /// look.
+  final AppThemeMode themeMode;
+
   static const AppSettings defaults = AppSettings(
     hapticsEnabled: true,
     countdownEnabled: true,
     units: Units.kilometers,
     onboardingSeen: true,
     locationRationaleSeen: true,
+    themeMode: AppThemeMode.dark,
   );
 
   AppSettings copyWith({
@@ -61,6 +88,7 @@ class AppSettings {
     Units? units,
     bool? onboardingSeen,
     bool? locationRationaleSeen,
+    AppThemeMode? themeMode,
   }) =>
       AppSettings(
         hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
@@ -68,6 +96,7 @@ class AppSettings {
         units: units ?? this.units,
         onboardingSeen: onboardingSeen ?? this.onboardingSeen,
         locationRationaleSeen: locationRationaleSeen ?? this.locationRationaleSeen,
+        themeMode: themeMode ?? this.themeMode,
       );
 
   @override
@@ -77,14 +106,16 @@ class AppSettings {
       other.countdownEnabled == countdownEnabled &&
       other.units == units &&
       other.onboardingSeen == onboardingSeen &&
-      other.locationRationaleSeen == locationRationaleSeen;
+      other.locationRationaleSeen == locationRationaleSeen &&
+      other.themeMode == themeMode;
 
   @override
   int get hashCode => Object.hash(
-    hapticsEnabled,
-    countdownEnabled,
-    units,
-    onboardingSeen,
-    locationRationaleSeen,
-  );
+        hapticsEnabled,
+        countdownEnabled,
+        units,
+        onboardingSeen,
+        locationRationaleSeen,
+        themeMode,
+      );
 }

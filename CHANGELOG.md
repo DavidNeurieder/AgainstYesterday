@@ -11,7 +11,7 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
-- Both run flows explain **why the app needs location** *before* Android's own
+- Light and dark themes with a system option, controlled from **Settings → Display → Theme** (§6). The default stays dark to preserve the shipped look. The app now builds a `lightTheme`/`darkTheme` pair with a `ThemeExtension`-free brightness-aware palette and follows the selected `themeMode`. Settings persist the choice.
   permission dialog can appear (§33): a one-time "Why location?" note ("Against
   Yesterday records your run from your phone's GPS receiver: the track you
   cover, your pace, and the ghost you race. Android will ask you to allow

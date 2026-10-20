@@ -8,6 +8,13 @@ import 'package:flutter/material.dart';
 
 import 'app_colors.dart';
 
+const _kLightBackground = Color(0xFFF7F8FA);
+const _kLightSurface = Color(0xFFFFFFFF);
+const _kLightSurfaceHigh = Color(0xFFF1F3F6);
+const _kLightOutline = Color(0xFFD8DEE8);
+const _kLightTextPrimary = Color(0xFF101318);
+const _kLightTextSecondary = Color(0xFF4B5565);
+
 /// Spacing scale used across the app.
 abstract final class AppSpacing {
   AppSpacing._();
@@ -21,22 +28,22 @@ abstract final class AppSpacing {
 }
 
 /// The single place that defines how Material looks in this app.
-ThemeData buildAppTheme() {
+ThemeData buildAppTheme([Brightness brightness = Brightness.dark]) {
   final base = ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
+    brightness: brightness,
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.pb,
-      brightness: Brightness.dark,
-      surface: AppColors.surface,
+      brightness: brightness,
+      surface: brightness == Brightness.dark ? AppColors.surface : const Color(0xFFF7F8FA),
     ).copyWith(
       primary: AppColors.you,
       onPrimary: AppColors.background,
-      surface: AppColors.surface,
-      onSurface: AppColors.textPrimary,
-      error: AppColors.error,
+      surface: brightness == Brightness.dark ? AppColors.surface : _kLightSurface,
+      onSurface: brightness == Brightness.dark ? AppColors.textPrimary : _kLightTextPrimary,
+      error: brightness == Brightness.dark ? AppColors.error : const Color(0xFFB42318),
     ),
-    scaffoldBackgroundColor: AppColors.background,
+    scaffoldBackgroundColor: brightness == Brightness.dark ? AppColors.background : _kLightBackground,
     fontFamily: null, // system font; monospace handled per-widget (§44 timing)
   );
 
@@ -56,40 +63,40 @@ ThemeData buildAppTheme() {
         fontWeight: FontWeight.w600,
       ),
       bodyMedium: base.textTheme.bodyMedium?.copyWith(
-        color: AppColors.textSecondary,
+        color: brightness == Brightness.dark ? AppColors.textSecondary : _kLightTextSecondary,
       ),
       labelLarge: base.textTheme.labelLarge?.copyWith(
         fontWeight: FontWeight.w600,
       ),
     ),
-    cardTheme: const CardThemeData(
-      color: AppColors.surface,
+    cardTheme: CardThemeData(
+      color: brightness == Brightness.dark ? AppColors.surface : _kLightSurface,
       elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(20)),
-        side: BorderSide(color: AppColors.outline),
+        borderRadius: const BorderRadius.all(Radius.circular(20)),
+        side: BorderSide(color: brightness == Brightness.dark ? AppColors.outline : _kLightOutline),
       ),
     ),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: AppColors.background,
-      foregroundColor: AppColors.textPrimary,
+    appBarTheme: AppBarTheme(
+      backgroundColor: brightness == Brightness.dark ? AppColors.background : _kLightBackground,
+      foregroundColor: brightness == Brightness.dark ? AppColors.textPrimary : _kLightTextPrimary,
       elevation: 0,
       centerTitle: false,
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: AppColors.surface,
-      indicatorColor: AppColors.surfaceHigh,
+      backgroundColor: brightness == Brightness.dark ? AppColors.surface : _kLightSurface,
+      indicatorColor: brightness == Brightness.dark ? AppColors.surfaceHigh : _kLightSurfaceHigh,
       height: 64,
     ),
-    dividerTheme: const DividerThemeData(
-      color: AppColors.outline,
+    dividerTheme: DividerThemeData(
+      color: brightness == Brightness.dark ? AppColors.outline : _kLightOutline,
       thickness: 1,
     ),
     chipTheme: base.chipTheme.copyWith(
-      backgroundColor: AppColors.surfaceHigh,
-      side: const BorderSide(color: AppColors.outline),
-      labelStyle: const TextStyle(color: AppColors.textSecondary),
+      backgroundColor: brightness == Brightness.dark ? AppColors.surfaceHigh : _kLightSurfaceHigh,
+      side: BorderSide(color: brightness == Brightness.dark ? AppColors.outline : _kLightOutline),
+      labelStyle: TextStyle(color: brightness == Brightness.dark ? AppColors.textSecondary : _kLightTextSecondary),
     ),
   );
 }

@@ -20,6 +20,7 @@ import '../../map/map_settings_section.dart';
 import '../application/gpx_export.dart';
 import '../application/link_launcher.dart';
 import '../application/settings_controller.dart';
+import '../domain/settings.dart';
 import '../application/track_export.dart';
 
 /// Shown in About and kept in step with `pubspec.yaml`.
@@ -68,6 +69,31 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           _Card(
             children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                // §31: wraps the control onto its own line on narrow phones
+                // instead of overflowing (the segment labels are wide).
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    const Text('Theme'),
+                    SegmentedButton<AppThemeMode>(
+                      segments: [
+                        for (final mode in AppThemeMode.values)
+                          ButtonSegment(
+                            value: mode,
+                            label: Text(mode.label),
+                          ),
+                      ],
+                      selected: {settings.themeMode},
+                      onSelectionChanged: (selection) =>
+                          notifier.save(settings.copyWith(themeMode: selection.first)),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: AppColors.outline),
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 // §31: wraps the control onto its own line on narrow phones

@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_theme.dart';
 import '../features/recording/application/recording_controller.dart';
+import '../features/settings/application/settings_controller.dart';
 import 'router.dart';
 
 class AgainstYesterdayApp extends ConsumerStatefulWidget {
@@ -24,6 +25,7 @@ class AgainstYesterdayApp extends ConsumerStatefulWidget {
 class _AgainstYesterdayAppState extends ConsumerState<AgainstYesterdayApp> {
   @override
   Widget build(BuildContext context) {
+    final themeMode = ref.watch(themeModeProvider);
     return ProviderScope(
       // The lifecycle observer lives INSIDE the scope: a state above its own
       // ProviderScope cannot resolve providers (`containerOf` only looks
@@ -33,7 +35,9 @@ class _AgainstYesterdayAppState extends ConsumerState<AgainstYesterdayApp> {
         child: MaterialApp.router(
           title: 'Against Yesterday',
           debugShowCheckedModeBanner: false,
-          theme: buildAppTheme(),
+          theme: buildAppTheme(Brightness.light),
+          darkTheme: buildAppTheme(Brightness.dark),
+          themeMode: themeMode.themeMode,
           routerConfig: buildRouter(),
         ),
       ),
