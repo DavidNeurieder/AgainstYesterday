@@ -134,6 +134,26 @@ Future<void> finishAndConfirm(WidgetTester tester) async {
   await tester.pump();
 }
 
+/// Dismisses the first-launch intro (§34) when it is showing.
+///
+/// A fresh install (the harness uninstalls before each suite) lands on the
+/// three-screen intro before Home, so a suite that pumps the app directly must
+/// walk it. A no-op when the intro is not present — a warm install or a
+/// pre-seeded settings document never trips the gate.
+Future<void> dismissOnboardingIfPresent(WidgetTester tester) async {
+  // The GET STARTED button only exists on the last page; the page dots carry
+  // a spoken count, so jump to the last one deterministically.
+  final lastDot = find.bySemanticsLabel('Screen 3 of 3');
+  if (!tester.any(find.text('GET STARTED')) && tester.any(lastDot)) {
+    await tester.tap(lastDot);
+    await tester.pumpAndSettle();
+  }
+  if (tester.any(find.text('GET STARTED'))) {
+    await tester.tap(find.text('GET STARTED'));
+    await tester.pumpAndSettle();
+  }
+}
+
 /// Accepts the §33 location explanation when the flow opens with one.
 ///
 /// The explanation, when it comes at all, precedes preparation — so this

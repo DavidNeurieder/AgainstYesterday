@@ -104,6 +104,15 @@ class RecordingController extends Notifier<LiveRunState?> {
   GpsSource? _gpsSource;
   StreamSubscription<GpsFix>? _gpsSub;
 
+  /// True while a device acquisition is in flight.
+  ///
+  /// The `gpsAcquiring` gate ticks every 500 ms, and Android's permission
+  /// request only settles when the user answers it. Without this guard each
+  /// tick would start another request, re-showing the system dialog forever
+  /// (and, on Android, colliding with "can request only one set of permissions
+  /// at a time"). One acquisition per gate entry is enough.
+  bool _acquiring = false;
+
   /// While the Android recording foreground service is up (see
   /// `run_foreground_lifespan.dart`). Only flips on when a device source
   /// actually streams, so scenario runs never touch the platform channel.
@@ -344,11 +353,20 @@ class RecordingController extends Notifier<LiveRunState?> {
     if (source == null) {
       return;
     }
+    // Never stack requests: the gate ticks faster than a user can answer the
+    // system permission dialog, so a second call while one is in flight would
+    // re-prompt indefinitely.
+    if (_acquiring) {
+      return;
+    }
+    _acquiring = true;
     String? problem;
     try {
       problem = await source.ensureAvailable();
     } catch (e) {
       problem = 'The GPS receiver did not answer: $e';
+    } finally {
+      _acquiring = false;
     }
     if (_session == null) {
       return; // dismissed while acquiring

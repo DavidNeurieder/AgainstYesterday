@@ -15,32 +15,41 @@ import '../features/recording/application/recording_controller.dart';
 import '../features/settings/application/settings_controller.dart';
 import 'router.dart';
 
-class AgainstYesterdayApp extends ConsumerStatefulWidget {
+class AgainstYesterdayApp extends StatelessWidget {
   const AgainstYesterdayApp({super.key});
 
   @override
-  ConsumerState<AgainstYesterdayApp> createState() => _AgainstYesterdayAppState();
-}
-
-class _AgainstYesterdayAppState extends ConsumerState<AgainstYesterdayApp> {
-  @override
   Widget build(BuildContext context) {
-    final themeMode = ref.watch(themeModeProvider);
     return ProviderScope(
       // The lifecycle observer lives INSIDE the scope: a state above its own
       // ProviderScope cannot resolve providers (`containerOf` only looks
       // upward), so a real platform lifecycle message would otherwise crash
       // any tree pumped without an outer scope (bare `pumpWidget(app)`).
       child: _LifecycleRelay(
-        child: MaterialApp.router(
-          title: 'Against Yesterday',
-          debugShowCheckedModeBanner: false,
-          theme: buildAppTheme(Brightness.light),
-          darkTheme: buildAppTheme(Brightness.dark),
-          themeMode: themeMode.themeMode,
-          routerConfig: buildRouter(),
-        ),
+        child: const _AppShell(),
       ),
+    );
+  }
+}
+
+/// The Material app itself: theme, theme mode and router.
+///
+/// Split from [AgainstYesterdayApp] so the theme-mode provider can be watched
+/// *inside* the `ProviderScope` the root installs — a `ref.watch` in a state
+/// above its own scope resolves upward and finds nothing.
+class _AppShell extends ConsumerWidget {
+  const _AppShell();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+    return MaterialApp.router(
+      title: 'Against Yesterday',
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(Brightness.light),
+      darkTheme: buildAppTheme(Brightness.dark),
+      themeMode: themeMode.themeMode,
+      routerConfig: buildRouter(),
     );
   }
 }

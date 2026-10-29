@@ -11,7 +11,22 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
-- Light and dark themes with a system option, controlled from **Settings → Display → Theme** (§6). The default stays dark to preserve the shipped look. The app now builds a `lightTheme`/`darkTheme` pair with a `ThemeExtension`-free brightness-aware palette and follows the selected `themeMode`. Settings persist the choice.
+- Test coverage from the Android hardening plan: degenerate/zero-distance
+  attempts and personal-best tie-breaks (`degenerate_attempt_test.dart`,
+  `pb_classification_test.dart`), duplicate/out-of-order/repeated-timestamp
+  fix filtering (`track_filter_test.dart`), multi-pause track integrity
+  (`pause_resume_test.dart`), and receiver-loss recovery
+  (`gps_recovery_test.dart`). On-device: an Android permission-state suite
+  (`integration_test/permissions_test.dart`, `--permissions`) and a genuine
+  process-death recovery suite that races a seeded route, `am force-stop`s the
+  app, relaunches it and asserts the interrupted run was restored from the real
+  on-disk `JsonFileStore` (`--process-death`). It drives the installed app
+  through `flutter run` (not `flutter test`, which uninstalls the package on
+  exit, so storage cannot span two invocations) with a semantics-enabled test
+  entry point (`integration_test/process_death_main.dart`) so uiautomator can
+  tap real widgets.
+- Light and dark themes with a system option, controlled from **Settings → Display → Theme** (§6). The default stays dark to preserve the shipped look. The app now builds a `theme`/`darkTheme` pair with a brightness-aware palette and follows the selected `themeMode`. Settings persist the choice.
+- Both run flows explain **why the app needs location** *before* Android's own
   permission dialog can appear (§33): a one-time "Why location?" note ("Against
   Yesterday records your run from your phone's GPS receiver: the track you
   cover, your pace, and the ghost you race. Android will ask you to allow
@@ -241,6 +256,14 @@ documented here, grouped by the implementation milestones in
 
 ### Fixed
 
+- The GPS acquisition gate no longer re-issues the permission request on every
+  tick. `gpsAcquiring` ticks every 500 ms while Android's dialog is still open,
+  and each tick started a fresh `requestPermission()`, so an unanswered dialog
+  was re-shown indefinitely (Android logs "can request only one set of
+  permissions at a time" and delivers an empty `grantResults` for each stacked
+  request). Acquisition now runs once per gate entry, so answering the dialog —
+  or dismissing it — lands the error screen as intended; RETRY still re-enters
+  cleanly (`gps_recovery_test.dart`).
 - The screens survive a raised **system font scale** (§7, §31). Label/value rows
   — the shared `StatRow` and the route detail's stat and attempt rows — now give
   the label the slack and let it wrap instead of pushing the value off the end

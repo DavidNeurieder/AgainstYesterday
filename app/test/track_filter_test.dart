@@ -137,4 +137,75 @@ void main() {
     // Nine real 80 m steps: every point survives.
     expect(filter.distanceMeters, closeTo(9 * stepMeters, 1.0));
   });
+
+  test('a repeated coordinate at a new timestamp earns nothing', () {
+    // A parked phone still reports fixes; the receiver jitters around one
+    // spot. The motion floor is the guard: the position is identical, so no
+    // distance accrues no matter how many fixes arrive.
+    final filter = TrackFilter();
+    for (var second = 1; second <= 10; second++) {
+      filter.add(_fix(52.50000, 13.40000, atSecond: second));
+    }
+
+    expect(filter.distanceMeters, 0);
+    expect(filter.movingSeconds, 0);
+  });
+
+  test('a repeated timestamp is not read as an instantaneous hop', () {
+    // The engine guards against a non-positive time delta so a stale timestamp
+    // cannot turn a genuine move into infinite speed and earn phoney distance.
+    // Feeding the same instant twice must leave the axis exactly as it was.
+    final filter = TrackFilter();
+    final first = _fix(52.50000, 13.40000, atSecond: 1);
+    filter.add(first);
+    filter.add(_fix(52.50002, 13.40000, atSecond: 2));
+    final afterRealStep = filter.distanceMeters;
+    expect(afterRealStep, greaterThan(0));
+
+    // Same coordinate, same timestamp as the last fix: a duplicate delivery.
+    filter.add(_fix(52.50002, 13.40000, atSecond: 2));
+    expect(filter.distanceMeters, afterRealStep);
+    expect(filter.movingSeconds, 1);
+  });
+
+  test('an out-of-order (backward) timestamp adds no distance', () {
+    // A receiver that replays an older buffered fix must not let the segment
+    // be read backwards: a negative delta earns nothing. The point itself is
+    // still a plausible neighbour, so the chain is not corrupted — the next
+    // in-order fix is measured from the replayed point, not from the far one.
+    final filter = TrackFilter();
+    filter.add(_fix(52.50000, 13.40000, atSecond: 1));
+    filter.add(_fix(52.50100, 13.40000, atSecond: 11)); // +111 m, 10 s
+    final forwardOnly = filter.distanceMeters;
+    expect(forwardOnly, closeTo(0.001 * _metersPerDegree, 1.0));
+
+    // A stale fix stamped *before* the last point, at a different position.
+    filter.add(_fix(52.50200, 13.40000, atSecond: 5));
+
+    // The backward step is worth exactly nothing: neither the 111 m chord it
+    // would have implied (read backwards) nor a fraction of a second of moving
+    // time may appear.
+    expect(filter.distanceMeters, forwardOnly,
+        reason: 'a negative time delta must earn no distance');
+    expect(filter.movingSeconds, 10.0,
+        reason: 'a negative time delta must add no moving time');
+  });
+
+  test('a duplicate fix inside a pause is reset away, not bridged', () {
+    // reset() is what a pause calls: the chain must start over, so the same
+    // coordinate on both sides of a pause cannot manufacture a segment.
+    final filter = TrackFilter();
+    filter.add(_fix(52.50000, 13.40000, atSecond: 1));
+    filter.add(_fix(52.50100, 13.40000, atSecond: 11));
+    expect(filter.distanceMeters, closeTo(0.001 * _metersPerDegree, 1.0));
+
+    filter.reset();
+    expect(filter.distanceMeters, 0);
+    expect(filter.movingSeconds, 0);
+
+    // The first fix after the reset is simply a new anchor: no distance until
+    // a second point corroborates it.
+    filter.add(_fix(52.50100, 13.40000, atSecond: 61));
+    expect(filter.distanceMeters, 0);
+  });
 }

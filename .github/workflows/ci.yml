@@ -188,12 +188,17 @@ jobs:
           # API 34 runs sequentially in one emulator session: the demo suite
           # first, then the real-receiver suite, whose harness feeds simulated
           # fixes over the emulator geo console (see
-          # tool/android_integration_test.sh). The API 24 smoke job keeps only
-          # the record-and-save journey.
+          # tool/android_integration_test.sh). Then the Android permission-state
+          # suite and the genuine process-death recovery suite (which drives the
+          # installed app and force-stops it — `flutter test` cannot, because it
+          # uninstalls the package on exit). The API 24 smoke job keeps only the
+          # record-and-save journey.
           script: |
             if [ "${{ matrix.suite }}" = "full" ]; then
               ./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true
               ./tool/android_integration_test.sh --device-gps --dart-define=USE_RUST_ENGINE=true
+              ./tool/android_integration_test.sh --permissions --dart-define=USE_RUST_ENGINE=true
+              ./tool/android_integration_test.sh --process-death --dart-define=USE_RUST_ENGINE=true
             else
               ./tool/android_integration_test.sh --smoke --dart-define=USE_RUST_ENGINE=true
             fi

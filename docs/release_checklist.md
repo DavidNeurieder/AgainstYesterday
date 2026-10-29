@@ -31,6 +31,12 @@ needs a person and a device. CI job names refer to
 - [ ] [CI] `android-integration-test` (API 34): `--device-gps` suite grants the
       permission while the test runs and fails if it cannot
       (`REQUIRE_DEVICE_GPS`).
+- [ ] [CI] `android-integration-test` (API 34): `--permissions` suite
+      establishes each Android state (`denied`, `deniedForever`, `servicesOff`,
+      `grantedAfterDenial`) on the real platform and asserts the app's answer
+      (`integration_test/permissions_test.dart`). The harness applies the state
+      *after* `flutter test` installs the package — a permission flag set on an
+      absent package is a silent no-op. Nightly repeats it on API 36.
 - [ ] [manual] On a device: first grant, denial → retry, permanent denial →
       settings, revocation mid-session, and disabled location services. Confirm
       location is not collected before authorization and stops after denial.
@@ -43,6 +49,14 @@ needs a person and a device. CI job names refer to
 - [ ] [CI] Interrupted-run recovery (`test/persistence_recovery_test.dart`,
       `test/lifecycle_test.dart`) and the on-device relaunch test
       (`integration_test/app_test.dart`).
+- [ ] [CI] Genuine process death: the `--process-death` suite runs the
+      installed app through `flutter run` (with a semantics-enabled test entry
+      point so uiautomator can drive it), races a seeded route, `am force-stop`s
+      the process, relaunches it, and asserts the interrupted run was restored
+      from the real on-disk `JsonFileStore`. It cannot use `flutter test`, which
+      uninstalls the package on exit and so discards app storage between
+      invocations. The run has to be a race: the restore lives in the race flow
+      (§28), while `RECORD ROUTE` deliberately starts a fresh line.
 - [ ] [CI] Exactly one activity is persisted across a rapid
       start/pause/resume/finish (`test/gps_edge_cases_test.dart`).
 - [ ] [manual] Long recording survives screen-off and low-memory pressure

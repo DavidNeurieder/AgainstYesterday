@@ -11,14 +11,18 @@ library;
 import 'dart:io';
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:against_yesterday/persistence/serialization.dart';
+
+import 'test_catalog.dart';
 
 const _route = Route(
   id: FakeEngineService.riverLoopId,
@@ -232,6 +236,86 @@ void main() {
 
       // Corrupt document.
       expect(buildWith('{oops'), isNull);
+    });
+  });
+
+  // The resume decision is made by the flow that opens, not at startup: a
+  // relaunched app sits on Home with the snapshot untouched (§28). These two
+  // tests pin which entry restores a run, because the on-device process-death
+  // suite drives exactly that entry.
+  group('opening a run flow picks up the persisted snapshot', () {
+    ProviderContainer containerOf(WidgetTester tester) =>
+        ProviderScope.containerOf(tester.element(find.byType(MaterialApp)));
+
+    RunSnapshot interrupted({String? routeId}) => RunSnapshot(
+      status: RunStatus.running,
+      startedAt: DateTime.utc(2026, 1, 1, 10),
+      movingSeconds: 120,
+      clockSeconds: 120,
+      distanceMeters: 400,
+      loopMeters: 4760,
+      routeId: routeId,
+    );
+
+    testWidgets('the race flow resumes it instead of starting a new run',
+        (tester) async {
+      final store = seededStore(routes: [riverLoopRoute])
+        ..write(
+          'run_snapshot',
+          runSnapshotToJson(interrupted(routeId: riverLoopRoute.id)),
+        );
+
+      await tester.pumpWidget(ProviderScope(
+        overrides: [persistenceStoreProvider.overrideWithValue(store)],
+        child: const AgainstYesterdayApp(),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('RACE YOUR BEST'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      // A resumed race skips the pre-run and the countdown: the live screen is
+      // the restore, and its distance is the recorded one, not zero.
+      expect(find.text('FINISH'), findsOneWidget);
+      expect(find.text('START'), findsNothing);
+      final state = containerOf(tester).read(recordingControllerProvider)!;
+      expect(state.status, RunStatus.running);
+      // Restored at 400 m and advancing: never reset to zero (the data loss
+      // this guards), never far past where it left off.
+      expect(state.distance.meters, greaterThanOrEqualTo(400));
+      expect(state.distance.meters, lessThan(410));
+      expect(state.elapsed.seconds, greaterThanOrEqualTo(120));
+      expect(state.elapsed.seconds, lessThan(125));
+      expect(state.route?.id, riverLoopRoute.id);
+    });
+
+    testWidgets('the new-route recording flow starts a fresh line',
+        (tester) async {
+      // `RECORD ROUTE` records a *new* line and always starts over, so the
+      // interrupted run must not be handed to it (its resume belongs to the
+      // race flow). Asserting the contract here keeps a future edit from
+      // silently changing which entry the device suite has to drive.
+      final store = MemoryPersistenceStore()
+        ..write('run_snapshot', runSnapshotToJson(interrupted()));
+
+      await tester.pumpWidget(ProviderScope(
+        overrides: [persistenceStoreProvider.overrideWithValue(store)],
+        child: const AgainstYesterdayApp(),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('RECORD ROUTE'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+
+      expect(find.text('FINISH'), findsNothing);
+      expect(find.text('START RECORDING'), findsOneWidget);
+      final state = containerOf(tester).read(recordingControllerProvider);
+      expect(state?.status, isNot(RunStatus.running));
+      expect(state?.distance.meters ?? 0, isNot(400));
     });
   });
 

@@ -32,6 +32,13 @@ jobs:
           # over the network, so it lives here (nightly) and not on PRs.
           - api-level: 34
             suite: map
+          # Newest API, the Android permission-state suite: broader matrix
+          # coverage of the states the PR job only checks on API 34.
+          - api-level: 36
+            suite: permissions
+          # Newest API, genuine process-death recovery.
+          - api-level: 36
+            suite: process-death
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -67,6 +74,10 @@ jobs:
             elif [ "${{ matrix.suite }}" = "map" ]; then
               # Real MapLibre map over the network (nightly-only, see above).
               ./tool/android_integration_test.sh --map-smoke
+            elif [ "${{ matrix.suite }}" = "permissions" ]; then
+              ./tool/android_integration_test.sh --permissions
+            elif [ "${{ matrix.suite }}" = "process-death" ]; then
+              ./tool/android_integration_test.sh --process-death
             else
               ./tool/android_integration_test.sh --smoke
             fi

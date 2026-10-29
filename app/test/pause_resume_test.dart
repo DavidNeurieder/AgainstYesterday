@@ -147,4 +147,67 @@ void main() {
       expect(saved.duration!.seconds, closeTo(4, 0.6));
     });
   });
+
+  test('resuming after several pauses never duplicates the track', () {
+    fakeAsync((async) {
+      final c = container(async);
+      final ctrl = c.read(recordingControllerProvider.notifier);
+
+      // Pause/resume is documented to *close* a track and open a fresh one on
+      // resume (the free-run reset). Whatever the internals, the sealed
+      // activity must carry each second of movement exactly once: the track
+      // length has to match the moving time, not the wall-clock span.
+      ctrl.beginRun();
+      var runningSeconds = 0;
+      for (var i = 0; i < 4; i++) {
+        async.elapse(const Duration(seconds: 1));
+        runningSeconds++;
+        final running = state(c)!;
+        // Movement was recorded while running.
+        expect(running.distance.meters, greaterThan(0));
+        expect(running.status, RunStatus.running);
+
+        ctrl.pause();
+        final frozen = state(c)!.distance.meters;
+
+        // A long pause holds the distance exactly where the pause left it —
+        // no sample is appended, no segment is reopened.
+        async.elapse(const Duration(seconds: 5));
+        expect(state(c)!.distance.meters, frozen);
+        expect(state(c)!.status, RunStatus.paused);
+
+        // The first tick after a resume must move on from the frozen point,
+        // never re-add the metre the pause froze on.
+        ctrl.resume();
+        async.elapse(const Duration(seconds: 1));
+        runningSeconds++;
+        expect(state(c)!.distance.meters, greaterThan(frozen));
+      }
+      ctrl.finishRun();
+      async.elapse(const Duration(milliseconds: 500));
+
+      final saved = c.read(activityRepositoryProvider).first;
+      // Eight 1 s running stretches, with every 5 s pause excluded.
+      expect(saved.duration!.seconds, closeTo(runningSeconds, 0.6));
+
+      final track = saved.track!;
+      // The decisive check: the saved track holds roughly one sample per
+      // moving second — a duplicated resume segment would leave many more.
+      expect(track.length, lessThanOrEqualTo(runningSeconds + 3));
+      expect(track.length, greaterThanOrEqualTo(2));
+
+      // And no two consecutive samples may repeat the same position *and*
+      // timestamp: a duplicated resume would leave exactly that pair.
+      for (var i = 1; i < track.length; i++) {
+        final prev = track[i - 1];
+        final next = track[i];
+        final samePoint =
+            prev.position.latitude == next.position.latitude &&
+            prev.position.longitude == next.position.longitude;
+        final sameStamp = prev.timestamp == next.timestamp;
+        expect(samePoint && sameStamp, isFalse,
+            reason: 'track has a duplicated sample at index $i');
+      }
+    });
+  });
 }

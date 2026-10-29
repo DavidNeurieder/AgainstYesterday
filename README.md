@@ -206,7 +206,7 @@ without guessing.
 ## Tests
 
 ```bash
-cd app && flutter analyze && flutter test   # Flutter: 416 tests (1 skipped: Rust FFI)
+cd app && flutter analyze && flutter test   # Flutter: 438 tests (1 skipped: Rust FFI)
 cargo test                                   # Rust: 205 tests (property cases included)
 
 # the same Flutter suite against the real Rust engine over FFI
@@ -230,13 +230,20 @@ snapshot.
 The on-device suites (`app/integration_test/`) run on an emulator through
 `app/tool/android_integration_test.sh` (`--device-gps` selects the
 real-receiver suite, `--map-smoke` the real-MapLibre map smoke — nightly only,
-it needs the network — and `--smoke` narrows the demo suite to the
+it needs the network — `--permissions` the Android location-permission state
+machine (it sets the platform state explicitly per case and answers the system
+dialog for you), `--process-death` the genuine process-death recovery run
+(it runs the installed app through `flutter run` with a semantics-enabled test
+entry point, races a seeded route, `am force-stop`s it and relaunches it
+against the real on-disk store — `flutter test` cannot do this, since it
+uninstalls the package on exit), and `--smoke` narrows the demo suite to the
 record-and-save journey; see the script header for the environment knobs). CI
-runs the full journey on API 34 and the smoke on API 24 for every PR; the
-nightly workflow adds API 36, a repeated run to catch flakes, and the map
-smoke. On a red run the harness preserves the app log, a screenshot, and the
-location/permission dumps under `app/build/integration-artifacts/<suite>/`.
-Release sign-off uses the gates in
+runs the full journey, the real-receiver suite, the permission suite and
+process-death recovery on API 34, and the smoke on API 24 for every PR; the
+nightly workflow adds API 36 (including the broader permission matrix), a
+repeated run to catch flakes, and the map smoke. On a red run the harness
+preserves the app log, a screenshot, and the location/permission dumps under
+`app/build/integration-artifacts/<suite>/`. Release sign-off uses the gates in
 [docs/release_checklist.md](docs/release_checklist.md).
 
 ## Status
