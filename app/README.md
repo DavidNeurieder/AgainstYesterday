@@ -81,8 +81,9 @@ library.
 flutter test integration_test -d <device>
 ```
 
-On Android, `tool/android_integration_test.sh` boots a headless emulator and
-runs the suite against it:
+On Android, `tool/android_integration_test.sh` boots the emulator (in a window
+on a desktop host, headless where there is no display) and runs the suite
+against it:
 
 ```bash
 ./tool/android_integration_test.sh          # default AVD "test_phone"

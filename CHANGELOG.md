@@ -24,7 +24,11 @@ documented here, grouped by the implementation milestones in
   through `flutter run` (not `flutter test`, which uninstalls the package on
   exit, so storage cannot span two invocations) with a semantics-enabled test
   entry point (`integration_test/process_death_main.dart`) so uiautomator can
-  tap real widgets.
+  tap real widgets. The nightly `--map-smoke` suite now also drives the native
+  renderer: it asserts the route and travelled GeoJSON sources hold what the
+  scene says (`querySourceFeatures`), that the native camera follows YOU as new
+  fixes arrive (`getVisibleRegion`), and that an unreachable style document
+  fails quietly instead of taking the screen down.
 - Light and dark themes with a system option, controlled from **Settings → Display → Theme** (§6). The default stays dark to preserve the shipped look. The app now builds a `theme`/`darkTheme` pair with a brightness-aware palette and follows the selected `themeMode`. Settings persist the choice.
 - Both run flows explain **why the app needs location** *before* Android's own
   permission dialog can appear (§33): a one-time "Why location?" note ("Against
@@ -256,6 +260,20 @@ documented here, grouped by the implementation milestones in
 
 ### Fixed
 
+- The live map follows YOU from the very first fix. The native map's own
+  startup camera event was being read as the runner panning away, which cleared
+  the follow flag before the first follow had even run, so the camera stayed on
+  the route's bounding-box centre (half a screen off, and a route-detail
+  thumbnail opened unfitted) until the runner dragged the map. Camera events
+  before the scene's camera has been applied are now ignored, and a move that
+  lands on YOU is recognised as the app's own. The first camera application is
+  also verified against the native visible region and re-applied if the
+  platform's own camera restore undid it, since that restore lands after the
+  style-loaded callback.
+- The recenter button only appears when the runner actually pans away. It used
+  to appear on the app's own camera moves — that same startup event, and every
+  follow afterwards — which made a live run look as though it had lost the
+  runner.
 - The GPS acquisition gate no longer re-issues the permission request on every
   tick. `gpsAcquiring` ticks every 500 ms while Android's dialog is still open,
   and each tick started a fresh `requestPermission()`, so an unanswered dialog

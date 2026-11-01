@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 #
-# Boots an Android emulator (headless) and runs the on-device integration
-# tests against it.
+# Boots an Android emulator (in a window on a desktop host, headless where no
+# display exists) and runs the on-device integration tests against it.
 #
 # Usage:
 #   ./tool/android_integration_test.sh                 # default AVD, demo suite
@@ -32,9 +32,19 @@
 # Environment:
 #   BOOT_TIMEOUT   seconds to wait for the device to boot (default 300)
 #   TEST_TIMEOUT   seconds to allow each `flutter test` run (default 900)
-#   EMULATOR_GPU   emulator -gpu mode when the script boots the AVD
-#                  (default swiftshader_indirect; use `host` on a machine with
-#                  a real GPU — software rendering provokes systemui ANRs)
+#   EMULATOR_GPU   emulator -gpu mode when the script boots the AVD (default:
+#                  the emulator's own choice in a window — the host GPU, since
+#                  software rendering both provokes systemui ANRs and reads as
+#                  a frozen window; headless defaults to swiftshader_indirect)
+#   EMULATOR_WINDOW=1  boot the AVD with its window instead of headless. The
+#                  default: a window whenever a display is available (unset
+#                  DISPLAY/WAYLAND_DISPLAY means headless, e.g. CI). Headless +
+#                  `host` GPU is the combination that loses its GL context at
+#                  teardown: gfxstream logs "error null ctx", the device drops
+#                  off adb mid-uninstall, and a suite whose tests all passed
+#                  still exits nonzero. A windowed emulator tears down cleanly,
+#                  and booting it yourself also skips the per-run boot (the
+#                  script reuses a live $SERIAL).
 #   ARTIFACTS_DIR  where failure artifacts land
 #                  (default build/integration-artifacts, relative to app/)
 set -euo pipefail
@@ -94,12 +104,22 @@ done
 # so a macOS dev machine can still run the harness.
 if command -v timeout >/dev/null 2>&1; then
   TEST_TIMEOUT_CMD=(timeout "$TEST_TIMEOUT")
+  ADB_TIMEOUT_CMD=(timeout 15)
 else
   echo ">> warning: 'timeout' not found; running without a test timeout" >&2
   TEST_TIMEOUT_CMD=()
+  ADB_TIMEOUT_CMD=()
 fi
 
+# Progress lines carry the wall clock, so a slow phase (AVD boot, Gradle, a
+# device that stopped answering) is visible in the log afterwards instead of
+# only as "the suite took ages".
+log() {
+  echo ">> [$(date +%T)] $*"
+}
+
 BOOTS_EMULATOR=0
+EMULATOR_PID=""
 FEEDER_PID=""
 GRANT_PID=""
 DISMISS_PID=""
@@ -139,17 +159,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Boot the AVD headlessly unless the target device is already available. Scoped
-# to $SERIAL: with another emulator attached, a bare `adb get-state` reports a
+# Whether $SERIAL is still answering. Bounded: when the emulator's GL context
+# dies the device drops off adb and a bare adb call can block instead of
+# failing (see [collect_artifacts]).
+device_alive() {
+  ${ADB_TIMEOUT_CMD[@]+"${ADB_TIMEOUT_CMD[@]}"} "$ADB" -s "$SERIAL" get-state \
+    >/dev/null 2>&1
+}
+
+# Boots the AVD unless the target device is already available. Scoped to
+# $SERIAL: with another emulator attached, a bare `adb get-state` reports a
 # device while $SERIAL may be absent, and every later command then fails with
 # "more than one device/emulator".
-if ! "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1; then
-  echo ">> Booting AVD '$AVD'..."
-  # SwiftShader is the portable default (CI runners have no usable GPU). On a
-  # host with a real GPU, `EMULATOR_GPU=host` avoids the systemui ANRs that
-  # software rendering produces — an ANR window takes focus and silently
-  # swallows taps and keyevents.
-  #
+boot_device() {
+  if device_alive; then
+    return 0
+  fi
+  log "Booting AVD '$AVD'..."
   # A non-default serial implies the port: without `-port`, a second suite on
   # the same host always boots onto 5554, shares the device with the first, and
   # the two runs steal each other's foreground window (which shows up as
@@ -158,26 +184,95 @@ if ! "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1; then
   case "$SERIAL" in
     emulator-[0-9]*) BOOT_ARGS+=(-port "${SERIAL#emulator-}") ;;
   esac
-  "$EMULATOR" -avd "$AVD" -no-window -no-audio -no-boot-anim \
-    -gpu "${EMULATOR_GPU:-swiftshader_indirect}" -no-snapshot \
-    ${BOOT_ARGS[@]+"${BOOT_ARGS[@]}"} &
-  BOOTS_EMULATOR=1
-fi
-
-echo ">> Waiting for device $SERIAL to boot..."
-# Scoped to $SERIAL: with a second device attached (another emulator or a
-# plugged-in phone) a bare `wait-for-device` returns immediately and every
-# later command fails with "more than one device/emulator".
-"$ADB" -s "$SERIAL" wait-for-device
-boot_deadline=$(( $(date +%s) + BOOT_TIMEOUT ))
-until [ "$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
-  if [ "$(date +%s)" -ge "$boot_deadline" ]; then
-    echo "error: device $SERIAL did not finish booting within ${BOOT_TIMEOUT}s" >&2
-    exit 1
+  # The emulator runs in the foreground (its own window) whenever there is a
+  # display to put it on: headless + `host` GPU loses the GL context at
+  # teardown (see the environment block above), and a visible map is also what
+  # makes a failing map smoke diagnosable. CI has no display and stays headless
+  # on SwiftShader; EMULATOR_WINDOW=0 forces that anywhere.
+  GPU_ARGS=()
+  if [ "${EMULATOR_WINDOW:-$([ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && echo 1 || echo 0)}" = "1" ]; then
+    BOOT_ARGS+=(-no-audio -no-boot-anim)
+    # Windowed: let the emulator pick its own renderer (`auto` = the host GPU
+    # when there is one). Forcing SwiftShader here software-renders every frame
+    # of a whole test journey, which reads as a frozen emulator window.
+    if [ -n "${EMULATOR_GPU:-}" ]; then
+      GPU_ARGS+=(-gpu "$EMULATOR_GPU")
+    fi
+  else
+    BOOT_ARGS+=(-no-window -no-audio -no-boot-anim)
+    # Headless: SwiftShader, the portable choice for a CI runner with no GPU.
+    GPU_ARGS+=(-gpu "${EMULATOR_GPU:-swiftshader_indirect}")
   fi
-  sleep 2
-done
-echo ">> Device booted."
+  "$EMULATOR" -avd "$AVD" \
+    ${GPU_ARGS[@]+"${GPU_ARGS[@]}"} -no-snapshot \
+    ${BOOT_ARGS[@]+"${BOOT_ARGS[@]}"} &
+  EMULATOR_PID=$!
+  BOOTS_EMULATOR=1
+
+  log "Waiting for device $SERIAL to boot..."
+  # Scoped to $SERIAL: with a second device attached (another emulator or a
+  # plugged-in phone) a bare `wait-for-device` returns immediately and every
+  # later command fails with "more than one device/emulator".
+  "$ADB" -s "$SERIAL" wait-for-device
+  boot_deadline=$(( $(date +%s) + BOOT_TIMEOUT ))
+  until [ "$("$ADB" -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+    if [ "$(date +%s)" -ge "$boot_deadline" ]; then
+      echo "error: device $SERIAL did not finish booting within ${BOOT_TIMEOUT}s" >&2
+      exit 1
+    fi
+    sleep 2
+  done
+  log "Device booted."
+}
+
+boot_device
+
+# Runs one `flutter test` invocation, keeping its output and telling a product
+# failure apart from an emulator that died under it.
+#
+# The emulator occasionally loses its GL context (gfxstream logs "error null
+# ctx"), drops off adb, and the tool then fails for reasons that have nothing
+# to do with the code under test — that includes a suite whose tests all passed
+# and then could not uninstall the package. The signature is unambiguous: the
+# device is gone from adb, and every file the failure dump writes is empty. So
+# a vanished device is retried once on a fresh boot; a second loss is reported
+# as infrastructure, and anything else is left to the caller as a real failure.
+flutter_test_retry() {
+  local log_file="$ARTIFACTS_DIR/flutter-test.log"
+  mkdir -p "$ARTIFACTS_DIR"
+  local attempt
+  for attempt in 1 2; do
+    if ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test "$@" 2>&1 \
+      | tee "$log_file"; then
+      return 0
+    fi
+    if device_alive; then
+      return 1
+    fi
+    echo ">> INFRA: $SERIAL dropped off adb during the run" >&2
+    echo ">> INFRA: the emulator lost its graphics context, not a test failure" >&2
+    echo ">> INFRA: the tool output is in $log_file" >&2
+    if [ "$attempt" = "2" ]; then
+      echo ">> INFRA: lost the emulator twice; giving up (nothing here says the app is broken)" >&2
+      return 1
+    fi
+    echo ">> INFRA: rebooting it and retrying the suite once..." >&2
+    # A crashed emulator can linger as a zombie holding the AVD lock. Kill it
+    # by the pid boot_device recorded — never by pattern: a `pkill -f` that
+    # names the AVD also matches the shell that invoked this script.
+    if [ -n "${EMULATOR_PID:-}" ]; then
+      kill "$EMULATOR_PID" >/dev/null 2>&1 || true
+      local i
+      for ((i = 0; i < 30; i++)); do
+        kill -0 "$EMULATOR_PID" >/dev/null 2>&1 || break
+        sleep 1
+      done
+      kill -9 "$EMULATOR_PID" >/dev/null 2>&1 || true
+      EMULATOR_PID=""
+    fi
+    boot_device
+  done
+}
 
 # --- Shared helpers ---------------------------------------------------------
 
@@ -196,7 +291,9 @@ hide_system_dialogs() {
 # cannot inherit the previous suite's saved state. Nothing to uninstall (no
 # package yet) is fine.
 reset_app_state() {
-  "$ADB" -s "$SERIAL" uninstall "$PKG" >/dev/null 2>&1 || true
+  # Bounded for the same reason as collect_artifacts: a vanished device would
+  # otherwise block the suite before it ever starts.
+  timeout 60 "$ADB" -s "$SERIAL" uninstall "$PKG" >/dev/null 2>&1 || true
 }
 
 # --- Real-app UI automation --------------------------------------------------
@@ -373,10 +470,14 @@ collect_artifacts() {
   local name="$1"
   local dir="$ARTIFACTS_DIR/$name"
   mkdir -p "$dir"
-  "$ADB" -s "$SERIAL" logcat -d > "$dir/logcat.txt" 2>/dev/null || true
-  "$ADB" -s "$SERIAL" exec-out screencap -p > "$dir/screenshot.png" 2>/dev/null || true
-  "$ADB" -s "$SERIAL" shell dumpsys location > "$dir/dumpsys-location.txt" 2>/dev/null || true
-  "$ADB" -s "$SERIAL" shell dumpsys package "$PKG" > "$dir/dumpsys-package.txt" 2>/dev/null || true
+  # Bounded: when the emulator's GPU context dies the device stops answering
+  # and a bare `adb logcat -d` blocks forever, which once stranded a run for
+  # 40 minutes *after* the tests had already failed. Artifacts are diagnostic,
+  # so give up and report the failure instead.
+  timeout 20 "$ADB" -s "$SERIAL" logcat -d > "$dir/logcat.txt" 2>/dev/null || true
+  timeout 20 "$ADB" -s "$SERIAL" exec-out screencap -p > "$dir/screenshot.png" 2>/dev/null || true
+  timeout 20 "$ADB" -s "$SERIAL" shell dumpsys location > "$dir/dumpsys-location.txt" 2>/dev/null || true
+  timeout 20 "$ADB" -s "$SERIAL" shell dumpsys package "$PKG" > "$dir/dumpsys-package.txt" 2>/dev/null || true
   echo ">> Failure artifacts in $dir" >&2
 }
 
@@ -500,10 +601,10 @@ run_device_gps_suite() {
   start_feeder &
   FEEDER_PID=$!
 
-  echo ">> Running the device-GPS integration test on $SERIAL..."
+  log "Running the device-GPS integration test on $SERIAL..."
   # REQUIRE_DEVICE_GPS turns a missing/tripped define into a hard failure
   # instead of a silent skip, mirroring REQUIRE_RUST_ENGINE in the host job.
-  if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test integration_test/device_gps_test.dart -d "$SERIAL" \
+  if ! flutter_test_retry integration_test/device_gps_test.dart -d "$SERIAL" \
     --dart-define=USE_DEVICE_GPS=true \
     --dart-define=REQUIRE_DEVICE_GPS=true \
     ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
@@ -520,10 +621,10 @@ run_map_smoke_suite() {
   # Fresh install so the map smoke cannot inherit a previous suite's saved
   # regions or routes.
   reset_app_state
-  echo ">> Running the map smoke integration test on $SERIAL..."
+  log "Running the map smoke integration test on $SERIAL..."
   # MAP_VIEW=true is what makes the suite run at all (its skip gate); the real
   # map pulls the style document and tiles over the network.
-  if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test \
+  if ! flutter_test_retry \
     integration_test/map_smoke_test.dart -d "$SERIAL" \
     --dart-define=MAP_VIEW=true \
     ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
@@ -616,7 +717,7 @@ run_permissions_suite() {
   local cases="denied deniedForever servicesOff grantedAfterDenial"
   local case
   for case in $cases; do
-    echo ">> Permission case: $case"
+    log "Permission case: $case"
     reset_app_state
 
     # The dialog cannot be answered from a test; press BACK only while the
@@ -625,7 +726,7 @@ run_permissions_suite() {
     start_dialog_dismisser
     start_permission_watcher "$case"
 
-    if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test integration_test/permissions_test.dart -d "$SERIAL" \
+    if ! flutter_test_retry integration_test/permissions_test.dart -d "$SERIAL" \
       --dart-define=USE_DEVICE_GPS=true \
       --dart-define=REQUIRE_DEVICE_GPS=true \
       --dart-define=PERMISSION_CASE="$case" \
@@ -715,7 +816,7 @@ run_process_death_suite() {
   # so the harness can drive the app over adb. It exits on its own when the app
   # process is killed in phase 2.
   reset_app_state
-  echo ">> Process-death: building and installing the app (demo timeline)..."
+  log "Process-death: building and installing the app (demo timeline)..."
   RUN_LOG="$ARTIFACTS_DIR/process-death-run.log"
   mkdir -p "$ARTIFACTS_DIR"
   flutter run -t "$entry" -d "$SERIAL" \
@@ -757,7 +858,7 @@ run_process_death_suite() {
   sleep 1
 
   # --- Phase 1: record an interrupted run -----------------------------------
-  echo ">> Process-death phase 1/3: record a run and leave the snapshot on disk..."
+  log "Process-death phase 1/3: record a run and leave the snapshot on disk..."
   # A stray foreground app would swallow every tap (verified: a leftover app
   # from the emulator image stole focus and the drive silently went nowhere).
   if ! bring_app_to_front 60; then
@@ -822,7 +923,7 @@ run_process_death_suite() {
   echo ">> snapshot on disk: started_at=$recorded_started distance_m=$recorded_distance moving_s=$recorded_moving"
 
   # --- Phase 2: a genuine process kill --------------------------------------
-  echo ">> Process-death phase 2/3: force-stop the app process..."
+  log "Process-death phase 2/3: force-stop the app process..."
   local pid_before
   pid_before="$("$ADB" -s "$SERIAL" shell pidof "$PKG" 2>/dev/null | tr -d '\r')"
   if [ -z "$pid_before" ]; then
@@ -861,7 +962,7 @@ run_process_death_suite() {
   echo ">> survived the kill: distance_m=$survived_distance moving_s=$survived_moving"
 
   # --- Phase 3: a fresh process restores the interrupted run ----------------
-  echo ">> Process-death phase 3/3: relaunch and assert the run was restored..."
+  log "Process-death phase 3/3: relaunch and assert the run was restored..."
   # `am start` is the relaunch: a genuinely new process reading the same
   # documents directory. Focus is asserted before any tap.
   if ! bring_app_to_front 60; then
@@ -938,8 +1039,8 @@ run_demo_suite() {
   if [ "$SMOKE" = "1" ]; then
     target="integration_test/app_test.dart"
   fi
-  echo ">> Running integration tests ($target) on $SERIAL..."
-  if ! ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test "$target" -d "$SERIAL" \
+  log "Running integration tests ($target) on $SERIAL..."
+  if ! flutter_test_retry "$target" -d "$SERIAL" \
     ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
     collect_artifacts demo
     exit 1

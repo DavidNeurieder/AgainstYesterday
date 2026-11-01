@@ -77,9 +77,31 @@ needs a person and a device. CI job names refer to
 
 - [ ] [CI] Full journey on API 34 and the record-and-save smoke on API 24, the
       oldest supported release, on every PR.
-- [ ] [CI] Nightly: API 36 smoke.
+- [ ] [CI] Nightly: API 36 smoke, the broader permission matrix, genuine
+      process-death recovery, and the real-map smoke.
+- [ ] [CI] Nightly `--map-smoke`: the native MapLibre renderer loads the style
+      and draws the scene, the route and travelled GeoJSON sources hold what the
+      scene says (`querySourceFeatures`), the native camera follows YOU as fixes
+      arrive (`getVisibleRegion`), and an unreachable style document fails
+      quietly (`integration_test/map_smoke_test.dart`).
 - [ ] [manual] The device matrix below (a reference Pixel and one other
       manufacturer).
+
+### Running the emulator suites locally
+
+- The harness boots the AVD **in a window** whenever a display is present (CI
+  has none and stays headless on SwiftShader). Headless plus the host GPU is
+  what loses its GL context at teardown — gfxstream logs `error null ctx`, the
+  device drops off adb mid-uninstall, and a suite whose tests all passed still
+  exits nonzero.
+- That crash is the emulator's, not the app's, and it can also land mid-suite.
+  The harness retries a run whose device vanished (once, on a fresh boot) and
+  labels a second loss `INFRA`; a real test failure leaves the device alive and
+  is never retried. Both cases keep the tool output in
+  `build/integration-artifacts/flutter-test.log`.
+- `--map-smoke` needs the network (style document and tiles). It reuses a live
+  `$ANDROID_SERIAL` instead of booting and killing its own emulator, so booting
+  one first makes the local loop much shorter.
 
 ## Gate 6 — Stability
 
