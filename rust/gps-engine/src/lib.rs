@@ -70,6 +70,9 @@ pub mod synthetic;
 /// Standard processing pipeline and labeled-corpus evaluation (§33/§38–40).
 pub mod evaluate;
 
+/// Self-contained HTML map rendering for inspecting tracks in a browser.
+pub mod viz;
+
 /// Domain value types: [`Distance`], [`Duration`], [`Speed`], [`Timestamp`].
 pub mod units;
 
@@ -89,11 +92,21 @@ pub use gps::{
 pub use gpx::{parse_gpx, read_gpx, read_gpx_file, write_gpx, write_gpx_file};
 pub use route::{
     CanonicalError, CanonicalizeConfig, ContinuityConfig, ContinuousProjection, DiscoveredRoute,
-    MatchConfig, MatchScore, Route, RouteCatalog, RoutePoint, TrackAddition, canonicalize, compare,
-    compare_either_direction, compare_with,
+    MatchConfig, MatchScore, PreparedTrack, Route, RouteCatalog, RoutePoint, TrackAddition,
+    canonicalize, compare, compare_either_direction, compare_either_direction_prepared,
+    compare_prepared, compare_with,
 };
 pub use track::{
-    FilterConfig, FilterReason, MovingConfig, ProcessingReport, SimplifyConfig, Track, TrackPoint,
-    filter, filter_detailed, resample_by_distance, simplify,
+    FilterConfig, FilterReason, MovingConfig, ProcessingReport, SegmentComparison, SegmentError,
+    SimplifyConfig, Track, TrackPoint, TrackSegment, compare_segments, filter, filter_detailed,
+    resample_by_distance, segments, simplify,
 };
+// Common aliases for the sectionwise comparison API.
+pub use track::segments::compare_segments as compare_sectionwise;
+pub use track::segments::compare_segments as compare_sections;
+pub use track::segments::compare_segments as section_compare;
+pub use track::segments::compare_segments as sectionwise_compare;
+pub use track::segments::segments as segment_track;
+pub use track::segments::segments as track_segments;
 pub use units::{Distance, Duration, Speed, Timestamp};
+pub use viz::{DEFAULT_MAP_STYLE_URL, MapOptions, MapTrack, render_map_html};

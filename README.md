@@ -71,6 +71,9 @@ flutter run
 # Rust engine
 cargo test
 cargo run --example analyze
+
+# Inspect tracks on a map (writes and opens /tmp/map.html)
+cargo run --bin gps-engine -- map rust/gps-engine/testdata/unit/noisy_loop.gpx --out /tmp/map.html
 ```
 
 CI (`/.github/workflows/ci.yml`) runs `cargo fmt --check`, `cargo clippy -D

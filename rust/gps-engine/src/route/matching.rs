@@ -19,7 +19,7 @@
 //! The [`overall_score`](MatchScore::overall_score) is a provisional single
 //! number; debugging should use the individual components.
 
-use crate::geo::{bearing, distance};
+use crate::geo::{BoundingBox, PolylineBounds, bearing, bounding_box, destination, distance};
 use crate::units::Distance;
 use crate::{Coordinate, Track};
 
@@ -77,7 +77,7 @@ pub struct MatchScore {
     /// runs the route reversed relative to the other).
     pub direction_similarity: f64,
     /// Fraction of consecutive `b`-projections onto `a` that advance along the
-    /// route (allowing [`BACKTRACK_TOLERANCE_M`] of jitter), 0..1. High when
+    /// route (allowing 25 m of backward jitter), 0..1. High when
     /// the two recordings progress in the same direction along the same shape;
     /// low when the subject repeatedly snaps back (e.g. crossing the other
     /// route repeatedly). Reported, but deliberately *not* folded into
@@ -110,6 +110,122 @@ impl MatchScore {
     }
 }
 
+/// A track's geometry indexed once for repeated comparison.
+///
+/// Building the index costs one pass over the track; matching a recording
+/// against a whole catalog (discovery, benchmarks, evaluation) reuses it
+/// instead of re-deriving the polyline, its segment boxes, the cumulative
+/// distances, and the 50 m length basis on every pair.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreparedTrack {
+    bounds: PolylineBounds,
+    /// Meters along the raw polyline at each vertex (`cumulative[0] == 0`).
+    cumulative: Vec<f64>,
+    bbox: BoundingBox,
+    /// Recorded length on the 50 m chord basis (see the private
+    /// `robust_length` helper).
+    robust_length: Distance,
+    start: Coordinate,
+    end: Coordinate,
+}
+
+impl PreparedTrack {
+    /// Indexes a track's geometry for matching.
+    pub fn new(track: &Track) -> Self {
+        let points = track.points();
+        let polyline: Vec<Coordinate> = points.iter().map(|p| p.coordinate()).collect();
+        let mut cumulative = Vec::with_capacity(polyline.len());
+        cumulative.push(0.0);
+        for pair in polyline.windows(2) {
+            cumulative.push(
+                cumulative.last().expect("the start is always pushed")
+                    + distance(pair[0], pair[1]).meters(),
+            );
+        }
+        Self {
+            bbox: bounding_box(&polyline).expect("a track has at least two points"),
+            bounds: PolylineBounds::new(&polyline),
+            cumulative,
+            robust_length: robust_length(track),
+            start: points[0].coordinate(),
+            end: points
+                .last()
+                .expect("a track has at least two points")
+                .coordinate(),
+        }
+    }
+
+    /// The track's geometry, one coordinate per fix.
+    pub fn polyline(&self) -> &[Coordinate] {
+        self.bounds.coordinates()
+    }
+
+    /// Recorded length on the 50 m chord basis used for the distance ratio.
+    pub fn robust_length(&self) -> Distance {
+        self.robust_length
+    }
+}
+
+/// Orientation-specific cheap necessary conditions for a route match.
+struct MatchGate {
+    forward: bool,
+    reversed: bool,
+}
+
+impl MatchGate {
+    fn new(a: &PreparedTrack, b: &PreparedTrack, config: &MatchConfig) -> Self {
+        if !boxes_within(a.bbox, b.bbox, config.lateral_tolerance) {
+            return Self {
+                forward: false,
+                reversed: false,
+            };
+        }
+        let max_start = config.max_start_distance.meters();
+        let max_end = config.max_end_distance.meters();
+        Self {
+            forward: distance(a.start, b.start).meters() <= max_start
+                && distance(a.end, b.end).meters() <= max_end,
+            reversed: distance(a.start, b.end).meters() <= max_start
+                && distance(a.end, b.start).meters() <= max_end,
+        }
+    }
+}
+
+/// Whether the two bounding boxes come within `tol` meters of each other.
+///
+/// Conservative: it may say "yes" for tracks that still never touch, but a
+/// "no" proves that no point of one lies within `tol` of the other's polyline.
+fn boxes_within(a: BoundingBox, b: BoundingBox, tol: Distance) -> bool {
+    let tol_m = tol.meters();
+    if !tol_m.is_finite() || tol_m < 0.0 {
+        return true; // nothing to prune on; the exact metrics decide
+    }
+    let d_lat = tol_m / 111_320.0;
+    // Longitude degrees shrink toward the poles. Widening by the pole-ward
+    // latitude of both boxes can only over-approximate, so it never rejects a
+    // point that is genuinely within `tol`.
+    let pole_ward = [
+        a.min.latitude(),
+        a.max.latitude(),
+        b.min.latitude(),
+        b.max.latitude(),
+    ]
+    .into_iter()
+    .fold(0.0f64, |acc, lat| acc.max(lat.abs()));
+    let cos_lat = (pole_ward + d_lat).min(90.0).to_radians().cos().max(1e-12);
+    let d_lon = tol_m / (cos_lat * 111_320.0);
+
+    a.min.latitude() - d_lat <= b.max.latitude()
+        && b.min.latitude() - d_lat <= a.max.latitude()
+        && a.min.longitude() - d_lon <= b.max.longitude()
+        && b.min.longitude() - d_lon <= a.max.longitude()
+}
+
+fn length_ratio_ok(a: &PreparedTrack, b: &PreparedTrack, config: &MatchConfig) -> bool {
+    let ratio = a.robust_length.meters() / b.robust_length.meters();
+    ratio >= config.min_distance_ratio && ratio <= config.max_distance_ratio
+}
+
 /// Compares `a` against `b` in either travel orientation, returning the better
 /// matching score when either the forward or the reversed comparison satisfies
 /// `config`; `None` when neither does.
@@ -118,18 +234,49 @@ impl MatchScore {
 /// opposite direction. The returned score reports the orientation that
 /// matched.
 pub fn compare_either_direction(a: &Track, b: &Track, config: &MatchConfig) -> Option<MatchScore> {
-    let forward = compare_with(a, b, config);
-    if forward.is_match(config) {
-        return Some(forward);
+    let prepared_a = PreparedTrack::new(a);
+    let prepared_b = PreparedTrack::new(b);
+    compare_either_direction_prepared(&prepared_a, &prepared_b, b, config)
+}
+
+/// [`compare_either_direction`] for tracks whose geometry is already indexed.
+///
+/// `b_track` must be the recording `prepared_b` was built from: the reversed
+/// orientation is resampled from its other end, so its length basis is not
+/// recoverable from the forward index.
+pub fn compare_either_direction_prepared(
+    prepared_a: &PreparedTrack,
+    prepared_b: &PreparedTrack,
+    b_track: &Track,
+    config: &MatchConfig,
+) -> Option<MatchScore> {
+    let gate = MatchGate::new(prepared_a, prepared_b, config);
+    if !gate.forward && !gate.reversed {
+        return None;
     }
 
-    let reversed_b = b.reversed();
-    let reversed = compare_with(a, &reversed_b, config);
-    if reversed.is_match(config) {
-        Some(reversed)
-    } else {
-        None
+    // `is_match` needs proximity, the length ratio, and spatial overlap. The
+    // gate already settled proximity and the boxes, so the O(points²) metrics
+    // only run for orientations that can still answer "same route".
+    if gate.forward && length_ratio_ok(prepared_a, prepared_b, config) {
+        let score = compare_prepared(prepared_a, prepared_b, config);
+        if score.is_match(config) {
+            return Some(score);
+        }
     }
+
+    if gate.reversed {
+        let reversed_b = b_track.reversed();
+        let prepared_reversed = PreparedTrack::new(&reversed_b);
+        if length_ratio_ok(prepared_a, &prepared_reversed, config) {
+            let score = compare_prepared(prepared_a, &prepared_reversed, config);
+            if score.is_match(config) {
+                return Some(score);
+            }
+        }
+    }
+
+    None
 }
 
 /// Compares two tracks with [`MatchConfig::default`].
@@ -139,19 +286,25 @@ pub fn compare(a: &Track, b: &Track) -> MatchScore {
 
 /// Compares two tracks under custom thresholds.
 pub fn compare_with(a: &Track, b: &Track, config: &MatchConfig) -> MatchScore {
-    let start_distance = distance(
-        a.start().expect("track non-empty").coordinate(),
-        b.start().expect("track non-empty").coordinate(),
-    );
-    let end_distance = distance(
-        a.end().expect("track non-empty").coordinate(),
-        b.end().expect("track non-empty").coordinate(),
-    );
+    compare_prepared(&PreparedTrack::new(a), &PreparedTrack::new(b), config)
+}
 
-    let distance_ratio = robust_length(a).meters() / robust_length(b).meters();
-    let spatial_overlap = overlap(a, b, config);
-    let direction_similarity = direction_similarity(a, b, config.lateral_tolerance);
-    let continuity = continuity_metric(a, b, config.lateral_tolerance);
+/// Compares two prepared tracks in the given orientation, mirroring
+/// [`compare_with`] exactly.
+pub fn compare_prepared(a: &PreparedTrack, b: &PreparedTrack, config: &MatchConfig) -> MatchScore {
+    let start_distance = distance(a.start, b.start);
+    let end_distance = distance(a.end, b.end);
+    let distance_ratio = a.robust_length.meters() / b.robust_length.meters();
+
+    // A point can only lie within the lateral tolerance of the other track when
+    // the two bounding boxes come that close. If they don't, every geometric
+    // metric is exactly zero and the O(points²) passes can be skipped.
+    let (spatial_overlap, direction_similarity, continuity) =
+        if boxes_within(a.bbox, b.bbox, config.lateral_tolerance) {
+            geometric_metrics(a, b, config)
+        } else {
+            (0.0, 0.0, 0.0)
+        };
 
     let closure = |d: Distance, max: Distance| -> f64 {
         if max.meters() <= 0.0 {
@@ -176,17 +329,74 @@ pub fn compare_with(a: &Track, b: &Track, config: &MatchConfig) -> MatchScore {
     }
 }
 
-/// Fraction of `b`'s points near `a`'s geometry, then the reverse, taking the
-/// minimum. Direction-agnostic: a reversed recording still overlaps.
-fn overlap(a: &Track, b: &Track, config: &MatchConfig) -> f64 {
+/// The O(points²) metrics for one orientation, sharing the reference index and
+/// the point-to-route projections between them.
+fn geometric_metrics(
+    a: &PreparedTrack,
+    b: &PreparedTrack,
+    config: &MatchConfig,
+) -> (f64, f64, f64) {
     let tol = config.lateral_tolerance;
-    let ab = fraction_near(b, &polyline(a), tol);
-    let ba = fraction_near(a, &polyline(b), tol);
-    ab.min(ba)
+
+    // b's points against a's geometry feed both `overlap` (the b→a half) and
+    // the continuity metric, which walks the same projections along a.
+    let on_a = route_positions(a, b.polyline(), tol);
+    let on_b = route_positions(b, a.polyline(), tol);
+
+    // Direction-agnostic overlap: the smaller of the two point fractions, so a
+    // recording that only covers part of the other route does not score 1.
+    let overlap = (on_a.on as f64 / b.polyline().len() as f64)
+        .min(on_b.on as f64 / a.polyline().len() as f64);
+    let continuity = if on_a.on == 0 {
+        0.0
+    } else {
+        on_a.advancing as f64 / on_a.on as f64
+    };
+    let direction = direction_similarity(a, b.polyline(), tol);
+    (overlap, direction, continuity)
 }
 
-fn polyline(track: &Track) -> Vec<Coordinate> {
-    track.points().iter().map(|p| p.coordinate()).collect()
+/// Point-to-route projections summarised in one pass.
+struct RoutePositions {
+    /// Points that landed within the lateral tolerance of the polyline.
+    on: usize,
+    /// Consecutive on-track points that advanced along the reference.
+    advancing: usize,
+}
+
+/// Projects `points` onto `reference`'s polyline in a single pass.
+///
+/// The reference's cumulative polyline is the axis: each point that projects
+/// within the lateral tolerance is counted as on-track, and counts as advancing
+/// when its cumulative position does not fall more than `BACKTRACK_TOLERANCE_M`
+/// behind the previous on-track position. The caller derives the spatial
+/// overlap and the continuity metric from these counts, so one projection run
+/// serves both. A subject that keeps crossing the reference back and forth (a
+/// self-intersection, or an out-and-back run against the wrong half) ends up
+/// with a low `advancing / on`.
+fn route_positions(
+    reference: &PreparedTrack,
+    points: &[Coordinate],
+    tol: Distance,
+) -> RoutePositions {
+    let mut previous: Option<f64> = None;
+    let mut on = 0usize;
+    let mut advancing = 0usize;
+    for point in points {
+        let Some(projection) = reference.bounds.project_within(*point, tol) else {
+            continue;
+        };
+        let along =
+            reference.cumulative[projection.segment_index] + projection.distance_along.meters();
+        if let Some(prev) = previous
+            && along >= prev - BACKTRACK_TOLERANCE_M
+        {
+            advancing += 1;
+        }
+        previous = Some(along);
+        on += 1;
+    }
+    RoutePositions { on, advancing }
 }
 
 /// Along-track length robust to lateral GPS noise: the length of the track
@@ -209,72 +419,8 @@ fn robust_length(track: &Track) -> Distance {
 }
 
 /// Backward jitter (m) between consecutive projections that still counts as
-/// "advancing" for [`MatchScore::continuity`].
+/// "advancing" for [`MatchScore::continuity`] (see [`route_positions`]).
 const BACKTRACK_TOLERANCE_M: f64 = 25.0;
-
-/// Fraction of consecutive `subject` points (matched near `reference`) whose
-/// along-track positions advance monotonically.
-///
-/// The reference's cumulative polyline is the axis; each subject point that
-/// projects within the lateral tolerance contributes one step, which counts
-/// as advancing when its cumulative position does not fall more than
-/// [`BACKTRACK_TOLERANCE_M`] behind the previous matched position. A subject
-/// that keeps crossing the reference back and forth (a self-intersection, or
-/// an out-and-back run against the wrong half) scores low.
-fn continuity_metric(reference: &Track, subject: &Track, tol: Distance) -> f64 {
-    let geometry = polyline(reference);
-    if geometry.len() < 2 {
-        return 0.0;
-    }
-    let mut cumulative = Vec::with_capacity(geometry.len());
-    cumulative.push(0.0);
-    for pair in geometry.windows(2) {
-        cumulative.push(cumulative.last().unwrap() + distance(pair[0], pair[1]).meters());
-    }
-    let bounds = crate::geo::PolylineBounds::new(&geometry);
-
-    let mut previous: Option<f64> = None;
-    let mut advancing = 0usize;
-    let mut counted = 0usize;
-    for point in subject.points() {
-        let Some(projection) = bounds.project_within(point.coordinate(), tol) else {
-            continue;
-        };
-        let along = cumulative[projection.segment_index] + projection.distance_along.meters();
-        if let Some(prev) = previous
-            && along >= prev - BACKTRACK_TOLERANCE_M
-        {
-            advancing += 1;
-        }
-        previous = Some(along);
-        counted += 1;
-    }
-    if counted == 0 {
-        0.0
-    } else {
-        advancing as f64 / counted as f64
-    }
-}
-
-fn fraction_near(subject: &Track, geometry: &[Coordinate], tol: Distance) -> f64 {
-    let bounds = crate::geo::PolylineBounds::new(geometry);
-    let mut near = 0usize;
-    let mut total = 0usize;
-    for p in subject.points() {
-        let Some(projection) = bounds.project_within(p.coordinate(), tol) else {
-            total += 1;
-            continue;
-        };
-        total += 1;
-        if projection.lateral_error.meters() <= tol.meters() {
-            near += 1;
-        }
-    }
-    if total == 0 {
-        return 0.0;
-    }
-    near as f64 / total as f64
-}
 
 /// Mean directional agreement between matched segments: for each chord of `b`
 /// spanning at least [`MIN_DIRECTION_STEP_M`] meters whose midpoint is near
@@ -285,48 +431,49 @@ fn fraction_near(subject: &Track, geometry: &[Coordinate], tol: Distance) -> f64
 /// does not dominate the direction signal on short, slow steps.
 const MIN_DIRECTION_STEP_M: f64 = 20.0;
 
-fn direction_similarity(a: &Track, b: &Track, tol: Distance) -> f64 {
-    let pa = polyline(a);
-    let bounds = crate::geo::PolylineBounds::new(&pa);
+fn direction_similarity(reference: &PreparedTrack, subject: &[Coordinate], tol: Distance) -> f64 {
+    let geometry = reference.polyline();
+    if subject.len() < 2 {
+        return 0.0;
+    }
 
     let mut sum = 0.0f64;
     let mut count = 0usize;
 
-    let pts = b.points();
-    let mut chord_start = pts[0].coordinate();
-    for point in &pts[1..] {
-        let step = distance(chord_start, point.coordinate()).meters();
+    let mut chord_start = subject[0];
+    for &point in &subject[1..] {
+        let step = distance(chord_start, point).meters();
         if step < MIN_DIRECTION_STEP_M {
             continue; // keep building the chord
         }
 
-        let Ok(chord_bearing) = bearing(chord_start, point.coordinate()) else {
-            chord_start = point.coordinate();
+        let Ok(chord_bearing) = bearing(chord_start, point) else {
+            chord_start = point;
             continue;
         };
-        let mid = crate::geo::destination(
+        let mid = destination(
             chord_start,
             chord_bearing,
             Distance::from_meters(step / 2.0),
         );
-        let Some(projection) = bounds.project_within(mid, tol) else {
-            chord_start = point.coordinate();
+        let Some(projection) = reference.bounds.project_within(mid, tol) else {
+            chord_start = point;
             continue;
         };
 
-        let seg_from = pa[projection.segment_index];
-        let seg_to = pa[projection.segment_index + 1];
-        let Ok(a_bearing) = bearing(seg_from, seg_to) else {
-            chord_start = point.coordinate();
+        let seg_from = geometry[projection.segment_index];
+        let seg_to = geometry[projection.segment_index + 1];
+        let Ok(reference_bearing) = bearing(seg_from, seg_to) else {
+            chord_start = point;
             continue;
         };
 
-        let delta =
-            (chord_bearing.as_radians() - a_bearing.as_radians()).rem_euclid(std::f64::consts::TAU);
+        let delta = (chord_bearing.as_radians() - reference_bearing.as_radians())
+            .rem_euclid(std::f64::consts::TAU);
         sum += delta.cos().max(0.0);
         count += 1;
 
-        chord_start = point.coordinate();
+        chord_start = point;
     }
 
     if count == 0 {
@@ -632,5 +779,156 @@ mod tests {
             loose.spatial_overlap > 0.9,
             "wide tolerance covers the detour"
         );
+    }
+
+    /// Straightforward reference implementation of the geometric metrics,
+    /// kept here so the indexed fast path can be checked against it. The fast
+    /// path only changes *where* the projections come from, never the answer.
+    fn reference_metrics(a: &Track, b: &Track, tol: Distance) -> (f64, f64, f64) {
+        use crate::geo::{PolylineBounds, bearing, destination};
+
+        let pa: Vec<Coordinate> = a.points().iter().map(|p| p.coordinate()).collect();
+        let pb: Vec<Coordinate> = b.points().iter().map(|p| p.coordinate()).collect();
+
+        let fraction_near = |points: &[Coordinate], geometry: &[Coordinate]| -> f64 {
+            let bounds = PolylineBounds::new(geometry);
+            let mut near = 0usize;
+            for point in points {
+                if let Some(projection) = bounds.project_within(*point, tol)
+                    && projection.lateral_error.meters() <= tol.meters()
+                {
+                    near += 1;
+                }
+            }
+            near as f64 / points.len() as f64
+        };
+        let overlap = fraction_near(&pb, &pa).min(fraction_near(&pa, &pb));
+
+        let mut cumulative = Vec::with_capacity(pa.len());
+        cumulative.push(0.0);
+        for pair in pa.windows(2) {
+            cumulative.push(cumulative.last().unwrap() + distance(pair[0], pair[1]).meters());
+        }
+        let bounds = PolylineBounds::new(&pa);
+        let mut previous: Option<f64> = None;
+        let mut advancing = 0usize;
+        let mut counted = 0usize;
+        for point in &pb {
+            let Some(projection) = bounds.project_within(*point, tol) else {
+                continue;
+            };
+            let along = cumulative[projection.segment_index] + projection.distance_along.meters();
+            if let Some(prev) = previous
+                && along >= prev - BACKTRACK_TOLERANCE_M
+            {
+                advancing += 1;
+            }
+            previous = Some(along);
+            counted += 1;
+        }
+        let continuity = if counted == 0 {
+            0.0
+        } else {
+            advancing as f64 / counted as f64
+        };
+
+        let bounds = PolylineBounds::new(&pa);
+        let mut sum = 0.0f64;
+        let mut count = 0usize;
+        let mut chord_start = pb[0];
+        for &point in &pb[1..] {
+            let step = distance(chord_start, point).meters();
+            if step < MIN_DIRECTION_STEP_M {
+                continue;
+            }
+            let Ok(chord_bearing) = bearing(chord_start, point) else {
+                chord_start = point;
+                continue;
+            };
+            let mid = destination(
+                chord_start,
+                chord_bearing,
+                Distance::from_meters(step / 2.0),
+            );
+            let Some(projection) = bounds.project_within(mid, tol) else {
+                chord_start = point;
+                continue;
+            };
+            let Ok(reference_bearing) = bearing(
+                pa[projection.segment_index],
+                pa[projection.segment_index + 1],
+            ) else {
+                chord_start = point;
+                continue;
+            };
+            let delta = (chord_bearing.as_radians() - reference_bearing.as_radians())
+                .rem_euclid(std::f64::consts::TAU);
+            sum += delta.cos().max(0.0);
+            count += 1;
+            chord_start = point;
+        }
+        let direction = if count == 0 { 0.0 } else { sum / count as f64 };
+
+        (overlap, direction, continuity)
+    }
+
+    #[test]
+    fn indexed_metrics_match_a_direct_recomputation() {
+        let config = MatchConfig::default();
+        let a = noisy(1);
+        let cases = vec![
+            clean(2),
+            noisy(3),
+            add_detour(&a, Distance::from_meters(40.0)),
+            reverse(&noisy(4)),
+        ];
+        for b in &cases {
+            let score = compare_with(&a, b, &config);
+            let expected = reference_metrics(&a, b, config.lateral_tolerance);
+            assert_eq!(score.spatial_overlap, expected.0);
+            assert_eq!(score.direction_similarity, expected.1);
+            assert_eq!(score.continuity, expected.2);
+        }
+    }
+
+    #[test]
+    fn distant_tracks_score_zero_without_geometry_work() {
+        let a = clean(1);
+        // Another city: no point can fall within the lateral tolerance.
+        let far_route = vec![
+            Coordinate::new(48.137, 11.575).unwrap(),
+            Coordinate::new(48.145, 11.582).unwrap(),
+        ];
+        let far = generate(&far_route, &SyntheticConfig::clean(2));
+        let config = MatchConfig::default();
+
+        let score = compare_with(&a, &far, &config);
+        assert_eq!(score.spatial_overlap, 0.0);
+        assert_eq!(score.direction_similarity, 0.0);
+        assert_eq!(score.continuity, 0.0);
+        assert!(!score.is_match(&config));
+        assert!(compare_either_direction(&a, &far, &config).is_none());
+    }
+
+    #[test]
+    fn prepared_either_direction_matches_the_track_api() {
+        let config = MatchConfig::default();
+        let a = clean(1);
+        let cases = vec![
+            clean(2),
+            noisy(3),
+            reverse(&noisy(4)),
+            add_detour(&a, Distance::from_meters(40.0)),
+        ];
+        for b in &cases {
+            let direct = compare_either_direction(&a, b, &config);
+            let prepared = compare_either_direction_prepared(
+                &PreparedTrack::new(&a),
+                &PreparedTrack::new(b),
+                b,
+                &config,
+            );
+            assert_eq!(direct, prepared);
+        }
     }
 }

@@ -11,6 +11,37 @@ documented here, grouped by the implementation milestones in
 
 ### Added
 
+- The companion CLI gains `gps-engine map`: it renders one or more GPX files
+  (or a directory of them) into a self-contained HTML page that overlays every
+  track on a MapLibre basemap, with per-track colours, start/finish markers, a
+  legend of distance/duration/points, and click popups. The page uses the same
+  OpenFreeMap Liberty style as the app, attributes OpenStreetMap (ODbL), and
+  falls back to a plain background when the style cannot be fetched, so the
+  routes still draw offline. The written page is handed to the platform's
+  default browser (`xdg-open`/`open`/`start`, spawned without blocking);
+  files the engine rejects (e.g. non-monotonic timestamps) are reported and
+  skipped, so a directory with a few corrupt recordings still maps the rest;
+  options: `--out` (defaults to a sibling `.html` for one file, `map.html`
+  otherwise), `--out -` for stdout, `--no-open` to skip the browser, `--title`,
+  and `--style-url`; the new `viz` module holds the renderer and its escaping /
+  determinism tests (`tests/viz.rs`, `tests/cli.rs`).
+- `gps-engine benchmark` loads its corpus leniently too: recordings the engine
+  rejects are reported on stderr and skipped before discovery/pairwise timing,
+  and a corpus with no usable track fails with the same summary used by `map`.
+- `gps-engine group` (aliases `organize`/`cluster`/`arrange`/`partition`/
+  `bucket`) clusters a corpus with the same discovery logic and copies each
+  recording into `<out>/route_<id>/`, so tracks on the same route end up in the
+  same folder; `--out`/`-o` set the destination (default `grouped/`),
+  `--move` moves instead of copying, unreadable recordings are reported and
+  skipped, and a corpus with no usable track fails. Duplicate basenames within
+  a route get a numeric suffix instead of overwriting.
+- `gps-engine segments` (aliases `sections`/`segment`/`section`) splits a
+  group of tracks into N equal-distance sections and prints per-section
+  average speed (km/h) for every track plus the min/max/mean/spread, so
+  sectionwise differences in pace are visible. The underlying
+  `segments`/`compare_segments` functions (with aliases `compare_sections`,
+  `compare_sectionwise`, `section_compare`, `sectionwise_compare`,
+  `track_segments`) are exported from the crate.
 - Test coverage from the Android hardening plan: degenerate/zero-distance
   attempts and personal-best tie-breaks (`degenerate_attempt_test.dart`,
   `pb_classification_test.dart`), duplicate/out-of-order/repeated-timestamp
@@ -260,6 +291,20 @@ documented here, grouped by the implementation milestones in
 
 ### Fixed
 
+- `gps-engine discover` now tolerates invalid recordings the same way `map`
+  and `benchmark` do: a GPX that fails to parse (e.g. non-monotonic
+  timestamps) is reported on stderr and skipped, and the run continues;
+  a corpus with no usable track still fails. The summary prints
+  `Skipped files: N`.
+- `gps-engine evaluate` now says what it needs instead of failing with a bare
+  ENOENT: a missing `manifest.json` reports the path plus a hint that
+  `evaluate` scores a *labeled* corpus (with the manifest shape and the
+  synthetic corpus as an example) and points at `discover`/`benchmark`/`map`
+  for unlabeled directories. It also loads only the recordings its manifest
+  references, so an unreadable file that no labeled pair mentions no longer
+  fails the run (and a large corpus is no longer parsed to score a few pairs);
+  a referenced recording that is missing or invalid is still a hard error,
+  because silently dropping it would corrupt the confusion matrix.
 - The live map follows YOU from the very first fix. The native map's own
   startup camera event was being read as the runner panning away, which cleared
   the follow flag before the first follow had even run, so the camera stayed on
@@ -384,6 +429,20 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- Route matching got a prepared-geometry fast path. `PreparedTrack` indexes a
+  recording once (polyline, per-segment boxes, cumulative distances, 50 m
+  length basis), `compare_prepared` / `compare_either_direction_prepared`
+  compare two indexes, and `RouteCatalog` keeps one per route representative
+  instead of re-deriving it for every comparison. A pair is rejected before any
+  point loop by a bounding-box + start/end + length-ratio gate, pairs whose
+  boxes never come within the lateral tolerance score exactly zero overlap, and
+  the overlap and continuity metrics now share one projection pass instead of
+  two. `gps-engine benchmark` compares each unordered pair once and prints a
+  note when it is an unoptimised debug build. On the 2063-file Geoprivacy
+  corpus (1985 valid tracks) discovery + the 1985² pairwise matrix now take
+  57 s in release (about 7 minutes in a debug build) instead of tens of hours;
+  the reported metrics are unchanged (a regression test checks them against a
+  direct recomputation).
 - The live run screen now leads with the **PB gap** (§2, checklist 1): the gap
   is drawn at its full hero size in the whole row left over, with the distance
   demoted beside it instead of the gap being squeezed into a fixed 168 px box

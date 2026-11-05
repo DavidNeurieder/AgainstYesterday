@@ -115,13 +115,13 @@ pub fn project_to_polyline(point: Coordinate, polyline: &[Coordinate]) -> Option
 /// Precomputed per-segment bounding boxes so that many points can be tested
 /// against one polyline with cheap range pruning instead of scanning every
 /// segment each time.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PolylineBounds {
     polyline: Vec<Coordinate>,
     bboxes: Vec<BBox>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct BBox {
     min_lat: f64,
     max_lat: f64,
@@ -149,6 +149,11 @@ impl PolylineBounds {
             polyline: polyline.to_vec(),
             bboxes,
         }
+    }
+
+    /// The indexed polyline, one coordinate per vertex.
+    pub fn coordinates(&self) -> &[Coordinate] {
+        &self.polyline
     }
 
     /// The exact projection of `point` onto the nearest segment, but only if

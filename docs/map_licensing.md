@@ -50,6 +50,22 @@ The canonical line used across the app is:
 Map data © OpenStreetMap contributors (ODbL) · Tiles © OpenFreeMap / OpenMapTiles
 ```
 
+## CLI HTML map (`gps-engine map`)
+
+The engine's companion CLI can render GPX tracks to a standalone HTML page
+(`cargo run --bin gps-engine -- map ...`, see the crate README). It uses the
+same stack and carries the same obligations:
+
+- **Renderer:** MapLibre GL JS, **BSD-3-Clause**, pinned to a release and
+  loaded from unpkg when the page is opened (not bundled).
+- **Data/tiles:** the same OpenFreeMap Liberty style and OpenStreetMap data as
+  the app.
+- **Attribution:** the canonical line above is rendered into the page footer
+  with links, in addition to MapLibre's attribution control.
+- **No bundled tiles:** the page fetches its library and tiles at view time.
+  Without network it falls back to a plain background and still draws the
+  tracks; `--style-url` points it at a self-hosted style document.
+
 ## Offline policy
 
 Offline is **on-device, per-route downloads only**:

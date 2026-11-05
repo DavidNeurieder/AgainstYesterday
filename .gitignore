@@ -17,3 +17,4 @@ app/android/app/src/main/jniLibs/
 # for inspection (they carry the user's real coordinates).
 ideas/
 Download/
+data/

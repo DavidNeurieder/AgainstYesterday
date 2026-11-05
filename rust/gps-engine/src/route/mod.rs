@@ -18,7 +18,10 @@ pub mod matching;
 
 pub use canonical::{CanonicalError, CanonicalizeConfig, canonicalize};
 pub use discovery::{DiscoveredRoute, RouteCatalog, TrackAddition};
-pub use matching::{MatchConfig, MatchScore, compare, compare_either_direction, compare_with};
+pub use matching::{
+    MatchConfig, MatchScore, PreparedTrack, compare, compare_either_direction,
+    compare_either_direction_prepared, compare_prepared, compare_with,
+};
 
 use crate::Track;
 use crate::error::RouteError;

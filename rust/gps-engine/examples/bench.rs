@@ -23,7 +23,10 @@ use std::time::Instant;
 use gps_engine::geo::Coordinate;
 use gps_engine::synthetic::SyntheticConfig;
 use gps_engine::units::{Distance, Speed};
-use gps_engine::{MatchConfig, Route, RouteCatalog, compare_either_direction, filter, simplify};
+use gps_engine::{
+    MatchConfig, PreparedTrack, Route, RouteCatalog, compare_either_direction_prepared, filter,
+    simplify,
+};
 
 fn parse_args() -> (usize, usize, f64, u64) {
     let mut tracks = 20usize;
@@ -145,13 +148,19 @@ fn bench_matching(corpus: &[gps_engine::Track], pairs: usize) {
             continue;
         }
         let slice = &corpus[..s];
+        let prepared: Vec<PreparedTrack> = slice.iter().map(PreparedTrack::new).collect();
         let (matched, elapsed) = {
             let mut matched = 0usize;
             let t = ms(|| {
                 for i in 0..slice.len() {
-                    for j in 0..slice.len() {
-                        if i != j
-                            && compare_either_direction(&slice[i], &slice[j], &config).is_some()
+                    for j in (i + 1)..slice.len() {
+                        if compare_either_direction_prepared(
+                            &prepared[i],
+                            &prepared[j],
+                            &slice[j],
+                            &config,
+                        )
+                        .is_some()
                         {
                             matched += 1;
                         }
@@ -165,7 +174,7 @@ fn bench_matching(corpus: &[gps_engine::Track], pairs: usize) {
             "  pairwise           {:>4}²   {:>9.2} ms   {:.0}/s   {} matched",
             s,
             elapsed,
-            (s * s) as f64 / (elapsed / 1000.0),
+            (s * (s - 1) / 2) as f64 / (elapsed / 1000.0),
             matched
         );
     }

@@ -17,7 +17,9 @@
 //! specifications recommend starting understandably and optimizing later.
 
 use crate::Track;
-use crate::route::matching::{MatchConfig, MatchScore, compare_either_direction};
+use crate::route::matching::{
+    MatchConfig, MatchScore, PreparedTrack, compare_either_direction_prepared,
+};
 
 /// The outcome of adding one track to a [`RouteCatalog`].
 #[derive(Debug, Clone, PartialEq)]
@@ -37,6 +39,9 @@ pub struct DiscoveredRoute {
     /// Stable index within the catalog (`route_id` from [`TrackAddition`]).
     pub id: usize,
     representative: Track,
+    /// The representative's geometry, indexed once so a new recording is
+    /// matched against a cheap lookup instead of a rebuilt polyline.
+    prepared: PreparedTrack,
     /// Number of recordings that have joined this cluster.
     pub track_count: usize,
 }
@@ -76,10 +81,16 @@ impl RouteCatalog {
 
     /// Adds one track, joining the best matching cluster or seeding a new one.
     pub fn add_track(&mut self, track: &Track) -> TrackAddition {
+        let prepared = PreparedTrack::new(track);
         let mut best: Option<(usize, MatchScore)> = None;
 
         for (idx, route) in self.routes.iter().enumerate() {
-            let matched = compare_either_direction(track, route.representative(), &self.config);
+            let matched = compare_either_direction_prepared(
+                &prepared,
+                &route.prepared,
+                &route.representative,
+                &self.config,
+            );
             let Some(score) = matched else {
                 continue;
             };
@@ -98,6 +109,7 @@ impl RouteCatalog {
                 route.track_count += 1;
                 if track.distance().meters() > route.representative.distance().meters() {
                     route.representative = track.clone();
+                    route.prepared = PreparedTrack::new(track);
                 }
                 TrackAddition {
                     route_id: idx,
@@ -110,6 +122,7 @@ impl RouteCatalog {
                 self.routes.push(DiscoveredRoute {
                     id,
                     representative: track.clone(),
+                    prepared,
                     track_count: 1,
                 });
                 TrackAddition {

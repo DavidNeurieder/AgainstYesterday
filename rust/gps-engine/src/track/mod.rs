@@ -6,6 +6,7 @@ mod model;
 mod point;
 mod resampling;
 mod reverse;
+pub mod segments;
 mod simplification;
 mod statistics;
 
@@ -14,5 +15,6 @@ pub use model::Track;
 pub use point::TrackPoint;
 pub use resampling::resample_by_distance;
 pub use reverse::reverse;
+pub use segments::{SegmentComparison, SegmentError, TrackSegment, compare_segments, segments};
 pub use simplification::{SimplifyConfig, simplify};
 pub use statistics::{MovingConfig, moving_duration};
