@@ -8,16 +8,22 @@
 /// activity type, so there is no theme or default-activity control yet.
 library;
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/units.dart';
 import '../../../core/ui/app_sections.dart';
+import '../../../engine/models.dart' as engine;
 import '../../../persistence/persistence.dart';
 import '../../map/map_settings_section.dart';
 import '../application/gpx_export.dart';
+import '../application/gpx_import.dart';
 import '../application/link_launcher.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
@@ -135,6 +141,14 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const Divider(height: 1, color: AppColors.outline),
               ListTile(
+                key: const ValueKey('import-gpx'),
+                leading: const Icon(Icons.file_download_outlined),
+                title: const Text('Import GPX'),
+                subtitle: const Text('Load tracks from GPX files'),
+                onTap: () => _importGpx(context, ref),
+              ),
+              const Divider(height: 1, color: AppColors.outline),
+              ListTile(
                 key: const ValueKey('delete-all'),
                 leading: const Icon(Icons.delete_outline),
                 title: const Text('Delete all data'),
@@ -221,6 +235,59 @@ class SettingsScreen extends ConsumerWidget {
     } on TrackExportException catch (error) {
       messenger.showSnackBar(
         SnackBar(content: Text('Export failed: ${error.message}')),
+      );
+    }
+  }
+
+  Future<void> _importGpx(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: const ['gpx'],
+    );
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+    final routeRepo = ref.read(routeRepositoryProvider.notifier);
+    var imported = 0;
+    for (final file in result.files) {
+      String? contents;
+      if (file.bytes != null) {
+        contents = utf8.decode(file.bytes!, allowMalformed: true);
+      } else if (file.path != null) {
+        try {
+          contents = await File(file.path!).readAsString();
+        } catch (_) {
+          contents = null;
+        }
+      }
+      if (contents == null) continue;
+      final geometry = parseGpxTrack(contents);
+      if (geometry.length < 2) continue;
+      final name = (file.name.isNotEmpty ? file.name : 'Imported track')
+          .replaceAll(RegExp(r'\.gpx$', caseSensitive: false), '');
+      final id = 'imported-${DateTime.now().microsecondsSinceEpoch}-$imported';
+      final route = engine.Route(
+        id: id,
+        name: name,
+        distance: Distance.meters(engine.polylineMeters(geometry)),
+        geometry: geometry,
+      );
+      await routeRepo.saveRoute(route);
+      imported++;
+    }
+    if (imported == 0) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No usable tracks found in the selected files.'),
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Imported $imported track${imported == 1 ? '' : 's'}.'),
+        ),
       );
     }
   }
