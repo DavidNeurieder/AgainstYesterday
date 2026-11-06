@@ -88,8 +88,19 @@ engine-doc:
 engine-android:
 	./app/tool/build_rust_engine_android.sh
 
-full-test: engine-fmt engine-lint engine-test engine-doc test-rust-engine \
-           lint tz-test connected-test-engine
+full-test:
+	@set -u; \
+	failures=""; \
+	run() { echo "==> $$1"; if timeout 1800 $(MAKE) $$1; then echo "   PASS: $$1"; else echo "   FAIL: $$1"; failures="$$failures $$1"; fi; }; \
+	run engine-fmt; run engine-lint; run engine-test; run engine-doc; \
+	run test-rust-engine; run lint; run tz-test; run connected-test-engine; \
+	echo "──────────────────────────────────────────────"; \
+	if [ -z "$$failures" ]; then \
+		echo "FULL TEST: everything passed"; \
+	else \
+		echo "FULL TEST: FAILED:$$failures"; \
+		exit 1; \
+	fi
 
 clean:
 	cd app && flutter clean
