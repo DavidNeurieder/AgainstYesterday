@@ -85,7 +85,7 @@ pub use attempt::{
 pub use error::{GeoError, GpxError, RouteError, TrackError, TrackField};
 pub use evaluate::{ConfusionMatrix, LabeledPair, evaluate, parse_manifest, standard_pipeline};
 pub use geo::{Bearing, Coordinate, PolylineBounds, Projection};
-pub use ghost::{Ghost, GhostSnapshot, GhostState};
+pub use ghost::{Ghost, GhostSnapshot, GhostState, live_ghost_gap};
 pub use gps::{
     Fixture, GpsFix, GpsQuality, GpsTrace, ProcessedSample, RejectionReason, TrackProcessing,
 };

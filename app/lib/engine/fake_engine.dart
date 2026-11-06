@@ -203,7 +203,41 @@ class FakeEngineService implements EngineService {
     );
   }
 
-  /// Fraction of [geometry]'s points within 25 m of the other polyline.
+  @override
+  GhostState liveGhostGap({
+    required Ghost ghost,
+    required double distanceM,
+    required double movingSeconds,
+    required double loopLengthM,
+  }) {
+    final liveTime = loopLengthM > 0
+        ? movingSeconds * (distanceM / loopLengthM)
+        : movingSeconds;
+    final reference = _referenceTimeAt(ghost.samples, distanceM);
+    final difference = Elapsed.seconds(liveTime - reference);
+    return GhostState(
+      distance: Distance.meters(distanceM),
+      timeDifference: difference,
+      ahead: difference.seconds <= 0,
+    );
+  }
+
+  double _referenceTimeAt(List<AttemptSample> samples, double distanceM) {
+    if (samples.isEmpty) return 0;
+    if (distanceM <= samples.first.distance.meters) {
+      return samples.first.elapsed.seconds;
+    }
+    for (var i = 1; i < samples.length; i++) {
+      if (distanceM <= samples[i].distance.meters) {
+        final a = samples[i - 1];
+        final b = samples[i];
+        final span = b.distance.meters - a.distance.meters;
+        final fraction = span <= 0 ? 0.0 : (distanceM - a.distance.meters) / span;
+        return a.elapsed.seconds + (b.elapsed.seconds - a.elapsed.seconds) * fraction;
+      }
+    }
+    return samples.last.elapsed.seconds;
+  }
   double _nearFraction(List<GeoPoint> geometry, List<GeoPoint> other) {
     if (geometry.isEmpty || other.length < 2) {
       return 0.0;

@@ -28,7 +28,7 @@ const Map<AheadBehind, String> _states = <AheadBehind, String>{
 /// Signed label from an interpolated magnitude (§30): the tween feeds this
 /// the animated seconds, while the semantics keep the final spoken label.
 String _format(AheadBehind state, double seconds) {
-  final magnitude = Elapsed.seconds(seconds);
+  final magnitude = Elapsed.seconds(seconds.abs());
   return switch (state) {
     AheadBehind.behind => '+${magnitude.format()}',
     _ => magnitude.format(),

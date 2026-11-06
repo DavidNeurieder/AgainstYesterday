@@ -541,7 +541,12 @@ class RecordingController extends Notifier<LiveRunState?> {
     GhostState? gap;
     GeoPoint? ghostPosition;
     if (session.ghost != null) {
-      gap = _gapAt(session, session.distanceM);
+      gap = ref.read(engineServiceProvider).liveGhostGap(
+        ghost: session.ghost!,
+        distanceM: session.distanceM,
+        movingSeconds: session.moving.seconds,
+        loopLengthM: session.loopLength,
+      );
       final ghostDistance = _ghostDistanceAt(session, session.moving.seconds);
       ghostPosition = pointAlongPolyline(session.geometry, ghostDistance);
     }
@@ -682,7 +687,12 @@ class RecordingController extends Notifier<LiveRunState?> {
     GhostState? gap;
     GeoPoint? ghostPosition;
     if (session.ghost != null) {
-      gap = _gapAt(session, session.distanceM);
+      gap = ref.read(engineServiceProvider).liveGhostGap(
+        ghost: session.ghost!,
+        distanceM: session.distanceM,
+        movingSeconds: session.moving.seconds,
+        loopLengthM: session.loopLength,
+      );
       final ghostDistance = _ghostDistanceAt(session, session.moving.seconds);
       ghostPosition = pointAlongPolyline(session.geometry, ghostDistance);
     }
@@ -901,46 +911,15 @@ class RecordingController extends Notifier<LiveRunState?> {
     return samples.last.distance.meters;
   }
 
-  GhostState _gapAt(_RecSession session, double distanceM) {
-    final reference = session.ghost!.samples;
-    // Live time at this distance: constant cruise pace.
-    final liveTime =
-        session.moving.seconds *
-        (distanceM / (session.loopLength <= 0 ? 1 : session.loopLength));
-    final referenceTime = _referenceTimeAt(reference, distanceM);
-    final difference = Elapsed.seconds(liveTime - referenceTime);
-    return GhostState(
-      distance: Distance.meters(distanceM),
-      timeDifference: difference,
-      ahead: difference.seconds <= 0,
-    );
-  }
-
-  /// Interpolates the reference (ghost/PB) time at [distanceM].
-  double _referenceTimeAt(List<AttemptSample> samples, double distanceM) {
-    if (samples.isEmpty) {
-      return 0;
-    }
-    if (distanceM <= samples.first.distance.meters) {
-      return samples.first.elapsed.seconds;
-    }
-    for (var i = 1; i < samples.length; i++) {
-      if (distanceM <= samples[i].distance.meters) {
-        final a = samples[i - 1];
-        final b = samples[i];
-        final span = b.distance.meters - a.distance.meters;
-        final fraction = span <= 0 ? 0 : (distanceM - a.distance.meters) / span;
-        return a.elapsed.seconds +
-            (b.elapsed.seconds - a.elapsed.seconds) * fraction;
-      }
-    }
-    return samples.last.elapsed.seconds;
-  }
-
   void _complete() {
     final session = _requireSession();
     final gap = session.ghost != null
-        ? _gapAt(session, session.distanceM)
+        ? ref.read(engineServiceProvider).liveGhostGap(
+            ghost: session.ghost!,
+            distanceM: session.distanceM,
+            movingSeconds: session.moving.seconds,
+            loopLengthM: session.loopLength,
+          )
         : null;
     // The save runs in the background; the unsaved flag only turns on if it
     // fails (§33), so the finish screen never flashes a false alarm.
@@ -959,7 +938,12 @@ class RecordingController extends Notifier<LiveRunState?> {
   Future<void> _persistCompletedRun() async {
     final session = _requireSession();
     final gap = session.ghost != null
-        ? _gapAt(session, session.distanceM)
+        ? ref.read(engineServiceProvider).liveGhostGap(
+            ghost: session.ghost!,
+            distanceM: session.distanceM,
+            movingSeconds: session.moving.seconds,
+            loopLengthM: session.loopLength,
+          )
         : null;
     final progress = ref.read(saveProgressProvider.notifier);
     try {

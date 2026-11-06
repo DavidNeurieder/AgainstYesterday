@@ -55,6 +55,7 @@ final class GpsEngineFfi {
   late final _DartFn _matchRoutes = _bind('gps_match_routes');
   late final _DartFn _createAttempt = _bind('gps_create_attempt');
   late final _DartFn _ghostStateAt = _bind('gps_ghost_state_at');
+  late final _DartFn _liveGhostGap = _bind('gps_live_ghost_gap');
   late final _DartFn _generateRecording = _bind('gps_generate_recording');
   late final void Function(Pointer<Uint8>) _free =
       _lib.lookupFunction<Void Function(Pointer<Uint8>), void Function(Pointer<Uint8>)>(
@@ -82,6 +83,8 @@ final class GpsEngineFfi {
       _invoke(_createAttempt, request, 'create_attempt');
   Uint8List ghostStateAt(Uint8List request) =>
       _invoke(_ghostStateAt, request, 'ghost_state_at');
+  Uint8List liveGhostGap(Uint8List request) =>
+      _invoke(_liveGhostGap, request, 'live_ghost_gap');
   Uint8List generateRecording(Uint8List request) =>
       _invoke(_generateRecording, request, 'generate_recording');
 

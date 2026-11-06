@@ -46,6 +46,14 @@ abstract class EngineService {
     required Distance distance,
   });
 
+  /// Live-run gap estimate for an in-progress run.
+  GhostState liveGhostGap({
+    required Ghost ghost,
+    required double distanceM,
+    required double movingSeconds,
+    required double loopLengthM,
+  });
+
   /// Deterministically synthesizes a recording of the shared demo loop.
   ///
   /// The ghost is built from a PB attempt walked at constant speed, so the

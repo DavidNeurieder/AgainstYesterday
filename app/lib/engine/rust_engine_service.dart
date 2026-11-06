@@ -115,6 +115,26 @@ final class RustEngineService implements EngineService {
   }
 
   @override
+  GhostState liveGhostGap({
+    required Ghost ghost,
+    required double distanceM,
+    required double movingSeconds,
+    required double loopLengthM,
+  }) {
+    final req = _W()
+      ..attempt(ghost.samples)
+      ..f64(distanceM)
+      ..f64(movingSeconds)
+      ..f64(loopLengthM);
+    final r = _R(_ffi.liveGhostGap(req.takeBytes()));
+    return GhostState(
+      distance: Distance.meters(r.f64()),
+      timeDifference: Elapsed.seconds(r.f64()),
+      ahead: r.u8() == 1,
+    );
+  }
+
+  @override
   List<TrackPoint> generateRecording({
     double noiseMeters = 2.0,
     double speedMetersPerSecond = 2.5,

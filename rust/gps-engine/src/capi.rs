@@ -402,7 +402,28 @@ fn ghost_state_at(bytes: &[u8]) -> Result<Vec<u8>, String> {
     Ok(w.data)
 }
 
-/// `gps_generate_recording`
+/// `gps_live_ghost_gap`
+///
+/// In: `[attempt] reference, f64 current_distance_m, f64 moving_seconds, f64 loop_length_m`.
+/// Out: `f64 distance_m, f64 time_difference_s, u8 ahead`.
+fn live_ghost_gap_impl(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let reference_samples = read_attempt(&mut rd)?;
+    let current_distance = Distance::from_meters(rd.f64()?);
+    let moving_seconds = Duration::from_secs(rd.f64()?);
+    let loop_length = Distance::from_meters(rd.f64()?);
+    rd.done("live_ghost_gap")?;
+
+    let reference = Attempt::from_samples(reference_samples).map_err(|e| e.to_string())?;
+    let state =
+        crate::ghost::live_ghost_gap(&reference, current_distance, moving_seconds, loop_length);
+
+    let mut w = Wr::default();
+    w.f64(state.distance.meters());
+    w.f64(state.time_difference.as_secs());
+    w.u8(state.ahead as u8);
+    Ok(w.data)
+}
 ///
 /// In: `[coordinates], f64 speed_mps, f64 sample_every_s, f64 noise_m`.
 /// Out: `[points]` (like [`read_points`], timestamps in unix-ms).
@@ -548,6 +569,20 @@ pub unsafe extern "C" fn gps_ghost_state_at(
     output_len: *mut usize,
 ) -> c_int {
     dispatch(input, input_len, output, output_len, ghost_state_at)
+}
+
+#[unsafe(no_mangle)]
+/// Live-run ghost gap estimate (constant cruise pace).
+///
+/// # Safety
+/// See [`gps_process_track`].
+pub unsafe extern "C" fn gps_live_ghost_gap(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_ghost_gap_impl)
 }
 
 #[unsafe(no_mangle)]

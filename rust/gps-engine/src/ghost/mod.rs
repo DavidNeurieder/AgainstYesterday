@@ -192,6 +192,38 @@ fn sample_spacing_at(samples: &[AttemptSample], distance_m: f64) -> f64 {
     }
 }
 
+/// Live-run gap estimate: the runner has not finished, so its time at
+/// `current_distance` is approximated by scaling the moving time by how far
+/// along the route it has come (constant cruise pace), then compared against
+/// the ghost's interpolated time at that distance.
+pub fn live_ghost_gap(
+    reference: &Attempt,
+    current_distance: Distance,
+    moving_seconds: Duration,
+    loop_length: Distance,
+) -> GhostState {
+    let live_time = if loop_length.meters() > 0.0 {
+        moving_seconds.as_secs() * (current_distance.meters() / loop_length.meters())
+    } else {
+        moving_seconds.as_secs()
+    };
+    let reference_time = if current_distance.meters() <= 0.0 || reference.samples.is_empty() {
+        Duration::ZERO
+    } else if current_distance.meters() <= reference.samples[0].distance.meters() {
+        reference.samples[0].elapsed
+    } else {
+        reference
+            .time_at(current_distance)
+            .unwrap_or(reference.elapsed_time)
+    };
+    let time_difference = Duration::from_secs(live_time - reference_time.as_secs());
+    GhostState {
+        distance: current_distance,
+        time_difference,
+        ahead: time_difference.as_secs() < 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
