@@ -1,7 +1,10 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'package:flutter_map/flutter_map.dart';
 import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/map/flutter_map_surface.dart';
+import 'package:against_yesterday/features/map/maplibre_map_surface.dart';
 import 'package:against_yesterday/features/map/map_surface.dart';
 import 'package:against_yesterday/features/map/painter_map_surface.dart';
 import 'package:against_yesterday/features/map/track_geojson.dart';
@@ -111,10 +114,72 @@ void main() {
     expect(map.staticView, isFalse);
   });
 
-  test('the default build selects the painter fallback', () {
+  test('the default build selects the painter fallback under flutter test', () {
+    expect(isFlutterTest, isTrue);
     final container = ProviderContainer();
     addTearDown(container.dispose);
     expect(container.read(mapSurfaceProvider), isA<PainterMapSurface>());
+  });
+
+  test('a desktop app build selects the flutter_map tiles', () {
+    expect(
+      resolveMapSurface(
+        isDesktop: true,
+        isTest: false,
+        renderer: MapRenderer.painter,
+      ),
+      isA<FlutterMapSurface>(),
+    );
+  });
+
+  test('a widget test on a desktop host stays on the painter', () {
+    expect(
+      resolveMapSurface(
+        isDesktop: true,
+        isTest: true,
+        renderer: MapRenderer.maplibre,
+      ),
+      isA<PainterMapSurface>(),
+    );
+  });
+
+  test('a device build still resolves MAP_VIEW', () {
+    expect(
+      resolveMapSurface(
+        isDesktop: false,
+        isTest: false,
+        renderer: MapRenderer.maplibre,
+      ),
+      isA<MaplibreMapSurface>(),
+    );
+    expect(
+      resolveMapSurface(
+        isDesktop: false,
+        isTest: false,
+        renderer: MapRenderer.painter,
+      ),
+      isA<PainterMapSurface>(),
+    );
+  });
+
+  testWidgets('the desktop tiles render the scene without overflowing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: SizedBox(
+            width: 320,
+            height: 240,
+            child: FlutterMapRouteMap(scene: scene),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(FlutterMap), findsOneWidget);
+    expect(find.text('© OpenStreetMap contributors'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a screen renders through an overridden surface', (tester) async {

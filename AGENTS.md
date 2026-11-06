@@ -68,16 +68,20 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
 
 - Screens draw route/track geometry through the `MapSurface` abstraction
   (`lib/features/map/`), never a concrete map widget — the live run, the
-  activity track and the route-detail course map all go through it. `MAP_VIEW`
-  selects the renderer at build time: unset/`false` = the self-contained
-  painter (`RouteMap`), `true` = the MapLibre renderer (`maplibre_gl`). The
-  painter is the default, so host tests and desktop stay hermetic; device
-  artifacts opt in — `make build`/`install`/`build-release` pass
-  `MAP_VIEW=true`, and without it the route-detail download button and the
-  offline region list never appear (`offlineMapsAvailableProvider` is false).
+  activity track and the route-detail course map all go through it. The
+  renderer is `flutter_map` (raster OpenStreetMap tiles) on Linux desktop, the
+  self-contained painter (`RouteMap`) in host/widget tests, and otherwise
+  selected at build time by `MAP_VIEW`: unset/`false` = the painter, `true` =
+  the MapLibre renderer (`maplibre_gl`). The painter is the default, so host
+  tests stay hermetic; device artifacts opt in — `make build`/`install`/
+  `build-release` pass `MAP_VIEW=true`, and without it the route-detail
+  download button and the offline region list never appear
+  (`offlineMapsAvailableProvider` is false).
 - `MAP_STYLE_URL` overrides the MapLibre style document (default OpenFreeMap
-  Liberty). Map data is OpenStreetMap (ODbL) and must be attributed; offline
-  regions are per-route downloads, not bundled (see
+  Liberty) and `MAP_TILE_URL` overrides the desktop raster tile template
+  (default the public OSM tile server — point it at a self-hosted server for
+  anything beyond light use). Map data is OpenStreetMap (ODbL) and must be
+  attributed; offline regions are per-route downloads, not bundled (see
   `ideas/offline_map_plan.txt`).
 
 ## Licensing

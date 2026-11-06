@@ -6,10 +6,16 @@
 /// Every screen that shows route or track geometry goes through a [MapSurface]
 /// instead of a concrete map widget, exactly as the app reaches the engine only
 /// through `EngineService`. The concrete renderer is chosen at build time from
-/// `MAP_VIEW`:
+/// `MAP_VIEW`, with one host exception:
 ///
+///  * desktop (Linux) — [FlutterMapSurface], raster OSM tiles via `flutter_map`.
+///    MapLibre Native has no Linux target, so this is the renderer desktop
+///    gets regardless of `MAP_VIEW`.
+///  * widget tests — [PainterMapSurface]. The test runner runs on the desktop
+///    host, but tests must stay hermetic (no tile downloads, no oversized
+///    layouts in tiny test viewports), so the painter is used there.
 ///  * unset / `false` — [PainterMapSurface], the self-contained `RouteMap`
-///    painter. This is the desktop, debug and hermetic-test default.
+///    painter.
 ///  * `true` — [MaplibreMapSurface], the offline MapLibre renderer used on
 ///    device builds.
 ///
@@ -18,10 +24,13 @@
 /// is the default and device artifacts opt in explicitly.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../engine/models.dart';
+import 'flutter_map_surface.dart';
 import 'maplibre_map_surface.dart';
 import 'painter_map_surface.dart';
 
@@ -93,8 +102,34 @@ abstract interface class MapSurface {
 /// The renderer for this build. Tests override it with a recording fake to
 /// assert the scene a screen produced without touching a native map.
 final mapSurfaceProvider = Provider<MapSurface>((ref) {
-  return switch (selectedMapRenderer) {
+  return resolveMapSurface(
+    isDesktop: Platform.isLinux,
+    isTest: isFlutterTest,
+    renderer: selectedMapRenderer,
+  );
+});
+
+/// Whether this process is the widget-test runner.
+///
+/// `flutter test` sets `FLUTTER_TEST=true` in the tester's environment; the
+/// check is read at runtime because it is not a compile-time define.
+bool get isFlutterTest => Platform.environment['FLUTTER_TEST'] == 'true';
+
+/// Picks the surface for a host. Pure so the mapping can be tested without
+/// depending on the host the test happens to run on.
+MapSurface resolveMapSurface({
+  required bool isDesktop,
+  required bool isTest,
+  required MapRenderer renderer,
+}) {
+  if (isTest) {
+    return const PainterMapSurface();
+  }
+  if (isDesktop) {
+    return const FlutterMapSurface();
+  }
+  return switch (renderer) {
     MapRenderer.maplibre => const MaplibreMapSurface(),
     MapRenderer.painter => const PainterMapSurface(),
   };
-});
+}
