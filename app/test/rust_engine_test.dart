@@ -205,6 +205,19 @@ void main() {
         markTestSkipped('GPS_ENGINE_LIB is set; the fallback is not exercised');
         return;
       }
+      // The provider also probes a few well-known host locations, so a stray
+      // cdylib on disk would mask the fallback branch.
+      final anyCandidate = [
+        '../target/release/libgps_engine.so',
+        'target/release/libgps_engine.so',
+        'build/libgps_engine.so',
+      ].any(FileSystemEntity.isFileSync);
+      if (anyCandidate) {
+        markTestSkipped(
+          'a Rust cdylib is present on disk; the fallback is not exercised',
+        );
+        return;
+      }
       final container = ProviderContainer();
       addTearDown(container.dispose);
       final engine = container.read(engineServiceProvider);

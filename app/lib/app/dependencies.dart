@@ -42,19 +42,29 @@ final engineServiceProvider = Provider<EngineService>((_) {
     return FakeEngineService();
   }
   final libraryPath = const String.fromEnvironment('GPS_ENGINE_LIB');
-  try {
-    return RustEngineService.open(
-      libraryPath.isEmpty ? 'libgps_engine.so' : libraryPath,
-    );
-  } on ArgumentError {
-    if (_useRustEngine == 'true') {
-      rethrow;
+  final candidates = libraryPath.isNotEmpty
+      ? [libraryPath]
+      : <String>[
+          'libgps_engine.so',
+          '../target/release/libgps_engine.so',
+          'target/release/libgps_engine.so',
+          'build/libgps_engine.so',
+        ];
+  for (final candidate in candidates) {
+    try {
+      return RustEngineService.open(candidate);
+    } on ArgumentError {
+      // Try the next candidate location.
     }
-    // The native library could not be loaded — a dev build without the cdylib,
-    // or a target with no bundled engine — so fall back to the deterministic
-    // demo engine. The diagnostics readout names whichever one is in use.
-    return FakeEngineService();
   }
+  if (_useRustEngine == 'true') {
+    throw ArgumentError(
+      'USE_RUST_ENGINE=true is set but no Rust engine library could be loaded '
+      '(searched: ${candidates.join(', ')}).',
+    );
+  }
+  // No native library found — fall back to the deterministic demo engine.
+  return FakeEngineService();
 });
 
 /// Raw `USE_DEVICE_GPS` — `'true'` reads the live run from the phone receiver
