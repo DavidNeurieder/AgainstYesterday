@@ -38,7 +38,7 @@ build-release: engine-android
 	cd app && flutter build apk --release \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
-run:
+run: engine-build
 	cd app && flutter run
 
 # Builds the debug APK (with Android cdylibs bundled, so the app auto-selects
