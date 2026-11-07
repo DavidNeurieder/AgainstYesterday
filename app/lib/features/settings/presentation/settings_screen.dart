@@ -250,6 +250,52 @@ class SettingsScreen extends ConsumerWidget {
     if (result == null || result.files.isEmpty) {
       return;
     }
+    if (!context.mounted) return;
+    // Let the user confirm which of the picked files to import.
+    final selected = List<bool>.filled(result.files.length, true);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Import GPX files'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: result.files.length,
+              itemBuilder: (context, i) {
+                return CheckboxListTile(
+                  value: selected[i],
+                  title: Text(result.files[i].name),
+                  onChanged: (v) =>
+                      setDialogState(() => selected[i] = v ?? false),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Import'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    final filesToImport = [
+      for (var i = 0; i < result.files.length; i++)
+        if (selected[i]) result.files[i],
+    ];
+    if (filesToImport.isEmpty) {
+      return;
+    }
     final routeRepo = ref.read(routeRepositoryProvider.notifier);
     final activityRepo = ref.read(activityRepositoryProvider.notifier);
     final engineService = ref.read(engineServiceProvider);
@@ -260,7 +306,7 @@ class SettingsScreen extends ConsumerWidget {
     var newRoutes = 0;
     var grouped = 0;
     var counter = 0;
-    for (final file in result.files) {
+    for (final file in filesToImport) {
       String? contents;
       if (file.bytes != null) {
         contents = utf8.decode(file.bytes!, allowMalformed: true);
