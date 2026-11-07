@@ -28,7 +28,7 @@ use crate::error::RouteError;
 use crate::geo::{
     Coordinate, Projection, distance, interpolate, project_to_polyline, project_to_segment,
 };
-use crate::units::{Distance, Speed};
+use crate::units::{Distance, Speed, Timestamp};
 
 /// A point sampled from a route: its coordinate paired with its position along
 /// the route's one-dimensional axis.
@@ -195,7 +195,7 @@ impl Route {
     }
 
     /// Validates a window and clamps it to the route's length.
-    fn window_bounds(
+    pub(crate) fn window_bounds(
         &self,
         center: Distance,
         backward: Distance,
@@ -217,7 +217,12 @@ impl Route {
     }
 
     /// Projects `point` onto every segment overlapping `[lo, hi]`.
-    fn projections_in_window(&self, point: Coordinate, lo: f64, hi: f64) -> Vec<Projection> {
+    pub(crate) fn projections_in_window(
+        &self,
+        point: Coordinate,
+        lo: f64,
+        hi: f64,
+    ) -> Vec<Projection> {
         let mut out = Vec::new();
         for index in 0..self.cumulative.len() - 1 {
             let seg_lo = self.cumulative[index];
@@ -305,26 +310,47 @@ impl Route {
 
 /// Chooses the continuity match from the candidates around `covered`.
 ///
-/// Prefers the forward candidate nearest `covered` (a raw position at or
-/// beyond the covered distance: continuing movement); only when no candidate
-/// lies ahead does it fall back to the nearest candidate behind. This
-/// deliberately breaks the geometric symmetry of mirrored route halves (an
-/// out-and-back turnaround) in favor of forward progress.
-fn best_forward_candidate(candidates: &[Projection], covered: f64) -> Option<(f64, f64)> {
+/// Among forward candidates (at or beyond `covered`) prefers the one with the
+/// smallest lateral error, breaking ties by the smallest forward advance so
+/// progress stays continuous. This keeps a fix that has rounded a vertex on
+/// the new segment (lateral ~0) instead of sticking to the previous segment's
+/// endpoint (small advance, larger lateral). Mirrored geometry (an
+/// out-and-back return) is already separated by the forward filter: the
+/// outbound mirror sits behind `covered` and is never a forward candidate.
+///
+/// Only when no candidate lies ahead does it fall back to the nearest
+/// candidate behind `covered`.
+pub(crate) fn best_forward_candidate(
+    candidates: &[Projection],
+    covered: f64,
+) -> Option<(f64, f64)> {
     let forward = candidates
         .iter()
         .filter(|p| p.distance_along.meters() >= covered)
         .min_by(|a, b| {
-            (a.distance_along.meters() - covered)
-                .partial_cmp(&(b.distance_along.meters() - covered))
+            a.lateral_error
+                .meters()
+                .partial_cmp(&b.lateral_error.meters())
                 .expect("distances are finite")
+                .then_with(|| {
+                    (a.distance_along.meters() - covered)
+                        .partial_cmp(&(b.distance_along.meters() - covered))
+                        .expect("distances are finite")
+                })
         });
     forward
         .or_else(|| {
             candidates.iter().min_by(|a, b| {
-                (a.distance_along.meters() - covered)
-                    .partial_cmp(&(b.distance_along.meters() - covered))
+                (covered - a.distance_along.meters())
+                    .abs()
+                    .partial_cmp(&(covered - b.distance_along.meters()).abs())
                     .expect("distances are finite")
+                    .then_with(|| {
+                        a.lateral_error
+                            .meters()
+                            .partial_cmp(&b.lateral_error.meters())
+                            .expect("distances are finite")
+                    })
             })
         })
         .map(|p| (p.distance_along.meters(), p.lateral_error.meters()))
@@ -374,6 +400,105 @@ pub struct ContinuousProjection {
     /// `true` when the window contained no segment and a global re-anchor was
     /// used (dropout recovery).
     pub reanchored: bool,
+}
+
+/// Stateful, incremental continuity-aware route progress matcher.
+///
+/// This is the single-fix analogue of [`Route::project_track_with_continuity`]:
+/// each observation is matched inside a window anchored on the last covered
+/// position, forward progress is bounded by `max_speed × Δt`, and coverage
+/// never decreases. Using the continuity window (rather than a global nearest
+/// projection) keeps progress on the correct branch of self-intersecting or
+/// overlapping geometry (figure-eights, repeated loops, out-and-backs).
+#[derive(Debug, Clone)]
+pub struct RouteMatcher {
+    config: ContinuityConfig,
+    covered: f64,
+    last_timestamp: Option<Timestamp>,
+}
+
+impl RouteMatcher {
+    /// Creates a matcher that starts at the beginning of the route.
+    pub fn new(config: ContinuityConfig) -> Self {
+        Self {
+            config,
+            covered: 0.0,
+            last_timestamp: None,
+        }
+    }
+
+    /// Covered distance along the route so far (monotone).
+    pub fn covered(&self) -> Distance {
+        Distance::from_meters(self.covered)
+    }
+
+    /// Resets progress to the start of the route.
+    pub fn reset(&mut self) {
+        self.covered = 0.0;
+        self.last_timestamp = None;
+    }
+
+    /// Seeds the matcher with already-covered progress (e.g. a resumed run).
+    /// The next observation re-anchors the time window like a fresh start.
+    pub fn seed(&mut self, covered: Distance) {
+        self.covered = covered.meters().clamp(0.0, f64::INFINITY);
+        self.last_timestamp = None;
+    }
+
+    /// Snaps monotone coverage to `covered` without resetting the time anchor.
+    /// Used for route-end completion when geometry is ambiguous at the seam.
+    pub fn snap_to(&mut self, covered: Distance) {
+        self.covered = self.covered.max(covered.meters());
+    }
+
+    /// Matches one observation and advances monotone coverage.
+    pub fn update(
+        &mut self,
+        route: &Route,
+        coordinate: Coordinate,
+        timestamp: Timestamp,
+    ) -> ContinuousProjection {
+        let dt = match self.last_timestamp {
+            Some(prev) => timestamp.elapsed_since(prev).as_secs().max(0.0),
+            None => f64::INFINITY, // first point gets the full forward window
+        };
+        self.last_timestamp = Some(timestamp);
+
+        let forward = (self.config.max_speed.mps() * dt)
+            .min(self.config.forward_window.meters())
+            .max(0.0);
+        let (lo, hi) = route
+            .window_bounds(
+                Distance::from_meters(self.covered),
+                self.config.max_backtrack,
+                Distance::from_meters(forward),
+            )
+            .unwrap_or((self.covered, self.covered));
+
+        let candidates = route.projections_in_window(coordinate, lo, hi);
+        let best = best_forward_candidate(&candidates, self.covered);
+
+        let (raw, lateral, reanchored) = match best {
+            Some((raw, lateral)) => (raw, lateral, false),
+            None => {
+                let global = route.project(coordinate);
+                (
+                    global.distance_along.meters(),
+                    global.lateral_error.meters(),
+                    true,
+                )
+            }
+        };
+        let backtracker = raw + self.config.max_backtrack.meters() < self.covered;
+        self.covered = self.covered.max(raw);
+        ContinuousProjection {
+            distance: Distance::from_meters(self.covered),
+            raw: Distance::from_meters(raw),
+            lateral_error: Distance::from_meters(lateral),
+            backtracker,
+            reanchored,
+        }
+    }
 }
 
 #[cfg(test)]

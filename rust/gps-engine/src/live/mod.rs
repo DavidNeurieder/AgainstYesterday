@@ -23,7 +23,7 @@
 use crate::geo::{Coordinate, distance};
 use crate::ghost::{GhostState, confidence_for_spacing};
 use crate::gps::GpsFix;
-use crate::route::Route;
+use crate::route::{ContinuityConfig, Route, RouteMatcher};
 use crate::track::CursorConfig;
 use crate::track::filtering::{FilterCursor, fix_passes_sensor_checks};
 use crate::units::{Distance, Duration, Speed};
@@ -225,6 +225,12 @@ pub struct LiveRecorder {
     route_last_ground: Option<Coordinate>,
     route_last_time: Option<crate::units::Timestamp>,
     route_pace: Speed,
+    /// Continuity-aware route progress (windowed, forward-preference). `None`
+    /// when free-running.
+    matcher: Option<RouteMatcher>,
+    /// Lateral error of the last accepted route match, used for off-route
+    /// reporting (from the continuity match, not a global re-projection).
+    last_lateral: Option<Distance>,
 
     last_fix: Option<GpsFix>,
     paused: bool,
@@ -234,6 +240,9 @@ impl LiveRecorder {
     /// Creates a recorder. Pass a [`Route`] to follow a recognised course, or
     /// `None` for a free run.
     pub fn new(config: LiveConfig, route: Option<Route>) -> Self {
+        let matcher = route
+            .as_ref()
+            .map(|_| RouteMatcher::new(ContinuityConfig::default()));
         LiveRecorder {
             cursor: FilterCursor::new(config.cursor.clone()),
             config,
@@ -244,6 +253,8 @@ impl LiveRecorder {
             route_last_ground: None,
             route_last_time: None,
             route_pace: Speed::ZERO,
+            matcher,
+            last_lateral: None,
             last_fix: None,
             paused: false,
         }
@@ -271,23 +282,34 @@ impl LiveRecorder {
         self.last_fix = Some(fix);
     }
 
-    /// Route mode: project every accepted fix for coverage regardless of
-    /// incremental-filter jump withholding; gate moving time by the ground
-    /// speed against the motion floor (the old `_isMoving` semantics).
+    /// Route mode: continuity-aware progress along the route (accepted
+    /// coverage only, immune to self-intersection/global-projection jumps),
+    /// with moving time gated by ground speed against the motion floor.
     fn push_route(&mut self, fix: GpsFix) {
         let route = self.route.as_ref().expect("route mode");
-        let projection = route.project(fix.coordinate);
-        let mut covered = projection.distance_along.meters();
+        let projection = self
+            .matcher
+            .as_mut()
+            .expect("matcher in route mode")
+            .update(route, fix.coordinate, fix.timestamp);
+
         let len = route.length().meters();
+        let mut covered = projection.distance.meters().min(len);
         if len - covered <= 1.0 {
             covered = len;
         }
         if covered > self.route_coverage {
-            self.route_coverage = covered.min(len);
+            self.route_coverage = covered;
         }
         if len - self.route_coverage <= 1.0 && self.route_coverage > 0.0 {
             self.route_coverage = len;
         }
+        if (self.route_coverage - projection.distance.meters()).abs() > f64::EPSILON {
+            if let Some(matcher) = self.matcher.as_mut() {
+                matcher.snap_to(Distance::from_meters(self.route_coverage));
+            }
+        }
+        self.last_lateral = Some(projection.lateral_error);
 
         if let (Some(prev_coord), Some(prev_time)) = (self.route_last_ground, self.route_last_time)
         {
@@ -321,6 +343,10 @@ impl LiveRecorder {
         self.route_last_ground = None;
         self.route_last_time = None;
         self.route_pace = Speed::ZERO;
+        if let Some(matcher) = self.matcher.as_mut() {
+            let covered = self.route_coverage;
+            matcher.seed(Distance::from_meters(covered));
+        }
     }
 
     /// Resumes a paused run. The next accepted fix re-anchors naturally.
@@ -340,6 +366,10 @@ impl LiveRecorder {
         self.route_last_ground = None;
         self.route_last_time = None;
         self.route_pace = Speed::ZERO;
+        self.last_lateral = None;
+        if let Some(matcher) = self.matcher.as_mut() {
+            matcher.seed(Distance::from_meters(d));
+        }
         self.last_fix = None;
         self.paused = false;
     }
@@ -402,15 +432,12 @@ impl LiveRecorder {
             })
             .unwrap_or(0.0);
 
-        let off_route = self.route.as_ref().and_then(|route| {
-            let fix = self.last_fix?;
-            let lateral = route.project(fix.coordinate).lateral_error;
-            if lateral.meters() >= self.config.off_route_threshold.meters() {
-                Some(lateral)
-            } else {
-                None
-            }
-        });
+        let off_route = if self.route.is_some() {
+            self.last_lateral
+                .filter(|&lateral| lateral.meters() >= self.config.off_route_threshold.meters())
+        } else {
+            None
+        };
 
         LiveSnapshot {
             distance: self.distance(),
@@ -645,5 +672,107 @@ mod tests {
         let snap = rec.snapshot();
         assert!(snap.off_route.is_some(), "expected off-route, got {snap:?}");
         assert!(snap.off_route.unwrap().meters() > 30.0);
+    }
+
+    /// A route that traces the same loop twice. The second lap is
+    /// geometrically identical to the first, so global nearest projection
+    /// snaps every second-lap fix back onto the first lap and (with
+    /// running-max coverage) progress stalls at the end of lap 1. Continuity-
+    /// aware matching must keep coverage advancing to the finish.
+    fn repeated_loop_route() -> Route {
+        // ~222 m square, traced twice.
+        let a = coord(52.5000, 13.4000);
+        let b = coord(52.5020, 13.4000);
+        let c = coord(52.5020, 13.4020);
+        let d = coord(52.5000, 13.4020);
+        Route::new(vec![a, b, c, d, a, b, c, d, a]).unwrap()
+    }
+
+    #[test]
+    fn repeated_loop_live_route_reaches_finish_without_stalling() {
+        let route = repeated_loop_route();
+        let total = route.length().meters();
+        assert!(total > 800.0, "sanity: repeated loop has length {total}");
+
+        let mut rec = LiveRecorder::new(LiveConfig::default(), Some(route.clone()));
+
+        // Walk the route in order at ~5 m/s, one fix per second.
+        let step = 5.0_f64;
+        let mut d = 0.0_f64;
+        let mut t = 0_i64;
+        let mut max_regression = 0.0_f64;
+        let mut prev = 0.0_f64;
+        while d <= total + 1e-6 {
+            let dm = d.min(total);
+            let c = route.coordinate_at(Distance::from_meters(dm)).unwrap();
+            rec.push(GpsFix::new(Timestamp::from_unix_secs(t as f64), c));
+            let covered = rec.distance().meters();
+            if prev - covered > max_regression {
+                max_regression = prev - covered;
+            }
+            prev = covered;
+            t += 1;
+            d += step;
+        }
+        let c = route.coordinate_at(route.length()).unwrap();
+        rec.push(GpsFix::new(Timestamp::from_unix_secs(t as f64), c));
+
+        let covered = rec.distance().meters();
+        assert!(
+            max_regression <= 0.5,
+            "coverage regressed by {max_regression:.2} m"
+        );
+        assert!(
+            covered >= total - 1.0,
+            "coverage reached only {covered:.1} m of {total:.1} m \
+             (global projection snapped to the first lap)"
+        );
+        assert!(
+            rec.snapshot().route_progress >= 0.999,
+            "route_progress {} did not reach the finish",
+            rec.snapshot().route_progress
+        );
+    }
+
+    /// A bow-tie figure-eight: the third segment crosses the first at the
+    /// center. Continuity-aware matching must follow the intended leg through
+    /// the crossing and reach the finish.
+    fn figure_eight_route() -> Route {
+        Route::new(vec![
+            coord(52.5000, 13.4000), // A bottom-left
+            coord(52.5020, 13.4020), // B top-right
+            coord(52.5000, 13.4020), // C bottom-right
+            coord(52.5020, 13.4000), // D top-left
+            coord(52.5000, 13.4000), // A finish (closes the figure)
+        ])
+        .unwrap()
+    }
+
+    #[test]
+    fn figure_eight_live_route_reaches_finish() {
+        let route = figure_eight_route();
+        let total = route.length().meters();
+        assert!(total > 500.0, "sanity: figure-eight has length {total}");
+
+        let mut rec = LiveRecorder::new(LiveConfig::default(), Some(route.clone()));
+
+        let step = 5.0_f64;
+        let mut d = 0.0_f64;
+        let mut t = 0_i64;
+        while d <= total + 1e-6 {
+            let dm = d.min(total);
+            let c = route.coordinate_at(Distance::from_meters(dm)).unwrap();
+            rec.push(GpsFix::new(Timestamp::from_unix_secs(t as f64), c));
+            t += 1;
+            d += step;
+        }
+        let c = route.coordinate_at(route.length()).unwrap();
+        rec.push(GpsFix::new(Timestamp::from_unix_secs(t as f64), c));
+
+        let covered = rec.distance().meters();
+        assert!(
+            covered >= total - 1.0,
+            "coverage reached only {covered:.1} m of {total:.1} m"
+        );
     }
 }
