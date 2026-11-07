@@ -37,8 +37,7 @@ class LiveRunScreen extends ConsumerWidget {
     final controller = ref.read(recordingControllerProvider.notifier);
 
     final gapState = switch (state.ghostGap) {
-      final GhostState gap when gap.ahead => AheadBehind.ahead,
-      final GhostState _ => AheadBehind.behind,
+      final GhostState gap => AheadBehind.fromGap(gap),
       null => AheadBehind.unknown,
     };
 

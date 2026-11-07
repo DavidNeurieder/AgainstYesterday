@@ -118,5 +118,53 @@ void main() {
       expect(state.ahead, isTrue); // 0 or negative difference
       expect(state.timeDifference.seconds, lessThanOrEqualTo(0));
     });
+    test('live ghost gap compares moving time at the same distance', () {
+      final engine = FakeEngineService();
+      // A ghost that reaches 1 km in 200 s and 2 km in 400 s (5 m/s).
+      final ghost = Ghost(
+        attemptId: 'pb',
+        samples: const [
+          AttemptSample(distance: Distance.meters(0), elapsed: Elapsed.zero()),
+          AttemptSample(
+            distance: Distance.meters(1000),
+            elapsed: Elapsed.seconds(200),
+          ),
+          AttemptSample(
+            distance: Distance.meters(2000),
+            elapsed: Elapsed.seconds(400),
+          ),
+        ],
+      );
+
+      // 210 s at 1 km → 10 s behind.
+      final behind = engine.liveGhostGap(
+        ghost: ghost,
+        distanceM: 1000,
+        movingSeconds: 210,
+        loopLengthM: 2000,
+      );
+      expect(behind.timeDifference.seconds, closeTo(10, 1e-9));
+      expect(behind.ahead, isFalse);
+
+      // 190 s at 1 km → 10 s ahead.
+      final ahead = engine.liveGhostGap(
+        ghost: ghost,
+        distanceM: 1000,
+        movingSeconds: 190,
+        loopLengthM: 2000,
+      );
+      expect(ahead.timeDifference.seconds, closeTo(-10, 1e-9));
+      expect(ahead.ahead, isTrue);
+
+      // 200 s at 1 km → even; the equal gap is not a lead.
+      final tied = engine.liveGhostGap(
+        ghost: ghost,
+        distanceM: 1000,
+        movingSeconds: 200,
+        loopLengthM: 2000,
+      );
+      expect(tied.timeDifference.seconds, closeTo(0, 1e-9));
+      expect(tied.ahead, isFalse);
+    });
   });
 }

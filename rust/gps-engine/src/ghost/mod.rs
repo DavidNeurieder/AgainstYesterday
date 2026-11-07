@@ -192,21 +192,23 @@ fn sample_spacing_at(samples: &[AttemptSample], distance_m: f64) -> f64 {
     }
 }
 
-/// Live-run gap estimate: the runner has not finished, so its time at
-/// `current_distance` is approximated by scaling the moving time by how far
-/// along the route it has come (constant cruise pace), then compared against
-/// the ghost's interpolated time at that distance.
+/// Live-run gap: the runner's *actual* moving time so far compared against
+/// the ghost's interpolated time at the distance the runner has covered.
+///
+/// Both sides are times at the same point on the route, so the difference is
+/// directly the lead or deficit:
+/// `moving_seconds - ghost_time_at(current_distance)` (positive = behind).
+///
+/// `loop_length` is carried for protocol compatibility; the comparison does
+/// not depend on it — scaling moving time by route progress would make a
+/// slower runner look ahead and only reveal the deficit near the finish.
 pub fn live_ghost_gap(
     reference: &Attempt,
     current_distance: Distance,
     moving_seconds: Duration,
-    loop_length: Distance,
+    _loop_length: Distance,
 ) -> GhostState {
-    let live_time = if loop_length.meters() > 0.0 {
-        moving_seconds.as_secs() * (current_distance.meters() / loop_length.meters())
-    } else {
-        moving_seconds.as_secs()
-    };
+    let live_time = moving_seconds.as_secs();
     let reference_time = if current_distance.meters() <= 0.0 || reference.samples.is_empty() {
         Duration::ZERO
     } else if current_distance.meters() <= reference.samples[0].distance.meters() {
@@ -464,6 +466,72 @@ mod tests {
         let snap = ghost.snapshot_at(Duration::from_secs(1_500.0)).unwrap();
         assert!(snap.spatial_gap.meters() < 0.0);
         assert!(snap.state.ahead);
+    }
+
+    #[test]
+    fn live_gap_compares_actual_time_at_the_same_distance() {
+        // PB: 10 km in 3000 s, so 5 km in 1500 s.
+        let reference = pb();
+        let loop_length = Distance::from_meters(10_000.0);
+
+        // At 5 km the runner has moved for 1560 s → 60 s behind. Scaling
+        // moving time by route progress (the old bug) would report a 720 s
+        // *lead* here.
+        let behind = live_ghost_gap(
+            &reference,
+            Distance::from_meters(5_000.0),
+            Duration::from_secs(1_560.0),
+            loop_length,
+        );
+        assert!((behind.time_difference.as_secs() - 60.0).abs() < 1e-9);
+        assert!(!behind.ahead);
+        assert!((behind.distance.meters() - 5_000.0).abs() < 1e-9);
+
+        // 1440 s at 5 km → 60 s ahead.
+        let ahead = live_ghost_gap(
+            &reference,
+            Distance::from_meters(5_000.0),
+            Duration::from_secs(1_440.0),
+            loop_length,
+        );
+        assert!((ahead.time_difference.as_secs() + 60.0).abs() < 1e-9);
+        assert!(ahead.ahead);
+
+        // Dead even at the PB split.
+        let tied = live_ghost_gap(
+            &reference,
+            Distance::from_meters(5_000.0),
+            Duration::from_secs(1_500.0),
+            loop_length,
+        );
+        assert!(tied.time_difference.as_secs().abs() < 1e-9);
+        assert!(!tied.ahead);
+    }
+
+    #[test]
+    fn live_gap_at_the_start_is_even() {
+        let state = live_ghost_gap(
+            &pb(),
+            Distance::ZERO,
+            Duration::ZERO,
+            Distance::from_meters(10_000.0),
+        );
+        assert!(state.time_difference.as_secs().abs() < 1e-9);
+        assert!(!state.ahead);
+    }
+
+    #[test]
+    fn live_gap_past_the_reference_finish_uses_its_finish_time() {
+        // The ghost never covered 12 km; its 10 km finish (3000 s) is the
+        // benchmark. The runner is there at 3600 s → 600 s behind.
+        let state = live_ghost_gap(
+            &pb(),
+            Distance::from_meters(12_000.0),
+            Duration::from_secs(3_600.0),
+            Distance::from_meters(10_000.0),
+        );
+        assert!((state.time_difference.as_secs() - 600.0).abs() < 1e-9);
+        assert!(!state.ahead);
     }
 
     #[test]

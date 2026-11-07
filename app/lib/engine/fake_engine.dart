@@ -323,15 +323,13 @@ class FakeEngineService implements EngineService {
     required double movingSeconds,
     required double loopLengthM,
   }) {
-    final liveTime = loopLengthM > 0
-        ? movingSeconds * (distanceM / loopLengthM)
-        : movingSeconds;
+    final liveTime = movingSeconds;
     final reference = _referenceTimeAt(ghost.samples, distanceM);
     final difference = Elapsed.seconds(liveTime - reference);
     return GhostState(
       distance: Distance.meters(distanceM),
       timeDifference: difference,
-      ahead: difference.seconds <= 0,
+      ahead: difference.seconds < 0,
     );
   }
 

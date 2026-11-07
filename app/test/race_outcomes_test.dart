@@ -84,15 +84,14 @@ void main() {
   group('the gap follows the fixed ghost', () {
     test('ahead of a linear ghost is a negative difference', () {
       fakeAsync((async) {
-        // 60 s quicker than the ghost over the whole line; at the halfway
-        // point the projection shows half the advantage.
+        // 60 s quicker than the ghost to the halfway point.
         final gap = runToFinish(
           async,
           fraction: 0.5,
-          movingSeconds: raceReferenceSeconds(1.0) - 60,
+          movingSeconds: raceReferenceSeconds(0.5) - 60,
         );
         expect(gap.ahead, isTrue);
-        expect(gap.timeDifference.seconds, closeTo(-30, 0.5));
+        expect(gap.timeDifference.seconds, closeTo(-60, 0.5));
       });
     });
 
@@ -101,23 +100,38 @@ void main() {
         final gap = runToFinish(
           async,
           fraction: 0.5,
-          movingSeconds: raceReferenceSeconds(1.0) + 60,
+          movingSeconds: raceReferenceSeconds(0.5) + 60,
         );
         expect(gap.ahead, isFalse);
-        expect(gap.timeDifference.seconds, closeTo(30, 0.5));
+        expect(gap.timeDifference.seconds, closeTo(60, 0.5));
       });
     });
 
-    test('the magnitude scales with how far along the line the runner is', () {
+    test('the gap is measured at the distance covered', () {
       fakeAsync((async) {
-        // The same 60 s advantage, but only a quarter of the way in.
+        // Same 20 s advantage, but only a quarter of the way in: the lead is
+        // still 20 s, not a projection over the unseen remainder.
         final gap = runToFinish(
           async,
           fraction: 0.25,
-          movingSeconds: raceReferenceSeconds(1.0) - 60,
+          movingSeconds: raceReferenceSeconds(0.25) - 20,
         );
         expect(gap.ahead, isTrue);
-        expect(gap.timeDifference.seconds, closeTo(-15, 0.5));
+        expect(gap.timeDifference.seconds, closeTo(-20, 0.5));
+      });
+    });
+
+    test('a PB finish time at the halfway point is half a PB behind', () {
+      fakeAsync((async) {
+        // Taking the *whole* PB time to cover half the course is not even:
+        // the ghost reached halfway in half the PB time.
+        final gap = runToFinish(
+          async,
+          fraction: 0.5,
+          movingSeconds: raceReferenceSeconds(1.0),
+        );
+        expect(gap.ahead, isFalse);
+        expect(gap.timeDifference.seconds, closeTo(raceReferenceSeconds(0.5), 0.5));
       });
     });
   });
