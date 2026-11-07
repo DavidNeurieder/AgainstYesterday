@@ -83,7 +83,8 @@ void main() {
     await waitForText(tester, 'VIEW RESULT');
 
     // M11: a short demo run may land on either completion header.
-    final header = tester.any(find.text('RUN COMPLETE')) ||
+    final header =
+        tester.any(find.text('RUN COMPLETE')) ||
         tester.any(find.text('NEW PERSONAL BEST'));
     expect(header, isTrue, reason: 'expected a completion header');
 
@@ -108,8 +109,7 @@ void main() {
       diagnostics: () {
         final activities = container.read(activityRepositoryProvider).length;
         final snapshot = container.read(runSnapshotProvider);
-        final status =
-            container.read(recordingControllerProvider)?.status.name;
+        final status = container.read(recordingControllerProvider)?.status.name;
         final save = container.read(saveProgressProvider);
         return 'tiles='
             '${tester.widgetList(find.byIcon(Icons.directions_run)).length}, '
@@ -145,10 +145,12 @@ void main() {
 
     // Routes tab lists the seeded catalog — scope into the NavigationBar to
     // avoid the AppBar title also matching.
-    await tester.tap(find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.text('Routes'),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Routes'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('River Loop'), findsWidgets);
     expect(find.text('Park 5K'), findsWidgets);
@@ -156,10 +158,12 @@ void main() {
 
     // A course card opens its detail page — scope into RoutesScreen so the
     // IndexedStack twin copies in Home/Record don't interfere.
-    await tester.tap(find.descendant(
-      of: find.byType(RoutesScreen),
-      matching: find.text('River Loop'),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(RoutesScreen),
+        matching: find.text('River Loop'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Personal Best'), findsOneWidget);
     await tester.scrollUntilVisible(
@@ -180,15 +184,16 @@ void main() {
   // Phase 12: backgrounding snapshots the run; a "relaunch" over the same
   // store resumes the interrupted run instead of starting a fresh session.
   // -------------------------------------------------------------------------
-  testWidgets('restores an interrupted run across app relaunch',
-      (tester) async {
+  testWidgets('restores an interrupted run across app relaunch', (
+    tester,
+  ) async {
     // A shared store stands in for device storage: the relaunched app reads
     // the same snapshot the backgrounded instance wrote.
     final store = MemoryPersistenceStore();
     Widget app() => ProviderScope(
-          overrides: [persistenceStoreProvider.overrideWithValue(store)],
-          child: const AgainstYesterdayApp(),
-        );
+      overrides: [persistenceStoreProvider.overrideWithValue(store)],
+      child: const AgainstYesterdayApp(),
+    );
 
     // "First process": seed a route (a fresh install with no catalog has no
     // race hero — RECORD ROUTE records a fresh route, it does not resume), get
