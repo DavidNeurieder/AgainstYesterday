@@ -770,21 +770,27 @@ class _SegmentComparisonSectionState
     try {
       final selected = widget.attempts.take(5).toList();
       final attempts = <Attempt>[];
+      String? firstError;
       for (final a in selected) {
         if (a.track == null || a.track!.length < 2) continue;
         final sanitized = _monotonicTrack(a.track!);
-        final att = await engine.createAttempt(
-          activityId: a.id,
-          routeId: widget.route.id,
-          points: sanitized,
-          routeGeometry: widget.route.geometry,
-        );
-        attempts.add(att);
+        try {
+          final att = await engine.createAttempt(
+            activityId: a.id,
+            routeId: widget.route.id,
+            points: sanitized,
+            routeGeometry: widget.route.geometry,
+          );
+          attempts.add(att);
+        } catch (e) {
+          firstError ??= e.toString();
+        }
       }
       if (attempts.length < 2) {
         setState(() {
           _comparison = null;
           _loading = false;
+          _error = firstError;
         });
         return;
       }
