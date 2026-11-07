@@ -26,7 +26,8 @@ pub use matching::{
 use crate::Track;
 use crate::error::RouteError;
 use crate::geo::{
-    Coordinate, Projection, distance, interpolate, project_to_polyline, project_to_segment,
+    self, Bearing, Coordinate, Projection, distance, interpolate, project_to_polyline,
+    project_to_segment,
 };
 use crate::units::{Distance, Speed, Timestamp};
 
@@ -402,6 +403,74 @@ pub struct ContinuousProjection {
     pub reanchored: bool,
 }
 
+/// One GPS observation fed to [`RouteMatcher`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RouteObservation {
+    /// Reported position.
+    pub coordinate: Coordinate,
+    /// Observation time.
+    pub timestamp: Timestamp,
+    /// Reported horizontal accuracy (1σ-ish), when known.
+    pub accuracy: Option<Distance>,
+    /// Reported or derived ground speed, when known.
+    pub speed: Option<Speed>,
+    /// Reported or derived travel bearing (clockwise from true north), when known.
+    pub bearing: Option<Bearing>,
+}
+
+const MIN_HEADING_SPEED_MPS: f64 = 0.6;
+const SIGMA_H_RAD: f64 = 35.0_f64 * std::f64::consts::PI / 180.0;
+const SIGMA_P_BASE_M: f64 = 40.0;
+const SIGMA_V_MPS: f64 = 3.0;
+const SIGMA_D_DEFAULT_M: f64 = 15.0;
+const SIGMA_D_MIN_M: f64 = 5.0;
+const SIGMA_D_MAX_M: f64 = 50.0;
+
+fn wrap_angle_rad(a: f64) -> f64 {
+    let mut x = (a + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU) - std::f64::consts::PI;
+    // rem_euclid can yield -PI in edge cases; normalize to (-PI, PI].
+    if x <= -std::f64::consts::PI {
+        x += std::f64::consts::TAU;
+    }
+    x
+}
+
+fn segment_bearing(route: &Route, segment_index: usize) -> Option<Bearing> {
+    let geom = route.geometry();
+    if segment_index + 1 >= geom.len() {
+        return None;
+    }
+    geo::bearing(geom[segment_index], geom[segment_index + 1]).ok()
+}
+
+/// Confidence in a match decision, `0.0` (untrusted) .. `1.0` (certain).
+/// Kept separate from per-candidate cost and from the receiver's reported
+/// GPS accuracy.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MatchConfidence(pub f64);
+
+impl MatchConfidence {
+    /// No usable confidence.
+    pub const NONE: Self = Self(0.0);
+    /// Fully trusted.
+    pub const FULL: Self = Self(1.0);
+
+    /// The raw `0.0..=1.0` value.
+    pub fn value(self) -> f64 {
+        self.0
+    }
+}
+
+/// The outcome of one [`RouteMatcher`] update, extending a
+/// [`ContinuousProjection`] with scoring confidence.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MatchStep {
+    /// The accepted projection (monotone coverage, lateral, flags).
+    pub projection: ContinuousProjection,
+    /// Confidence in the selected candidate, separate from cost and GPS accuracy.
+    pub confidence: MatchConfidence,
+}
+
 /// Stateful, incremental continuity-aware route progress matcher.
 ///
 /// This is the single-fix analogue of [`Route::project_track_with_continuity`]:
@@ -415,6 +484,7 @@ pub struct RouteMatcher {
     config: ContinuityConfig,
     covered: f64,
     last_timestamp: Option<Timestamp>,
+    last_bearing: Option<Bearing>,
 }
 
 impl RouteMatcher {
@@ -424,6 +494,7 @@ impl RouteMatcher {
             config,
             covered: 0.0,
             last_timestamp: None,
+            last_bearing: None,
         }
     }
 
@@ -436,6 +507,7 @@ impl RouteMatcher {
     pub fn reset(&mut self) {
         self.covered = 0.0;
         self.last_timestamp = None;
+        self.last_bearing = None;
     }
 
     /// Seeds the matcher with already-covered progress (e.g. a resumed run).
@@ -443,6 +515,7 @@ impl RouteMatcher {
     pub fn seed(&mut self, covered: Distance) {
         self.covered = covered.meters().clamp(0.0, f64::INFINITY);
         self.last_timestamp = None;
+        self.last_bearing = None;
     }
 
     /// Snaps monotone coverage to `covered` without resetting the time anchor.
@@ -451,37 +524,53 @@ impl RouteMatcher {
         self.covered = self.covered.max(covered.meters());
     }
 
-    /// Matches one observation and advances monotone coverage.
+    /// Matches one observation (coordinate + time only) and advances monotone
+    /// coverage. Equivalent to [`Self::update_observation`] with no sensor
+    /// quality or heading.
     pub fn update(
         &mut self,
         route: &Route,
         coordinate: Coordinate,
         timestamp: Timestamp,
     ) -> ContinuousProjection {
-        let dt = match self.last_timestamp {
-            Some(prev) => timestamp.elapsed_since(prev).as_secs().max(0.0),
-            None => f64::INFINITY, // first point gets the full forward window
-        };
-        self.last_timestamp = Some(timestamp);
+        self.update_observation(
+            route,
+            &RouteObservation {
+                coordinate,
+                timestamp,
+                accuracy: None,
+                speed: None,
+                bearing: None,
+            },
+        )
+        .projection
+    }
 
-        let forward = (self.config.max_speed.mps() * dt)
-            .min(self.config.forward_window.meters())
-            .max(0.0);
+    /// Matches a full observation with multi-signal scoring (distance,
+    /// heading, progress, speed) and returns the projection plus confidence.
+    pub fn update_observation(&mut self, route: &Route, obs: &RouteObservation) -> MatchStep {
+        let dt = match self.last_timestamp {
+            Some(prev) => obs.timestamp.elapsed_since(prev).as_secs().max(0.0),
+            None => f64::INFINITY,
+        };
+        self.last_timestamp = Some(obs.timestamp);
+
+        let (forward, backward) = self.adaptive_window(dt, obs.accuracy);
         let (lo, hi) = route
             .window_bounds(
                 Distance::from_meters(self.covered),
-                self.config.max_backtrack,
+                Distance::from_meters(backward),
                 Distance::from_meters(forward),
             )
             .unwrap_or((self.covered, self.covered));
 
-        let candidates = route.projections_in_window(coordinate, lo, hi);
-        let best = best_forward_candidate(&candidates, self.covered);
+        let candidates = route.projections_in_window(obs.coordinate, lo, hi);
+        let (best, confidence) = self.score_candidates(route, obs, dt, &candidates);
 
         let (raw, lateral, reanchored) = match best {
             Some((raw, lateral)) => (raw, lateral, false),
             None => {
-                let global = route.project(coordinate);
+                let global = route.project(obs.coordinate);
                 (
                     global.distance_along.meters(),
                     global.lateral_error.meters(),
@@ -491,13 +580,159 @@ impl RouteMatcher {
         };
         let backtracker = raw + self.config.max_backtrack.meters() < self.covered;
         self.covered = self.covered.max(raw);
-        ContinuousProjection {
-            distance: Distance::from_meters(self.covered),
-            raw: Distance::from_meters(raw),
-            lateral_error: Distance::from_meters(lateral),
-            backtracker,
-            reanchored,
+
+        // Track a stable bearing when moving, preferring the fix's report.
+        if let Some(b) = obs.bearing {
+            if obs.speed.map(|s| s.mps()).unwrap_or(0.0) >= MIN_HEADING_SPEED_MPS {
+                self.last_bearing = Some(b);
+            }
         }
+
+        MatchStep {
+            projection: ContinuousProjection {
+                distance: Distance::from_meters(self.covered),
+                raw: Distance::from_meters(raw),
+                lateral_error: Distance::from_meters(lateral),
+                backtracker,
+                reanchored,
+            },
+            confidence,
+        }
+    }
+
+    fn adaptive_window(&self, dt: f64, accuracy: Option<Distance>) -> (f64, f64) {
+        let accuracy_m = accuracy
+            .map(|a| a.meters())
+            .filter(|m| m.is_finite() && *m > 0.0)
+            .unwrap_or(0.0);
+        // Keep the disambiguating window tight; only add a modest margin for
+        // uncertainty, never exceeding the configured caps by much.
+        let margin = (accuracy_m * 0.5).clamp(0.0, 20.0);
+
+        let forward = if dt.is_finite() {
+            (self.config.max_speed.mps() * dt + margin)
+                .min(self.config.forward_window.meters() + margin)
+                .max(0.0)
+        } else {
+            self.config.forward_window.meters() + margin
+        };
+        let backward = self.config.max_backtrack.meters() + margin;
+        (forward, backward)
+    }
+
+    fn score_candidates(
+        &self,
+        route: &Route,
+        obs: &RouteObservation,
+        dt: f64,
+        candidates: &[Projection],
+    ) -> (Option<(f64, f64)>, MatchConfidence) {
+        if candidates.is_empty() {
+            return (None, MatchConfidence::NONE);
+        }
+
+        let sigma_d = obs
+            .accuracy
+            .map(|a| a.meters())
+            .filter(|m| m.is_finite() && *m > 0.0)
+            .unwrap_or(SIGMA_D_DEFAULT_M)
+            .clamp(SIGMA_D_MIN_M, SIGMA_D_MAX_M);
+
+        let moving = obs
+            .speed
+            .map(|s| s.mps() >= MIN_HEADING_SPEED_MPS)
+            .unwrap_or(false);
+        let runner_bearing = if moving { obs.bearing } else { None };
+
+        let expected_progress = if dt.is_finite() && dt > 0.0 {
+            let v = obs
+                .speed
+                .map(|s| s.mps())
+                .filter(|v| v.is_finite() && *v >= 0.0)
+                .unwrap_or((self.config.max_speed.mps() * 0.5).min(3.0));
+            Some(self.covered + v * dt)
+        } else {
+            None
+        };
+
+        let mut scored: Vec<(usize, f64, f64, f64)> = Vec::with_capacity(candidates.len()); // (idx, cost, raw, lateral)
+        for (idx, c) in candidates.iter().enumerate() {
+            let raw = c.distance_along.meters();
+            let lateral = c.lateral_error.meters();
+            let mut cost = 0.0;
+            let mut terms = 0.0;
+
+            // Distance likelihood.
+            cost += (lateral * lateral) / (2.0 * sigma_d * sigma_d);
+            terms += 1.0;
+
+            // Heading likelihood (only when moving and bearings known).
+            if let (Some(rb), Some(sb)) = (runner_bearing, segment_bearing(route, c.segment_index))
+            {
+                let diff = wrap_angle_rad(rb.as_radians() - sb.as_radians());
+                // Routes can be traversed in the drawn direction; 180° means
+                // opposite - penalize but don't forbid (handled softly). Use
+                // the smaller of forward/reverse alignment for progress sense?
+                // No: a fixed route has a defined direction; opposite travel is
+                // unusual. Penalize the angular difference directly.
+                cost += (diff * diff) / (2.0 * SIGMA_H_RAD * SIGMA_H_RAD);
+                terms += 1.0;
+            }
+
+            // Progress likelihood (soft).
+            if let Some(expected) = expected_progress {
+                let ep = (raw - expected).abs();
+                let sigma_p = SIGMA_P_BASE_M + sigma_d; // softer when uncertain
+                cost += (ep * ep) / (2.0 * sigma_p * sigma_p);
+                terms += 0.7; // soft weight
+            }
+
+            // Speed consistency.
+            if dt.is_finite() && dt > 0.0 {
+                let implied = (raw - self.covered) / dt;
+                // Penalize implausibly fast forward jumps and large backward jumps.
+                let max_v = self.config.max_speed.mps();
+                let ev = if implied > max_v * 1.2 {
+                    implied - max_v
+                } else if implied < -max_v * 0.5 {
+                    (-implied) - max_v * 0.25
+                } else {
+                    0.0
+                };
+                if ev > 0.0 {
+                    cost += (ev * ev) / (2.0 * SIGMA_V_MPS * SIGMA_V_MPS);
+                    terms += 0.5;
+                }
+            }
+
+            // Continuity tie-breaker: when costs are nearly equal, prefer the
+            // forward candidate with lowest lateral error (the same robust
+            // choice as Stage 1). Encode as a tiny cost term.
+            let forward_bias = if raw >= self.covered {
+                lateral * 1e-4
+            } else {
+                (self.covered - raw) * 1e-4 + lateral * 1e-4 + 1e-3
+            };
+            cost += forward_bias;
+            let _ = terms;
+
+            scored.push((idx, cost, raw, lateral));
+        }
+
+        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("finite costs"));
+        let best = &scored[0];
+        let second = scored.get(1);
+
+        // Confidence: combine fit quality, ambiguity margin, and accuracy.
+        let fit = (-best.1.min(50.0) / 4.0).exp(); // cost 0 -> 1, cost 8 -> ~0.14
+        let margin = second
+            .map(|s| ((s.1 - best.1).max(0.0) / 2.0).min(1.0))
+            .unwrap_or(1.0);
+        let acc_conf = (1.0 - (sigma_d - SIGMA_D_MIN_M) / (SIGMA_D_MAX_M - SIGMA_D_MIN_M) * 0.5)
+            .clamp(0.4, 1.0);
+        let confidence = (fit * (0.4 + 0.6 * margin) * acc_conf).clamp(0.0, 1.0);
+
+        (Some((best.2, best.3)), MatchConfidence(confidence))
     }
 }
 

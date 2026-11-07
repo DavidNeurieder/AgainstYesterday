@@ -23,7 +23,7 @@
 use crate::geo::{Coordinate, distance};
 use crate::ghost::{GhostState, confidence_for_spacing};
 use crate::gps::GpsFix;
-use crate::route::{ContinuityConfig, Route, RouteMatcher};
+use crate::route::{ContinuityConfig, Route, RouteMatcher, RouteObservation};
 use crate::track::CursorConfig;
 use crate::track::filtering::{FilterCursor, fix_passes_sensor_checks};
 use crate::units::{Distance, Duration, Speed};
@@ -287,11 +287,21 @@ impl LiveRecorder {
     /// with moving time gated by ground speed against the motion floor.
     fn push_route(&mut self, fix: GpsFix) {
         let route = self.route.as_ref().expect("route mode");
-        let projection = self
+        let step = self
             .matcher
             .as_mut()
             .expect("matcher in route mode")
-            .update(route, fix.coordinate, fix.timestamp);
+            .update_observation(
+                route,
+                &RouteObservation {
+                    coordinate: fix.coordinate,
+                    timestamp: fix.timestamp,
+                    accuracy: fix.accuracy,
+                    speed: fix.speed,
+                    bearing: fix.bearing,
+                },
+            );
+        let projection = step.projection;
 
         let len = route.length().meters();
         let mut covered = projection.distance.meters().min(len);
