@@ -97,10 +97,14 @@ void main() {
     return sub;
   }
 
-  LiveRunState? state(ProviderContainer c) => c.read(recordingControllerProvider);
+  LiveRunState? state(ProviderContainer c) =>
+      c.read(recordingControllerProvider);
 
-  void bootToReady(ProviderContainer c, FakeAsync async,
-      {List<Route> routes = const [_route]}) {
+  void bootToReady(
+    ProviderContainer c,
+    FakeAsync async, {
+    List<Route> routes = const [_route],
+  }) {
     c.read(recordingControllerProvider.notifier).ensureSession(routes);
     async.flushMicrotasks();
     async.elapse(const Duration(milliseconds: 1000));
@@ -116,7 +120,9 @@ void main() {
           overrides: [
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
-            persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
+            persistenceStoreProvider.overrideWithValue(
+              MemoryPersistenceStore(),
+            ),
           ],
         );
         addTearDown(c.dispose);
@@ -129,48 +135,33 @@ void main() {
 
         // START elevates the process for the whole streaming window.
         bootToReady(c, async);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.inactive,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.inactive);
         ctrl.beginRun();
         async.flushMicrotasks();
         expect(lifespan.started, 1);
         expect(lifespan.stopped, 0);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.active,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.active);
 
         // Pausing cancels the stream, so the elevation drops with it.
         ctrl.pause();
         async.flushMicrotasks();
         expect(lifespan.started, 1);
         expect(lifespan.stopped, 1);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.inactive,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.inactive);
 
         // RESUME starts a fresh stream; idempotent start stays at one call.
         ctrl.resume();
         async.flushMicrotasks();
         expect(lifespan.started, 2);
         expect(lifespan.stopped, 1);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.active,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.active);
 
         // FINISH seals the run and drops the elevation for good.
         ctrl.finishRun();
         async.flushMicrotasks();
         expect(lifespan.started, 2);
         expect(lifespan.stopped, 2);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.inactive,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.inactive);
       });
     });
 
@@ -183,7 +174,9 @@ void main() {
           overrides: [
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
-            persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
+            persistenceStoreProvider.overrideWithValue(
+              MemoryPersistenceStore(),
+            ),
           ],
         );
         addTearDown(c.dispose);
@@ -233,14 +226,9 @@ void main() {
 
         final live = state(c)!;
         expect(live.status, RunStatus.running);
-        expect(
-          live.distance.meters,
-          closeTo(haversineMeters(a, b), 1e-6),
-        );
-        expect(
-          live.backgroundProtection,
-          BackgroundProtection.unavailable,
-        );
+        // Tolerance accommodates the engine's geodesic vs Dart haversine.
+        expect(live.distance.meters, closeTo(haversineMeters(a, b), 0.01));
+        expect(live.backgroundProtection, BackgroundProtection.unavailable);
       });
     });
 
@@ -254,7 +242,9 @@ void main() {
           overrides: [
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
-            persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
+            persistenceStoreProvider.overrideWithValue(
+              MemoryPersistenceStore(),
+            ),
           ],
         );
         addTearDown(c.dispose);
@@ -265,19 +255,13 @@ void main() {
         ctrl.beginRun();
         async.flushMicrotasks();
         expect(lifespan.started, 1);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.starting,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.starting);
 
         // The run finishes while the platform call is still in flight.
         ctrl.finishRun();
         async.flushMicrotasks();
         expect(lifespan.stopped, 1);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.inactive,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.inactive);
 
         // The late start settles *after* the stop: it must not resurrect
         // protection for a finished run, and no extra stop is requested.
@@ -285,10 +269,7 @@ void main() {
         async.flushMicrotasks();
         expect(lifespan.started, 1);
         expect(lifespan.stopped, 1);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.inactive,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.inactive);
       });
     });
 
@@ -300,7 +281,9 @@ void main() {
           overrides: [
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
-            persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
+            persistenceStoreProvider.overrideWithValue(
+              MemoryPersistenceStore(),
+            ),
           ],
         );
         addTearDown(c.dispose);
@@ -335,7 +318,9 @@ void main() {
         final c = ProviderContainer(
           overrides: [
             runForegroundLifespanProvider.overrideWithValue(lifespan),
-            persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
+            persistenceStoreProvider.overrideWithValue(
+              MemoryPersistenceStore(),
+            ),
           ],
         );
         addTearDown(c.dispose);
@@ -350,10 +335,7 @@ void main() {
 
         expect(lifespan.started, 0);
         expect(lifespan.stopped, 0);
-        expect(
-          state(c)!.backgroundProtection,
-          BackgroundProtection.inactive,
-        );
+        expect(state(c)!.backgroundProtection, BackgroundProtection.inactive);
       });
     });
   });

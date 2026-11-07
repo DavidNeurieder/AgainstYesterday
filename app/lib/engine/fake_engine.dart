@@ -689,8 +689,12 @@ class _FakeLiveRun implements LiveRunHandle {
       final pos = GeoPoint(latitude: fix.latitude, longitude: fix.longitude);
       final proj = projectOnPolyline(_route, pos);
       if (proj != null) {
-        final covered = proj.distanceM.clamp(0.0, _routeLength);
+        var covered = proj.distanceM.clamp(0.0, _routeLength);
+        if (_routeLength - covered <= 1.0) covered = _routeLength;
         if (covered > _routeCoverage) _routeCoverage = covered;
+      }
+      if (_routeLength - _routeCoverage <= 1.0 && _routeCoverage > 0) {
+        _routeCoverage = _routeLength;
       }
       final prev = _routePrev;
       if (prev != null) {

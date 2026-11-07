@@ -253,8 +253,8 @@ void main() {
       expect(first['timestamp_ms'], isA<int>());
       expect(first['latitude'], closeTo(52.5, 0.01));
       expect(first['longitude'], closeTo(13.36, 0.01));
-      // Every sensor field is present; the first live fix has an accuracy and
-      // altitude but no predecessor, so no bearing.
+      // Every sensor field is present. Scenario fixes carry a computed bearing
+      // along the route geometry.
       for (final field in [
         'accuracy_m',
         'altitude_m',
@@ -263,7 +263,7 @@ void main() {
       ]) {
         expect(first.containsKey(field), isTrue, reason: field);
       }
-      expect(first['bearing_deg'], isNull);
+      expect(first['bearing_deg'], isA<num>());
       expect(find.text('Fixture JSON copied to clipboard.'), findsOneWidget);
     },
   );

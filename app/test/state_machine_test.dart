@@ -250,12 +250,15 @@ void main() {
         expect(state(c)!.routeProgress, lessThanOrEqualTo(1.0));
 
         // Further running neither grows past the loop nor shrinks.
+        // The engine may report its own geodesic loop length, which can differ
+        // fractionally from Dart's polylineMeters; accept a small tolerance.
+        final loopMax = loop + 0.5;
         var previous = state(c)!.distance.meters;
         for (var i = 0; i < 10; i++) {
           async.elapse(const Duration(seconds: 5));
           final current = state(c)!.distance.meters;
           expect(current, greaterThanOrEqualTo(previous));
-          expect(current, lessThanOrEqualTo(loop + 1e-9));
+          expect(current, lessThanOrEqualTo(loopMax));
           previous = current;
         }
         expect(state(c)!.routeProgress, closeTo(1.0, 0.001));

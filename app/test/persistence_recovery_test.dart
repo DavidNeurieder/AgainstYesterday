@@ -45,9 +45,7 @@ void main() {
       fakeAsync((async) {
         final store = MemoryPersistenceStore();
         final c = ProviderContainer(
-          overrides: [
-            persistenceStoreProvider.overrideWithValue(store),
-          ],
+          overrides: [persistenceStoreProvider.overrideWithValue(store)],
         );
         addTearDown(c.dispose);
         keepAlive(c);
@@ -62,7 +60,10 @@ void main() {
 
         ctrl.finishRun();
         async.elapse(const Duration(milliseconds: 500));
-        expect(c.read(recordingControllerProvider)!.status, RunStatus.completed);
+        expect(
+          c.read(recordingControllerProvider)!.status,
+          RunStatus.completed,
+        );
         expect(store.read('run_snapshot'), 'null');
       });
     });
@@ -71,9 +72,7 @@ void main() {
   group('resumeFromSnapshot recovery', () {
     ProviderContainer container(FakeAsync async, PersistenceStore store) {
       final c = ProviderContainer(
-        overrides: [
-          persistenceStoreProvider.overrideWithValue(store),
-        ],
+        overrides: [persistenceStoreProvider.overrideWithValue(store)],
       );
       addTearDown(c.dispose);
       keepAlive(c);
@@ -104,8 +103,10 @@ void main() {
 
         // Movement continues from the restored distance.
         async.elapse(const Duration(seconds: 2));
-        expect(c.read(recordingControllerProvider)!.distance.meters,
-            greaterThan(400));
+        expect(
+          c.read(recordingControllerProvider)!.distance.meters,
+          greaterThan(400),
+        );
       });
     });
 
@@ -124,15 +125,21 @@ void main() {
         );
         ctrl.resumeFromSnapshot(snapshot);
         async.flushMicrotasks();
-        expect(c.read(recordingControllerProvider)!.distance.meters,
-            closeTo(4500, 0.01));
+        expect(
+          c.read(recordingControllerProvider)!.distance.meters,
+          closeTo(4500, 0.01),
+        );
 
         // Headless resumes clamp to the loop length recorded in the snapshot.
         async.elapse(const Duration(seconds: 300)); // long enough to lap
-        expect(c.read(recordingControllerProvider)!.distance.meters,
-            closeTo(loopMeters, 0.5));
-        expect(c.read(recordingControllerProvider)!.routeProgress,
-            lessThanOrEqualTo(1.0));
+        expect(
+          c.read(recordingControllerProvider)!.distance.meters,
+          closeTo(loopMeters, 0.5),
+        );
+        expect(
+          c.read(recordingControllerProvider)!.routeProgress,
+          lessThanOrEqualTo(1.0),
+        );
       });
     });
 
@@ -198,45 +205,48 @@ void main() {
         distanceMeters: 300,
         loopMeters: 4760,
       );
-      final json = runSnapshotToJson(snapshot).replaceFirst(
-        '"status":"paused"',
-        '"status":"stale_state"',
-      );
+      final json = runSnapshotToJson(
+        snapshot,
+      ).replaceFirst('"status":"paused"', '"status":"stale_state"');
       expect(parseRunSnapshot(json).status, RunStatus.running);
     });
 
-    test('the repository yields null for corrupt, missing, or null docs', () async {
-      final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
-      addTearDown(() => dir.delete(recursive: true));
-
-      RunSnapshot? buildWith(String? content) {
-        final file = File('${dir.path}/run_snapshot.json');
-        if (content == null) {
-          if (file.existsSync()) {
-            file.deleteSync();
-          }
-        } else {
-          file.writeAsStringSync(content);
-        }
-        final c = ProviderContainer(
-          overrides: [
-            persistenceStoreProvider
-                .overrideWithValue(JsonFileStore(dir)),
-          ],
+    test(
+      'the repository yields null for corrupt, missing, or null docs',
+      () async {
+        final dir = await Directory.systemTemp.createTemp(
+          'against_yesterday_test',
         );
-        addTearDown(c.dispose);
-        return c.read(runSnapshotProvider);
-      }
+        addTearDown(() => dir.delete(recursive: true));
 
-      // No file at all.
-      expect(buildWith(null), isNull);
+        RunSnapshot? buildWith(String? content) {
+          final file = File('${dir.path}/run_snapshot.json');
+          if (content == null) {
+            if (file.existsSync()) {
+              file.deleteSync();
+            }
+          } else {
+            file.writeAsStringSync(content);
+          }
+          final c = ProviderContainer(
+            overrides: [
+              persistenceStoreProvider.overrideWithValue(JsonFileStore(dir)),
+            ],
+          );
+          addTearDown(c.dispose);
+          return c.read(runSnapshotProvider);
+        }
 
-      // Literal `null` document (what a clean finish writes).
-      expect(buildWith('null'), isNull);
+        // No file at all.
+        expect(buildWith(null), isNull);
 
-      // Corrupt document.
-      expect(buildWith('{oops'), isNull);
-    });
+        // Literal `null` document (what a clean finish writes).
+        expect(buildWith('null'), isNull);
+
+        // Corrupt document.
+        expect(buildWith('{oops'), isNull);
+      },
+    );
   });
 
   // The resume decision is made by the flow that opens, not at startup: a
@@ -257,18 +267,21 @@ void main() {
       routeId: routeId,
     );
 
-    testWidgets('the race flow resumes it instead of starting a new run',
-        (tester) async {
+    testWidgets('the race flow resumes it instead of starting a new run', (
+      tester,
+    ) async {
       final store = seededStore(routes: [riverLoopRoute])
         ..write(
           'run_snapshot',
           runSnapshotToJson(interrupted(routeId: riverLoopRoute.id)),
         );
 
-      await tester.pumpWidget(ProviderScope(
-        overrides: [persistenceStoreProvider.overrideWithValue(store)],
-        child: const AgainstYesterdayApp(),
-      ));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [persistenceStoreProvider.overrideWithValue(store)],
+          child: const AgainstYesterdayApp(),
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('RACE YOUR BEST'));
@@ -291,8 +304,9 @@ void main() {
       expect(state.route?.id, riverLoopRoute.id);
     });
 
-    testWidgets('the new-route recording flow starts a fresh line',
-        (tester) async {
+    testWidgets('the new-route recording flow starts a fresh line', (
+      tester,
+    ) async {
       // `RECORD ROUTE` records a *new* line and always starts over, so the
       // interrupted run must not be handed to it (its resume belongs to the
       // race flow). Asserting the contract here keeps a future edit from
@@ -300,10 +314,12 @@ void main() {
       final store = MemoryPersistenceStore()
         ..write('run_snapshot', runSnapshotToJson(interrupted()));
 
-      await tester.pumpWidget(ProviderScope(
-        overrides: [persistenceStoreProvider.overrideWithValue(store)],
-        child: const AgainstYesterdayApp(),
-      ));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [persistenceStoreProvider.overrideWithValue(store)],
+          child: const AgainstYesterdayApp(),
+        ),
+      );
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('RECORD ROUTE'));
@@ -320,19 +336,24 @@ void main() {
   });
 
   group('corrupt history degrades to an empty history', () {
-    test('a corrupt activities document recovers to an empty history', () async {
-      final dir = await Directory.systemTemp.createTemp('against_yesterday_test');
-      addTearDown(() => dir.delete(recursive: true));
-      final store = JsonFileStore(dir);
-      File('${dir.path}/activities.json').writeAsStringSync('{oops');
+    test(
+      'a corrupt activities document recovers to an empty history',
+      () async {
+        final dir = await Directory.systemTemp.createTemp(
+          'against_yesterday_test',
+        );
+        addTearDown(() => dir.delete(recursive: true));
+        final store = JsonFileStore(dir);
+        File('${dir.path}/activities.json').writeAsStringSync('{oops');
 
-      final c = ProviderContainer(
-        overrides: [persistenceStoreProvider.overrideWithValue(store)],
-      );
-      addTearDown(c.dispose);
+        final c = ProviderContainer(
+          overrides: [persistenceStoreProvider.overrideWithValue(store)],
+        );
+        addTearDown(c.dispose);
 
-      final history = c.read(activityRepositoryProvider);
-      expect(history, isEmpty);
-    });
+        final history = c.read(activityRepositoryProvider);
+        expect(history, isEmpty);
+      },
+    );
   });
 }

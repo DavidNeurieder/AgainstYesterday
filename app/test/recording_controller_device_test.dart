@@ -75,7 +75,8 @@ void main() {
     return sub;
   }
 
-  LiveRunState? state(ProviderContainer c) => c.read(recordingControllerProvider);
+  LiveRunState? state(ProviderContainer c) =>
+      c.read(recordingControllerProvider);
 
   void bootToReady(ProviderContainer c, FakeAsync async) {
     final ctrl = c.read(recordingControllerProvider.notifier);
@@ -91,9 +92,7 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
-            deviceGpsProvider.overrideWithValue(
-              _FakeGpsSource(stream.stream),
-            ),
+            deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             persistenceStoreProvider.overrideWithValue(
               MemoryPersistenceStore(),
             ),
@@ -121,14 +120,13 @@ void main() {
         stream.add(_fix(a.latitude, a.longitude));
         async.flushMicrotasks();
         async.elapse(const Duration(milliseconds: 1200));
-        stream.add(
-          _fix(b.latitude, b.longitude, speed: 3.0),
-        );
+        stream.add(_fix(b.latitude, b.longitude, speed: 3.0));
         async.flushMicrotasks();
 
         final live = state(c)!;
         expect(live.status, RunStatus.running);
-        expect(live.distance.meters, closeTo(haversineMeters(a, b), 1e-6));
+        // Tolerance accommodates the engine's geodesic vs Dart haversine.
+        expect(live.distance.meters, closeTo(haversineMeters(a, b), 0.01));
         // Only the second fix can prove motion (the first is the anchor), so
         // exactly the one 1.2 s interval counts as moving time.
         expect(live.elapsed.seconds, closeTo(1.2, 1e-9));
@@ -171,9 +169,7 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
-            deviceGpsProvider.overrideWithValue(
-              _FakeGpsSource(stream.stream),
-            ),
+            deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             persistenceStoreProvider.overrideWithValue(
               MemoryPersistenceStore(),
             ),
@@ -238,9 +234,7 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
-            deviceGpsProvider.overrideWithValue(
-              _FakeGpsSource(stream.stream),
-            ),
+            deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             persistenceStoreProvider.overrideWithValue(
               MemoryPersistenceStore(),
             ),
@@ -264,9 +258,10 @@ void main() {
 
         final live = state(c)!;
         // Snapped onto the route: distance is the arc length to geometry[1].
+        // Tolerance accommodates the engine's geodesic vs Dart haversine.
         expect(
           live.distance.meters,
-          closeTo(haversineMeters(geo[0], geo[1]), 1e-6),
+          closeTo(haversineMeters(geo[0], geo[1]), 0.01),
         );
         // The emitted position is the runner's real fix, not the snapped one.
         expect(live.currentPosition, geo[1]);
@@ -281,9 +276,7 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
-            deviceGpsProvider.overrideWithValue(
-              _FakeGpsSource(stream.stream),
-            ),
+            deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
           ],
         );
         addTearDown(c.dispose);
@@ -323,18 +316,17 @@ void main() {
       });
     });
 
-test('acquisition refusal lands ERROR with the GPS reason surfaced', () {
+    test('acquisition refusal lands ERROR with the GPS reason surfaced', () {
       fakeAsync((async) {
         final stream = StreamController<GpsFix>.broadcast();
         final source = _FakeGpsSource(
           stream.stream,
-          acquisition: 'Location services are off. Turn on GPS, then try '
+          acquisition:
+              'Location services are off. Turn on GPS, then try '
               'again.',
         );
         final c = ProviderContainer(
-          overrides: [
-            deviceGpsProvider.overrideWithValue(source),
-          ],
+          overrides: [deviceGpsProvider.overrideWithValue(source)],
         );
         addTearDown(c.dispose);
         keepAlive(c);

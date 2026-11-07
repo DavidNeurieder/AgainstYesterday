@@ -55,9 +55,8 @@ class SettingsScreen extends ConsumerWidget {
                 title: const Text('Haptics'),
                 subtitle: const Text('Vibrate on buttons and milestones'),
                 value: settings.hapticsEnabled,
-                onChanged: (value) => notifier.save(
-                  settings.copyWith(hapticsEnabled: value),
-                ),
+                onChanged: (value) =>
+                    notifier.save(settings.copyWith(hapticsEnabled: value)),
               ),
               const Divider(height: 1, color: AppColors.outline),
               SwitchListTile(
@@ -65,9 +64,8 @@ class SettingsScreen extends ConsumerWidget {
                 title: const Text('Countdown'),
                 subtitle: const Text('3-2-1-GO before a race starts'),
                 value: settings.countdownEnabled,
-                onChanged: (value) => notifier.save(
-                  settings.copyWith(countdownEnabled: value),
-                ),
+                onChanged: (value) =>
+                    notifier.save(settings.copyWith(countdownEnabled: value)),
               ),
             ],
           ),
@@ -88,14 +86,12 @@ class SettingsScreen extends ConsumerWidget {
                     SegmentedButton<AppThemeMode>(
                       segments: [
                         for (final mode in AppThemeMode.values)
-                          ButtonSegment(
-                            value: mode,
-                            label: Text(mode.label),
-                          ),
+                          ButtonSegment(value: mode, label: Text(mode.label)),
                       ],
                       selected: {settings.themeMode},
-                      onSelectionChanged: (selection) =>
-                          notifier.save(settings.copyWith(themeMode: selection.first)),
+                      onSelectionChanged: (selection) => notifier.save(
+                        settings.copyWith(themeMode: selection.first),
+                      ),
                     ),
                   ],
                 ),
@@ -114,14 +110,12 @@ class SettingsScreen extends ConsumerWidget {
                       key: const ValueKey('units-segment'),
                       segments: [
                         for (final units in Units.values)
-                          ButtonSegment(
-                            value: units,
-                            label: Text(units.label),
-                          ),
+                          ButtonSegment(value: units, label: Text(units.label)),
                       ],
                       selected: {settings.units},
-                      onSelectionChanged: (selection) =>
-                          notifier.save(settings.copyWith(units: selection.first)),
+                      onSelectionChanged: (selection) => notifier.save(
+                        settings.copyWith(units: selection.first),
+                      ),
                     ),
                   ],
                 ),
@@ -186,12 +180,8 @@ class SettingsScreen extends ConsumerWidget {
                 title: const Text('Report an issue'),
                 subtitle: const Text('Bugs and feature requests'),
                 trailing: const Icon(Icons.open_in_new),
-                onTap: () => _openLink(
-                  context,
-                  ref,
-                  kIssuesUrl,
-                  'the issue tracker',
-                ),
+                onTap: () =>
+                    _openLink(context, ref, kIssuesUrl, 'the issue tracker'),
               ),
               const Divider(height: 1, color: AppColors.outline),
               ListTile(
@@ -222,7 +212,9 @@ class SettingsScreen extends ConsumerWidget {
     final gpx = buildGpx(routes, activities);
     final messenger = ScaffoldMessenger.of(context);
     if (gpx == null) {
-      messenger.showSnackBar(const SnackBar(content: Text('Nothing to export yet.')));
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Nothing to export yet.')),
+      );
       return;
     }
     final fileName = gpxFileName(DateTime.now());
@@ -338,7 +330,6 @@ class SettingsScreen extends ConsumerWidget {
       final elapsed = duration == null || duration.inMilliseconds <= 0
           ? null
           : Elapsed.seconds(duration.inMilliseconds / 1000.0);
-      final distance = Distance.meters(engine.polylineMeters(geometry));
       final trackPoints = [
         for (var i = 0; i < geometry.length; i++)
           engine.TrackPoint(
@@ -346,6 +337,8 @@ class SettingsScreen extends ConsumerWidget {
             timestamp: timestamps[i] ?? startedAt,
           ),
       ];
+      final info = await engineService.routeInfo(points: trackPoints);
+      final distance = Distance.meters(info.lengthMeters);
       // Try to find an existing (or already-imported) route that is the same
       // course, so repeated recordings collapse onto one route instead of
       // spawning duplicates.

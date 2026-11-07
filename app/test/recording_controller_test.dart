@@ -137,11 +137,13 @@ void main() {
     fakeAsync((async) {
       // Recognition matches the finished free-run track against the user's
       // catalog, so seed River Loop into the repository.
-      final c = ProviderContainer(overrides: [
-        persistenceStoreProvider.overrideWithValue(
-          seededStore(routes: [riverLoopRoute]),
-        ),
-      ]);
+      final c = ProviderContainer(
+        overrides: [
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: [riverLoopRoute]),
+          ),
+        ],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
       final notifier = c.read(recordingControllerProvider.notifier);

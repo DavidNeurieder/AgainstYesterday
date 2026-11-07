@@ -205,8 +205,11 @@ void main() {
             prev.position.latitude == next.position.latitude &&
             prev.position.longitude == next.position.longitude;
         final sameStamp = prev.timestamp == next.timestamp;
-        expect(samePoint && sameStamp, isFalse,
-            reason: 'track has a duplicated sample at index $i');
+        expect(
+          samePoint && sameStamp,
+          isFalse,
+          reason: 'track has a duplicated sample at index $i',
+        );
       }
     });
   });
