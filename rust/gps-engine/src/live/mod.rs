@@ -277,9 +277,16 @@ impl LiveRecorder {
     fn push_route(&mut self, fix: GpsFix) {
         let route = self.route.as_ref().expect("route mode");
         let projection = route.project(fix.coordinate);
-        let covered = projection.distance_along.meters();
+        let mut covered = projection.distance_along.meters();
+        let len = route.length().meters();
+        if len - covered <= 1.0 {
+            covered = len;
+        }
         if covered > self.route_coverage {
-            self.route_coverage = covered.min(route.length().meters());
+            self.route_coverage = covered.min(len);
+        }
+        if len - self.route_coverage <= 1.0 && self.route_coverage > 0.0 {
+            self.route_coverage = len;
         }
 
         if let (Some(prev_coord), Some(prev_time)) = (self.route_last_ground, self.route_last_time)
