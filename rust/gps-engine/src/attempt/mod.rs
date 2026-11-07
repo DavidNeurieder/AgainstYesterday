@@ -20,8 +20,10 @@
 use thiserror::Error;
 
 use crate::Track;
+use crate::geo::distance as geo_distance;
 use crate::route::Route;
-use crate::units::{Distance, Duration};
+use crate::track::MovingConfig;
+use crate::units::{Distance, Duration, Speed};
 
 pub mod performance;
 
@@ -67,6 +69,38 @@ pub struct Attempt {
     pub distance: Distance,
 }
 
+/// Which time axis an [`Attempt`] is built on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AttemptAxis {
+    /// Wall-clock elapsed time since the first track point (the legacy axis).
+    #[default]
+    Clock,
+    /// Moving time: gaps count only when the segment shows real motion
+    /// (see [`MovingAxisConfig`]). Pauses and long stops do not advance the
+    /// axis, so the ghost compares performance at the same distance without a
+    /// break inflating the deficit.
+    Moving,
+}
+
+/// Rules for the [`AttemptAxis::Moving`] axis.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MovingAxisConfig {
+    /// Gaps whose average speed is below this are treated as stops.
+    pub min_speed: Speed,
+    /// A gap must last at least this long before it can count as a stop.
+    pub min_stop_duration: Duration,
+}
+
+impl Default for MovingAxisConfig {
+    fn default() -> Self {
+        let moving = MovingConfig::default();
+        MovingAxisConfig {
+            min_speed: moving.min_speed,
+            min_stop_duration: moving.min_stop_duration,
+        }
+    }
+}
+
 impl Attempt {
     /// Builds an attempt from an already-monotonic sample series.
     ///
@@ -99,11 +133,29 @@ impl Attempt {
         })
     }
 
+    /// Reduces a `(track, route)` recording to the route axis on the
+    /// wall-clock axis (backward-compatible default).
+    pub fn from_track(track: &Track, route: &Route) -> Self {
+        Self::from_track_with(
+            track,
+            route,
+            AttemptAxis::Clock,
+            &MovingAxisConfig::default(),
+        )
+    }
+
     /// Reduces a `(track, route)` recording to the route axis.
     ///
-    /// Each point is projected onto the route; coverage is the maximum route
-    /// distance reached so far at that timestamp. Clamped to the route bounds.
-    pub fn from_track(track: &Track, route: &Route) -> Self {
+    /// Coverage is the maximum route distance reached so far (never rolls
+    /// back). The sample `elapsed` follows `axis`: [`AttemptAxis::Clock`] is
+    /// wall time since the start; [`AttemptAxis::Moving`] accumulates only
+    /// moving segments so explicit pauses and long stops do not advance it.
+    pub fn from_track_with(
+        track: &Track,
+        route: &Route,
+        axis: AttemptAxis,
+        moving: &MovingAxisConfig,
+    ) -> Self {
         let t0_ms = track
             .start()
             .expect("track non-empty")
@@ -112,22 +164,40 @@ impl Attempt {
         let route_len = route.length().meters();
 
         let mut coverage = 0.0f64;
-        let samples: Vec<AttemptSample> = track
-            .points()
-            .iter()
-            .map(|p| {
-                let along = route
-                    .project(p.coordinate())
-                    .distance_along
-                    .meters()
-                    .clamp(0.0, route_len);
-                coverage = coverage.max(along);
-                AttemptSample {
-                    distance: Distance::from_meters(coverage),
-                    elapsed: Duration::from_millis((p.timestamp().unix_ms() - t0_ms) as f64),
+        let mut moving_elapsed = 0.0f64;
+        let mut prev = None;
+        let mut samples: Vec<AttemptSample> = Vec::with_capacity(track.len());
+
+        for p in track.points() {
+            let along = route
+                .project(p.coordinate())
+                .distance_along
+                .meters()
+                .clamp(0.0, route_len);
+            coverage = coverage.max(along);
+
+            let elapsed = match axis {
+                AttemptAxis::Clock => {
+                    Duration::from_millis((p.timestamp().unix_ms() - t0_ms) as f64)
                 }
-            })
-            .collect();
+                AttemptAxis::Moving => {
+                    if let Some((prev_point, _prev_cov)) = prev {
+                        let prev_p: &crate::TrackPoint = prev_point;
+                        let dt = p.timestamp().elapsed_since(prev_p.timestamp()).as_secs();
+                        if dt > 0.0 {
+                            moving_elapsed += moving_segment_dt(prev_p, p, dt, moving);
+                        }
+                    }
+                    Duration::from_secs(moving_elapsed)
+                }
+            };
+
+            samples.push(AttemptSample {
+                distance: Distance::from_meters(coverage),
+                elapsed,
+            });
+            prev = Some((p, coverage));
+        }
 
         Self::from_samples(samples).expect("from_track produces a monotonic coverage curve")
     }
@@ -209,6 +279,27 @@ impl Attempt {
         Some(Distance::from_meters(
             a.distance.meters() + fraction * (b.distance.meters() - a.distance.meters()),
         ))
+    }
+}
+
+/// Moving time contributed by one segment, or `0.0` when it is a stop.
+fn moving_segment_dt(
+    a: &crate::TrackPoint,
+    b: &crate::TrackPoint,
+    dt: f64,
+    config: &MovingAxisConfig,
+) -> f64 {
+    if dt <= 0.0 {
+        return 0.0;
+    }
+    if dt < config.min_stop_duration.as_secs() {
+        return dt;
+    }
+    let speed = geo_distance(a.coordinate(), b.coordinate()).meters() / dt;
+    if speed >= config.min_speed.mps() {
+        dt
+    } else {
+        0.0
     }
 }
 
@@ -427,6 +518,56 @@ mod tests {
         assert!(
             (halfway - 300.0).abs() < 1e-9,
             "linear midpoint should be 300 s, got {halfway}"
+        );
+    }
+
+    #[test]
+    fn moving_axis_excludes_pauses() {
+        // 300 m in 60 s, a 60 s stop (no ground), then 700 m in 140 s.
+        let route = straight_route();
+        let mut points = vec![TrackPoint::new(
+            crate::units::Timestamp::from_unix_ms(0),
+            route.coordinate_at(Distance::from_meters(0.0)).unwrap(),
+        )];
+        points.push(TrackPoint::new(
+            crate::units::Timestamp::from_unix_ms(60_000),
+            route.coordinate_at(Distance::from_meters(300.0)).unwrap(),
+        ));
+        // Stop: same place 60 s later.
+        points.push(TrackPoint::new(
+            crate::units::Timestamp::from_unix_ms(120_000),
+            route.coordinate_at(Distance::from_meters(300.0)).unwrap(),
+        ));
+        points.push(TrackPoint::new(
+            crate::units::Timestamp::from_unix_ms(260_000),
+            route.coordinate_at(Distance::from_meters(1000.0)).unwrap(),
+        ));
+        let track = Track::new(points).unwrap();
+
+        let clock = Attempt::from_track(&track, &route);
+        assert!((clock.elapsed_time.as_secs() - 260.0).abs() < 1e-6);
+
+        let moving = Attempt::from_track_with(
+            &track,
+            &route,
+            AttemptAxis::Moving,
+            &MovingAxisConfig::default(),
+        );
+        // 60 s moving + 0 s stop + 140 s moving = 200 s.
+        assert!(
+            (moving.elapsed_time.as_secs() - 200.0).abs() < 1e-3,
+            "moving axis got {}",
+            moving.elapsed_time.as_secs()
+        );
+        // 300 m was reached at 60 s of moving time (not 120 s wall clock).
+        assert!(
+            (moving
+                .time_at(Distance::from_meters(300.0))
+                .unwrap()
+                .as_secs()
+                - 60.0)
+                .abs()
+                < 1e-3
         );
     }
 

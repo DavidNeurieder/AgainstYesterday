@@ -80,7 +80,7 @@ pub mod viz;
 pub mod units;
 
 pub use attempt::{
-    Attempt, AttemptError, AttemptSample,
+    Attempt, AttemptAxis, AttemptError, AttemptSample, MovingAxisConfig,
     performance::{
         ComparisonConfig, ComparisonPoint, PerformanceComparison, compare as compare_performances,
     },
