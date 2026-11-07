@@ -209,7 +209,6 @@ pub fn compare_segments(
     Ok(out)
 }
 
-
 // ---------------------------------------------------------------------------
 // Route-axis segmentation (fixed distance boundaries along a canonical route)
 // ---------------------------------------------------------------------------
@@ -283,8 +282,14 @@ pub fn route_segments(
         let complete = attempt.distance.meters() >= end - 1e-9;
 
         let duration_secs = if start < attempt.distance.meters() {
-            let t_start = attempt.time_at(Distance::from_meters(start)).map(|d| d.as_secs()).unwrap_or(0.0);
-            let t_end = attempt.time_at(Distance::from_meters(covered_end)).map(|d| d.as_secs()).unwrap_or(t_start);
+            let t_start = attempt
+                .time_at(Distance::from_meters(start))
+                .map(|d| d.as_secs())
+                .unwrap_or(0.0);
+            let t_end = attempt
+                .time_at(Distance::from_meters(covered_end))
+                .map(|d| d.as_secs())
+                .unwrap_or(t_start);
             (t_end - t_start).max(0.0)
         } else {
             0.0

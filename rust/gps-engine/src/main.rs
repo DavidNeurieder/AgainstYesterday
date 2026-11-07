@@ -666,7 +666,8 @@ fn cmd_segments(args: &[String]) -> CmdResult {
                 let pts = t.points();
                 let mut cum = 0.0f64;
                 for i in 1..pts.len() {
-                    cum += gps_engine::geo::distance(pts[i - 1].coordinate(), pts[i].coordinate()).meters();
+                    cum += gps_engine::geo::distance(pts[i - 1].coordinate(), pts[i].coordinate())
+                        .meters();
                 }
                 cum
             })

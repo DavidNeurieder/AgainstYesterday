@@ -29,8 +29,8 @@ use crate::attempt::{Attempt, AttemptSample};
 use crate::geo::Coordinate;
 use crate::ghost::Ghost;
 use crate::route::{MatchConfig, Route, compare, compare_either_direction};
-use crate::track::segments::compare_route_segments;
 use crate::synthetic::Rng;
+use crate::track::segments::compare_route_segments;
 use crate::track::{FilterConfig, MovingConfig, Track, TrackPoint};
 use crate::units::{Distance, Duration, Timestamp};
 
@@ -375,11 +375,6 @@ fn create_attempt(bytes: &[u8]) -> Result<Vec<u8>, String> {
     Ok(w.data)
 }
 
-/// `gps_ghost_state_at`
-///
-/// In: `[attempt] reference, [attempt] current, f64 distance_m`.
-/// Out: `f64 distance_m, f64 time_difference_s, u8 ahead`.
-
 /// `gps_compare_route_segments`
 ///
 /// In: `f64 route_distance_m, f64 segment_distance_m, u32 attempt_count,
@@ -402,8 +397,7 @@ fn compare_route_segments_impl(bytes: &[u8]) -> Result<Vec<u8>, String> {
             let elapsed = Duration::from_secs(rd.f64()?);
             samples.push(crate::attempt::AttemptSample { distance, elapsed });
         }
-        let attempt = crate::attempt::Attempt::from_samples(samples)
-            .map_err(|e| e.to_string())?;
+        let attempt = crate::attempt::Attempt::from_samples(samples).map_err(|e| e.to_string())?;
         attempts.push(attempt);
     }
     rd.done("compare_route_segments")?;
@@ -621,7 +615,13 @@ pub unsafe extern "C" fn gps_compare_route_segments(
     output: *mut *mut u8,
     output_len: *mut usize,
 ) -> c_int {
-    dispatch(input, input_len, output, output_len, compare_route_segments_impl)
+    dispatch(
+        input,
+        input_len,
+        output,
+        output_len,
+        compare_route_segments_impl,
+    )
 }
 #[unsafe(no_mangle)]
 /// Evaluates a ghost duel at a fixed route distance.
