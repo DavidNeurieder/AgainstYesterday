@@ -240,9 +240,9 @@ impl LiveRecorder {
     /// Creates a recorder. Pass a [`Route`] to follow a recognised course, or
     /// `None` for a free run.
     pub fn new(config: LiveConfig, route: Option<Route>) -> Self {
-        let matcher = route
-            .as_ref()
-            .map(|_| RouteMatcher::new(ContinuityConfig::default()));
+        let matcher = route.as_ref().map(|_| {
+            RouteMatcher::with_off_route(ContinuityConfig::default(), config.off_route_threshold)
+        });
         LiveRecorder {
             cursor: FilterCursor::new(config.cursor.clone()),
             config,
@@ -570,6 +570,28 @@ mod tests {
     }
 
     #[test]
+    fn route_pause_resume_advances_with_later_fix() {
+        let route = linear_route(&[(52.500_00, 13.400_00), (52.510_00, 13.400_00)]);
+        let mut rec = LiveRecorder::new(LiveConfig::default(), Some(route));
+        rec.push(fix(52.500_00, 13.400_00, 0));
+        assert_eq!(rec.distance().meters(), 0.0);
+
+        rec.pause();
+        // Ignored while paused.
+        rec.push(fix(52.504_00, 13.400_00, 10));
+        assert_eq!(rec.distance().meters(), 0.0);
+
+        rec.resume();
+        // A fix further along the route after resume must be accepted.
+        rec.push(fix(52.502_00, 13.400_00, 20));
+        assert!(
+            rec.distance().meters() > 100.0,
+            "got {}",
+            rec.distance().meters()
+        );
+    }
+
+    #[test]
     fn pause_excludes_window_and_reanchors() {
         let mut rec = free_run();
         rec.push(fix(52.500_00, 13.400_00, 0));
@@ -682,6 +704,51 @@ mod tests {
         let snap = rec.snapshot();
         assert!(snap.off_route.is_some(), "expected off-route, got {snap:?}");
         assert!(snap.off_route.unwrap().meters() > 30.0);
+    }
+
+    #[test]
+    fn off_route_detour_freezes_coverage_and_reacquires() {
+        let route = linear_route(&[(52.500_00, 13.400_00), (52.510_00, 13.400_00)]);
+        let mut rec = LiveRecorder::new(LiveConfig::default(), Some(route.clone()));
+
+        // Establish progress along the route at ~5.6 m/s (realistic).
+        for i in 0..=40 {
+            let lat = 52.500_00 + (i as f64) * 0.00005;
+            rec.push(fix(lat, 13.400_00, i));
+        }
+        let on_route_dist = rec.distance().meters();
+        assert!(
+            on_route_dist > 150.0,
+            "expected progress, got {on_route_dist}"
+        );
+
+        // Detour far off route (> 30 m lateral) for enough fixes to trigger
+        // hysteresis. Coverage must not advance from the detour's projection.
+        for i in 41..=50 {
+            let lat = 52.501_50 + ((i - 41) as f64) * 0.00003;
+            rec.push(fix(lat, 13.405_00, i)); // ~340 m east
+        }
+        let detour_dist = rec.distance().meters();
+        assert!(
+            detour_dist <= on_route_dist + 1.0,
+            "coverage advanced during off-route detour: {on_route_dist} -> {detour_dist}"
+        );
+        assert!(
+            rec.snapshot().off_route.is_some(),
+            "detour should be reported off-route"
+        );
+
+        // Rejoin the route further north with a stable sequence; coverage
+        // should recover (reacquire) rather than stay frozen forever.
+        for i in 51..=65 {
+            let lat = 52.504_00 + ((i - 51) as f64) * 0.00005;
+            rec.push(fix(lat, 13.400_00, i));
+        }
+        let recovered = rec.distance().meters();
+        assert!(
+            recovered > detour_dist + 50.0,
+            "coverage did not reacquire after rejoining: detour {detour_dist}, recovered {recovered}"
+        );
     }
 
     /// A route that traces the same loop twice. The second lap is

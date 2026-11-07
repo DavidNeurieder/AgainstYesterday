@@ -461,72 +461,143 @@ impl MatchConfidence {
     }
 }
 
-/// The outcome of one [`RouteMatcher`] update, extending a
-/// [`ContinuousProjection`] with scoring confidence.
+/// Live route-matching state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchStatus {
+    /// Gathering initial evidence before committing to the route.
+    Initializing,
+    /// Confidently matched; progress advances normally.
+    Matched,
+    /// Ambiguous or degraded evidence; last reliable progress is preserved.
+    Uncertain,
+    /// Sustained deviation from the route; progress does not advance.
+    OffRoute,
+    /// Plausible re-entry evidence seen while off route; awaiting stability.
+    Reacquiring,
+}
+
+/// The outcome of one [`RouteMatcher`] update.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MatchStep {
-    /// The accepted projection (monotone coverage, lateral, flags).
+    /// The projection. `distance` is the **reliable** (accepted) coverage:
+    /// it does not advance while uncertain or off route, so it is safe to
+    /// feed to ghost/PB comparisons. `raw`/`lateral_error` reflect the
+    /// current best match.
     pub projection: ContinuousProjection,
     /// Confidence in the selected candidate, separate from cost and GPS accuracy.
     pub confidence: MatchConfidence,
+    /// Current matching state.
+    pub status: MatchStatus,
+    /// Whether this step's progress was accepted as reliable coverage.
+    pub accepted: bool,
 }
+
+const OFF_ROUTE_ENTER_COUNT: u32 = 3;
+const OFF_ROUTE_EXIT_COUNT: u32 = 2;
+const UNCERTAIN_ENTER_CONFIDENCE: f64 = 0.35;
+const UNCERTAIN_EXIT_CONFIDENCE: f64 = 0.55;
+const REACQUIRE_STABLE_COUNT: u32 = 3;
+const REACQUIRE_AGREE_M: f64 = 20.0;
 
 /// Stateful, incremental continuity-aware route progress matcher.
 ///
-/// This is the single-fix analogue of [`Route::project_track_with_continuity`]:
-/// each observation is matched inside a window anchored on the last covered
-/// position, forward progress is bounded by `max_speed × Δt`, and coverage
-/// never decreases. Using the continuity window (rather than a global nearest
-/// projection) keeps progress on the correct branch of self-intersecting or
-/// overlapping geometry (figure-eights, repeated loops, out-and-backs).
+/// Matches observations inside a continuity window, scores candidates by
+/// distance/heading/progress/speed, and tracks a [`MatchStatus`] with
+/// hysteresis. Reliable progress (safe for ghost/PB comparisons) advances
+/// only when confidently matched; uncertain or off-route observations
+/// preserve the last reliable position and never feed untrusted progress to
+/// downstream consumers.
 #[derive(Debug, Clone)]
 pub struct RouteMatcher {
     config: ContinuityConfig,
-    covered: f64,
+    off_route_m: f64,
+    reliable_covered: f64,
     last_timestamp: Option<Timestamp>,
     last_bearing: Option<Bearing>,
+    status: MatchStatus,
+    off_route_count: u32,
+    on_route_count: u32,
+    uncertain_count: u32,
+    confident_count: u32,
+    reacq_progress: Option<f64>,
+    reacq_count: u32,
+    init_count: u32,
 }
 
 impl RouteMatcher {
     /// Creates a matcher that starts at the beginning of the route.
     pub fn new(config: ContinuityConfig) -> Self {
+        Self::with_off_route(config, Distance::from_meters(30.0))
+    }
+
+    /// Creates a matcher with an explicit off-route threshold.
+    pub fn with_off_route(config: ContinuityConfig, off_route: Distance) -> Self {
         Self {
             config,
-            covered: 0.0,
+            off_route_m: off_route.meters().max(0.0),
+            reliable_covered: 0.0,
             last_timestamp: None,
             last_bearing: None,
+            status: MatchStatus::Initializing,
+            off_route_count: 0,
+            on_route_count: 0,
+            uncertain_count: 0,
+            confident_count: 0,
+            reacq_progress: None,
+            reacq_count: 0,
+            init_count: 0,
         }
     }
 
-    /// Covered distance along the route so far (monotone).
+    /// Current matching status.
+    pub fn status(&self) -> MatchStatus {
+        self.status
+    }
+
+    /// Reliable covered distance along the route so far (monotone, never
+    /// advances on uncertain/off-route observations).
     pub fn covered(&self) -> Distance {
-        Distance::from_meters(self.covered)
+        Distance::from_meters(self.reliable_covered)
     }
 
     /// Resets progress to the start of the route.
     pub fn reset(&mut self) {
-        self.covered = 0.0;
+        self.reliable_covered = 0.0;
         self.last_timestamp = None;
         self.last_bearing = None;
+        self.status = MatchStatus::Initializing;
+        self.off_route_count = 0;
+        self.on_route_count = 0;
+        self.uncertain_count = 0;
+        self.confident_count = 0;
+        self.reacq_progress = None;
+        self.reacq_count = 0;
+        self.init_count = 0;
     }
 
     /// Seeds the matcher with already-covered progress (e.g. a resumed run).
     /// The next observation re-anchors the time window like a fresh start.
     pub fn seed(&mut self, covered: Distance) {
-        self.covered = covered.meters().clamp(0.0, f64::INFINITY);
+        self.reliable_covered = covered.meters().clamp(0.0, f64::INFINITY);
         self.last_timestamp = None;
         self.last_bearing = None;
+        self.status = MatchStatus::Initializing;
+        self.off_route_count = 0;
+        self.on_route_count = 0;
+        self.uncertain_count = 0;
+        self.confident_count = 0;
+        self.reacq_progress = None;
+        self.reacq_count = 0;
+        self.init_count = 0;
     }
 
-    /// Snaps monotone coverage to `covered` without resetting the time anchor.
-    /// Used for route-end completion when geometry is ambiguous at the seam.
+    /// Snaps monotone reliable coverage to `covered` without resetting the
+    /// time anchor (route-end completion when geometry is ambiguous at the seam).
     pub fn snap_to(&mut self, covered: Distance) {
-        self.covered = self.covered.max(covered.meters());
+        self.reliable_covered = self.reliable_covered.max(covered.meters());
     }
 
-    /// Matches one observation (coordinate + time only) and advances monotone
-    /// coverage. Equivalent to [`Self::update_observation`] with no sensor
-    /// quality or heading.
+    /// Matches one observation (coordinate + time only).
     pub fn update(
         &mut self,
         route: &Route,
@@ -546,8 +617,7 @@ impl RouteMatcher {
         .projection
     }
 
-    /// Matches a full observation with multi-signal scoring (distance,
-    /// heading, progress, speed) and returns the projection plus confidence.
+    /// Matches a full observation with scoring, state, and hysteresis.
     pub fn update_observation(&mut self, route: &Route, obs: &RouteObservation) -> MatchStep {
         let dt = match self.last_timestamp {
             Some(prev) => obs.timestamp.elapsed_since(prev).as_secs().max(0.0),
@@ -555,20 +625,37 @@ impl RouteMatcher {
         };
         self.last_timestamp = Some(obs.timestamp);
 
+        // Candidate generation: continuity window around reliable progress.
+        // When off-route/reacquiring, also consider global candidates to find
+        // a plausible re-entry (accepted only after a stable sequence).
         let (forward, backward) = self.adaptive_window(dt, obs.accuracy);
         let (lo, hi) = route
             .window_bounds(
-                Distance::from_meters(self.covered),
+                Distance::from_meters(self.reliable_covered),
                 Distance::from_meters(backward),
                 Distance::from_meters(forward),
             )
-            .unwrap_or((self.covered, self.covered));
+            .unwrap_or((self.reliable_covered, self.reliable_covered));
+        let mut candidates = route.projections_in_window(obs.coordinate, lo, hi);
 
-        let candidates = route.projections_in_window(obs.coordinate, lo, hi);
-        let (best, confidence) = self.score_candidates(route, obs, dt, &candidates);
+        let global_reacq = matches!(
+            self.status,
+            MatchStatus::OffRoute | MatchStatus::Reacquiring
+        );
+        if global_reacq {
+            let global = route.project(obs.coordinate);
+            let dominated = candidates
+                .iter()
+                .any(|c| (c.distance_along.meters() - global.distance_along.meters()).abs() < 1.0);
+            if !dominated {
+                candidates.push(global);
+            }
+        }
+
+        let (best, confidence) = self.score_candidates(route, obs, dt, &candidates, global_reacq);
 
         let (raw, lateral, reanchored) = match best {
-            Some((raw, lateral)) => (raw, lateral, false),
+            Some((raw, lateral)) => (raw, lateral, candidates.is_empty()),
             None => {
                 let global = route.project(obs.coordinate);
                 (
@@ -578,25 +665,153 @@ impl RouteMatcher {
                 )
             }
         };
-        let backtracker = raw + self.config.max_backtrack.meters() < self.covered;
-        self.covered = self.covered.max(raw);
+        let backtracker = raw + self.config.max_backtrack.meters() < self.reliable_covered;
 
-        // Track a stable bearing when moving, preferring the fix's report.
+        let (status, accepted) =
+            self.advance_state(lateral, confidence.value(), raw, route.length().meters());
+        self.status = status;
+
+        let reported_distance = if accepted {
+            self.reliable_covered = self.reliable_covered.max(raw);
+            self.reliable_covered
+        } else {
+            self.reliable_covered
+        };
+
         if let Some(b) = obs.bearing {
-            if obs.speed.map(|s| s.mps()).unwrap_or(0.0) >= MIN_HEADING_SPEED_MPS {
+            if obs.speed.map(|s| s.mps()).unwrap_or(0.0) >= MIN_HEADING_SPEED_MPS && accepted {
                 self.last_bearing = Some(b);
             }
         }
 
         MatchStep {
             projection: ContinuousProjection {
-                distance: Distance::from_meters(self.covered),
+                distance: Distance::from_meters(reported_distance),
                 raw: Distance::from_meters(raw),
                 lateral_error: Distance::from_meters(lateral),
                 backtracker,
                 reanchored,
             },
             confidence,
+            status,
+            accepted,
+        }
+    }
+
+    fn advance_state(
+        &mut self,
+        lateral: f64,
+        confidence: f64,
+        raw: f64,
+        route_len: f64,
+    ) -> (MatchStatus, bool) {
+        let on_route = lateral <= self.off_route_m;
+        let far_off_route = lateral > self.off_route_m * 1.5;
+        let good_conf = confidence >= UNCERTAIN_EXIT_CONFIDENCE;
+        let poor_conf = confidence < UNCERTAIN_ENTER_CONFIDENCE;
+
+        if on_route {
+            self.on_route_count = self.on_route_count.saturating_add(1);
+            self.off_route_count = 0;
+        } else {
+            self.off_route_count = self.off_route_count.saturating_add(1);
+            self.on_route_count = 0;
+        }
+        if good_conf {
+            self.confident_count = self.confident_count.saturating_add(1);
+            self.uncertain_count = 0;
+        } else if poor_conf {
+            self.uncertain_count = self.uncertain_count.saturating_add(1);
+            self.confident_count = 0;
+        }
+
+        match self.status {
+            MatchStatus::Initializing => {
+                self.init_count += 1;
+                if on_route && confidence >= 0.25 {
+                    self.confident_count = self.confident_count.max(1);
+                    if self.init_count >= 1 {
+                        return (MatchStatus::Matched, true);
+                    }
+                }
+                if far_off_route && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
+                    return (MatchStatus::OffRoute, false);
+                }
+                (
+                    MatchStatus::Initializing,
+                    on_route && raw >= 0.0 && raw <= route_len + 1.0,
+                )
+            }
+            MatchStatus::Matched => {
+                if (far_off_route || !on_route) && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
+                    self.reacq_progress = None;
+                    self.reacq_count = 0;
+                    return (MatchStatus::OffRoute, false);
+                }
+                if !on_route || (poor_conf && self.uncertain_count >= 2) {
+                    return (MatchStatus::Uncertain, false);
+                }
+                (MatchStatus::Matched, true)
+            }
+            MatchStatus::Uncertain => {
+                if far_off_route && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
+                    self.reacq_progress = None;
+                    self.reacq_count = 0;
+                    return (MatchStatus::OffRoute, false);
+                }
+                if on_route && good_conf && self.confident_count >= 2 {
+                    return (MatchStatus::Matched, true);
+                }
+                if !on_route && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
+                    self.reacq_progress = None;
+                    self.reacq_count = 0;
+                    return (MatchStatus::OffRoute, false);
+                }
+                (MatchStatus::Uncertain, false)
+            }
+            MatchStatus::OffRoute => {
+                if on_route && confidence >= 0.2 {
+                    self.reacq_progress = Some(raw);
+                    self.reacq_count = 1;
+                    return (MatchStatus::Reacquiring, false);
+                }
+                (MatchStatus::OffRoute, false)
+            }
+            MatchStatus::Reacquiring => {
+                if far_off_route && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
+                    self.reacq_progress = None;
+                    self.reacq_count = 0;
+                    return (MatchStatus::OffRoute, false);
+                }
+                if on_route && confidence >= 0.2 {
+                    let agrees = self
+                        .reacq_progress
+                        .map(|p| (raw - p).abs() <= REACQUIRE_AGREE_M)
+                        .unwrap_or(true);
+                    if agrees {
+                        self.reacq_count += 1;
+                        self.reacq_progress = Some(raw);
+                        if self.reacq_count >= REACQUIRE_STABLE_COUNT
+                            && self.on_route_count >= OFF_ROUTE_EXIT_COUNT
+                        {
+                            self.reliable_covered = self.reliable_covered.max(raw);
+                            self.reacq_progress = None;
+                            self.reacq_count = 0;
+                            return (MatchStatus::Matched, true);
+                        }
+                    } else {
+                        self.reacq_progress = Some(raw);
+                        self.reacq_count = 1;
+                    }
+                    return (MatchStatus::Reacquiring, false);
+                }
+                if self.off_route_count >= 2 {
+                    self.reacq_progress = None;
+                    self.reacq_count = 0;
+                    return (MatchStatus::OffRoute, false);
+                }
+                (MatchStatus::Reacquiring, false)
+            }
         }
     }
 
@@ -605,8 +820,6 @@ impl RouteMatcher {
             .map(|a| a.meters())
             .filter(|m| m.is_finite() && *m > 0.0)
             .unwrap_or(0.0);
-        // Keep the disambiguating window tight; only add a modest margin for
-        // uncertainty, never exceeding the configured caps by much.
         let margin = (accuracy_m * 0.5).clamp(0.0, 20.0);
 
         let forward = if dt.is_finite() {
@@ -614,7 +827,10 @@ impl RouteMatcher {
                 .min(self.config.forward_window.meters() + margin)
                 .max(0.0)
         } else {
-            self.config.forward_window.meters() + margin
+            // Re-anchoring (no time reference): allow a generous forward search
+            // from the reliable anchor so a legitimate position after
+            // pause/resume/init is not trapped by the per-step speed cap.
+            self.config.forward_window.meters().max(5000.0) + margin
         };
         let backward = self.config.max_backtrack.meters() + margin;
         (forward, backward)
@@ -626,6 +842,7 @@ impl RouteMatcher {
         obs: &RouteObservation,
         dt: f64,
         candidates: &[Projection],
+        global_reacq: bool,
     ) -> (Option<(f64, f64)>, MatchConfidence) {
         if candidates.is_empty() {
             return (None, MatchConfidence::NONE);
@@ -650,47 +867,37 @@ impl RouteMatcher {
                 .map(|s| s.mps())
                 .filter(|v| v.is_finite() && *v >= 0.0)
                 .unwrap_or((self.config.max_speed.mps() * 0.5).min(3.0));
-            Some(self.covered + v * dt)
+            Some(self.reliable_covered + v * dt)
         } else {
             None
         };
 
-        let mut scored: Vec<(usize, f64, f64, f64)> = Vec::with_capacity(candidates.len()); // (idx, cost, raw, lateral)
-        for (idx, c) in candidates.iter().enumerate() {
+        let mut scored: Vec<(f64, f64, f64)> = Vec::with_capacity(candidates.len());
+        for c in candidates.iter() {
             let raw = c.distance_along.meters();
             let lateral = c.lateral_error.meters();
             let mut cost = 0.0;
-            let mut terms = 0.0;
 
-            // Distance likelihood.
             cost += (lateral * lateral) / (2.0 * sigma_d * sigma_d);
-            terms += 1.0;
 
-            // Heading likelihood (only when moving and bearings known).
             if let (Some(rb), Some(sb)) = (runner_bearing, segment_bearing(route, c.segment_index))
             {
                 let diff = wrap_angle_rad(rb.as_radians() - sb.as_radians());
-                // Routes can be traversed in the drawn direction; 180° means
-                // opposite - penalize but don't forbid (handled softly). Use
-                // the smaller of forward/reverse alignment for progress sense?
-                // No: a fixed route has a defined direction; opposite travel is
-                // unusual. Penalize the angular difference directly.
                 cost += (diff * diff) / (2.0 * SIGMA_H_RAD * SIGMA_H_RAD);
-                terms += 1.0;
             }
 
-            // Progress likelihood (soft).
             if let Some(expected) = expected_progress {
                 let ep = (raw - expected).abs();
-                let sigma_p = SIGMA_P_BASE_M + sigma_d; // softer when uncertain
+                let sigma_p = if global_reacq {
+                    (SIGMA_P_BASE_M + sigma_d) * 3.0
+                } else {
+                    SIGMA_P_BASE_M + sigma_d
+                };
                 cost += (ep * ep) / (2.0 * sigma_p * sigma_p);
-                terms += 0.7; // soft weight
             }
 
-            // Speed consistency.
-            if dt.is_finite() && dt > 0.0 {
-                let implied = (raw - self.covered) / dt;
-                // Penalize implausibly fast forward jumps and large backward jumps.
+            if dt.is_finite() && dt > 0.0 && !global_reacq {
+                let implied = (raw - self.reliable_covered) / dt;
                 let max_v = self.config.max_speed.mps();
                 let ev = if implied > max_v * 1.2 {
                     implied - max_v
@@ -701,38 +908,34 @@ impl RouteMatcher {
                 };
                 if ev > 0.0 {
                     cost += (ev * ev) / (2.0 * SIGMA_V_MPS * SIGMA_V_MPS);
-                    terms += 0.5;
                 }
             }
 
-            // Continuity tie-breaker: when costs are nearly equal, prefer the
-            // forward candidate with lowest lateral error (the same robust
-            // choice as Stage 1). Encode as a tiny cost term.
-            let forward_bias = if raw >= self.covered {
-                lateral * 1e-4
-            } else {
-                (self.covered - raw) * 1e-4 + lateral * 1e-4 + 1e-3
-            };
-            cost += forward_bias;
-            let _ = terms;
+            if !global_reacq {
+                let forward_bias = if raw >= self.reliable_covered {
+                    lateral * 1e-4
+                } else {
+                    (self.reliable_covered - raw) * 1e-4 + lateral * 1e-4 + 1e-3
+                };
+                cost += forward_bias;
+            }
 
-            scored.push((idx, cost, raw, lateral));
+            scored.push((cost, raw, lateral));
         }
 
-        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).expect("finite costs"));
+        scored.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("finite costs"));
         let best = &scored[0];
         let second = scored.get(1);
 
-        // Confidence: combine fit quality, ambiguity margin, and accuracy.
-        let fit = (-best.1.min(50.0) / 4.0).exp(); // cost 0 -> 1, cost 8 -> ~0.14
+        let fit = (-best.0.min(50.0) / 4.0).exp();
         let margin = second
-            .map(|s| ((s.1 - best.1).max(0.0) / 2.0).min(1.0))
+            .map(|s| ((s.0 - best.0).max(0.0) / 2.0).min(1.0))
             .unwrap_or(1.0);
         let acc_conf = (1.0 - (sigma_d - SIGMA_D_MIN_M) / (SIGMA_D_MAX_M - SIGMA_D_MIN_M) * 0.5)
             .clamp(0.4, 1.0);
         let confidence = (fit * (0.4 + 0.6 * margin) * acc_conf).clamp(0.0, 1.0);
 
-        (Some((best.2, best.3)), MatchConfidence(confidence))
+        (Some((best.1, best.2)), MatchConfidence(confidence))
     }
 }
 

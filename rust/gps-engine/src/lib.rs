@@ -99,8 +99,8 @@ pub use gpx::{parse_gpx, read_gpx, read_gpx_file, write_gpx, write_gpx_file};
 pub use live::{LiveConfig, LiveGhost, LiveGhostSnapshot, LiveRecorder, LiveSnapshot};
 pub use route::{
     CanonicalError, CanonicalizeConfig, ContinuityConfig, ContinuousProjection, DiscoveredRoute,
-    MatchConfidence, MatchConfig, MatchScore, MatchStep, PreparedTrack, Route, RouteCatalog,
-    RouteMatcher, RouteObservation, RoutePoint, TrackAddition, canonicalize, compare,
+    MatchConfidence, MatchConfig, MatchScore, MatchStatus, MatchStep, PreparedTrack, Route,
+    RouteCatalog, RouteMatcher, RouteObservation, RoutePoint, TrackAddition, canonicalize, compare,
     compare_either_direction, compare_either_direction_prepared, compare_prepared, compare_with,
 };
 pub use track::{
