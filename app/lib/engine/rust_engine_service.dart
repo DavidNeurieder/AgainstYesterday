@@ -98,25 +98,29 @@ final class RustEngineService implements EngineService {
       final attemptCount = r.u32();
       final segments = <RouteSegment>[];
       for (var j = 0; j < attemptCount; j++) {
-        segments.add(RouteSegment(
+        segments.add(
+          RouteSegment(
+            index: index,
+            startDistanceM: start,
+            endDistanceM: end,
+            durationSeconds: r.f64(),
+            averageSpeedMps: r.f64(),
+            complete: r.u8() == 1,
+          ),
+        );
+      }
+      result.add(
+        RouteSegmentComparison(
           index: index,
           startDistanceM: start,
           endDistanceM: end,
-          durationSeconds: r.f64(),
-          averageSpeedMps: r.f64(),
-          complete: r.u8() == 1,
-        ));
-      }
-      result.add(RouteSegmentComparison(
-        index: index,
-        startDistanceM: start,
-        endDistanceM: end,
-        segments: segments,
-        minSpeedMps: r.f64(),
-        maxSpeedMps: r.f64(),
-        meanSpeedMps: r.f64(),
-        speedSpreadMps: r.f64(),
-      ));
+          segments: segments,
+          minSpeedMps: r.f64(),
+          maxSpeedMps: r.f64(),
+          meanSpeedMps: r.f64(),
+          speedSpreadMps: r.f64(),
+        ),
+      );
     }
     return result;
   }
@@ -127,12 +131,14 @@ final class RustEngineService implements EngineService {
     required String routeId,
     required List<TrackPoint> points,
     required List<GeoPoint> routeGeometry,
+    bool movingTime = false,
   }) async {
     final req = _W()
       ..str(activityId)
       ..str(routeId)
       ..points(points)
-      ..coordinates(routeGeometry);
+      ..coordinates(routeGeometry)
+      ..u8(movingTime ? 1 : 0);
     final r = _R(_ffi.createAttempt(req.takeBytes()));
     return Attempt(
       activityId: activityId,
@@ -140,6 +146,37 @@ final class RustEngineService implements EngineService {
       elapsed: Elapsed.seconds(r.f64()),
       samples: r.attemptSamples(),
     );
+  }
+
+  @override
+  Future<({double lengthMeters, double durationSeconds})> routeInfo({
+    required List<TrackPoint> points,
+  }) async {
+    final req = _W()..points(points);
+    final r = _R(_ffi.routeInfo(req.takeBytes()));
+    return (lengthMeters: r.f64(), durationSeconds: r.f64());
+  }
+
+  @override
+  Future<LiveRunHandle> createLiveRun({
+    List<GeoPoint>? route,
+    List<AttemptSample>? ghostSamples,
+  }) async {
+    final req = _W();
+    if (route != null) {
+      req.u8(1);
+      req.coordinates(route);
+    } else {
+      req.u8(0);
+    }
+    if (ghostSamples != null) {
+      req.u8(1);
+      req.attempt(ghostSamples);
+    } else {
+      req.u8(0);
+    }
+    final r = _R(_ffi.liveNew(req.takeBytes()));
+    return _RustLiveRun(_ffi, r.u64());
   }
 
   @override
@@ -200,6 +237,120 @@ final class RustEngineService implements EngineService {
 /// `FakeEngineService.riverLoop` so fake and Rust engines produce matching
 /// deterministic fixtures. This is the engine's test geometry — the app
 /// catalog starts empty and is user-built only.
+/// A stateful live recorder backed by the Rust engine's opaque handle.
+class _RustLiveRun implements LiveRunHandle {
+  _RustLiveRun(this._ffi, this._handle);
+
+  final GpsEngineFfi _ffi;
+  int _handle;
+  bool _disposed = false;
+
+  void _check() {
+    if (_disposed) {
+      throw StateError('LiveRunHandle used after dispose');
+    }
+  }
+
+  @override
+  void push(GpsFix fix) {
+    _check();
+    final req = _W()
+      ..u64(_handle)
+      ..fix(fix);
+    _ffi.livePush(req.takeBytes());
+  }
+
+  @override
+  void pause() {
+    _check();
+    _ffi.livePause((_W()..u64(_handle)).takeBytes());
+  }
+
+  @override
+  void resume() {
+    _check();
+    _ffi.liveResume((_W()..u64(_handle)).takeBytes());
+  }
+
+  @override
+  void finish() {
+    _check();
+    _ffi.liveFinish((_W()..u64(_handle)).takeBytes());
+  }
+
+  @override
+  void seed({required double distanceMeters, required double movingSeconds}) {
+    _check();
+    final req = _W()
+      ..u64(_handle)
+      ..f64(distanceMeters)
+      ..f64(movingSeconds);
+    _ffi.liveSeed(req.takeBytes());
+  }
+
+  @override
+  void setGhost(List<AttemptSample>? samples) {
+    _check();
+    final req = _W()..u64(_handle);
+    if (samples != null) {
+      req.u8(1);
+      req.attempt(samples);
+    } else {
+      req.u8(0);
+    }
+    _ffi.liveSetGhost(req.takeBytes());
+  }
+
+  @override
+  LiveEngineSnapshot snapshot() {
+    _check();
+    final r = _R(_ffi.liveSnapshot((_W()..u64(_handle)).takeBytes()));
+    final distanceMeters = r.f64();
+    final movingSeconds = r.f64();
+    final paceMps = r.f64();
+    final routeProgress = r.f64();
+    final hasOff = r.u8() == 1;
+    final off = r.f64();
+    final hasAcc = r.u8() == 1;
+    final acc = r.f64();
+    final hasPos = r.u8() == 1;
+    final lat = r.f64();
+    final lon = r.f64();
+    final hasGhost = r.u8() == 1;
+    final gDistance = r.f64();
+    final gDiff = r.f64();
+    final gAhead = r.u8() == 1;
+    final gSpatial = r.f64();
+    final gConf = r.f64();
+    return LiveEngineSnapshot(
+      distanceMeters: distanceMeters,
+      movingSeconds: movingSeconds,
+      paceMps: paceMps,
+      routeProgress: routeProgress,
+      offRouteMeters: hasOff ? off : null,
+      accuracyMeters: hasAcc ? acc : null,
+      position: hasPos ? GeoPoint(latitude: lat, longitude: lon) : null,
+      ghost: hasGhost
+          ? LiveGhostSnapshot(
+              distanceMeters: gDistance,
+              timeDifferenceSeconds: gDiff,
+              ahead: gAhead,
+              spatialGapMeters: gSpatial,
+              confidence: gConf,
+            )
+          : null,
+    );
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _ffi.liveFree(_handle);
+    _handle = 0;
+  }
+}
+
 final List<GeoPoint> _recordingGeometry = const [
   GeoPoint(latitude: 52.5050, longitude: 13.3600),
   GeoPoint(latitude: 52.5095, longitude: 13.3660),
@@ -226,6 +377,7 @@ class _W {
     return this;
   }
 
+  _W u64(int value) => _add(value, 8);
   _W u32(int value) => _add(value, 4);
   _W i64(int value) => _add(value, 8);
   _W f64(double value) {
@@ -251,6 +403,23 @@ class _W {
 
   void _addFromBytes(ByteData data) {
     _builder.add(data.buffer.asUint8List());
+  }
+
+  _W fix(GpsFix fix) {
+    f64(fix.latitude);
+    f64(fix.longitude);
+    i64(fix.timestamp.millisecondsSinceEpoch);
+    var mask = 0;
+    if (fix.accuracyMeters != null) mask |= 0x01;
+    if (fix.altitudeMeters != null) mask |= 0x02;
+    if (fix.speedMetersPerSecond != null) mask |= 0x04;
+    if (fix.bearingDegrees != null) mask |= 0x08;
+    u8(mask);
+    if (fix.accuracyMeters != null) f64(fix.accuracyMeters!);
+    if (fix.altitudeMeters != null) f64(fix.altitudeMeters!);
+    if (fix.speedMetersPerSecond != null) f64(fix.speedMetersPerSecond!);
+    if (fix.bearingDegrees != null) f64(fix.bearingDegrees!);
+    return this;
   }
 
   _W points(List<TrackPoint> points) {
@@ -309,26 +478,36 @@ class _R {
     return data[_pos++];
   }
 
+  int u64() => _rawI64(); // Dart int holds 64-bit on 64-bit platforms
   int u32() {
     _ensure(4);
-    final v = ByteData.sublistView(data, _pos, _pos + 4)
-        .getUint32(0, Endian.little);
+    final v = ByteData.sublistView(
+      data,
+      _pos,
+      _pos + 4,
+    ).getUint32(0, Endian.little);
     _pos += 4;
     return v;
   }
 
   int _rawI64() {
     _ensure(8);
-    final v = ByteData.sublistView(data, _pos, _pos + 8)
-        .getInt64(0, Endian.little);
+    final v = ByteData.sublistView(
+      data,
+      _pos,
+      _pos + 8,
+    ).getInt64(0, Endian.little);
     _pos += 8;
     return v;
   }
 
   double f64() {
     _ensure(8);
-    final v = ByteData.sublistView(data, _pos, _pos + 8)
-        .getFloat64(0, Endian.little);
+    final v = ByteData.sublistView(
+      data,
+      _pos,
+      _pos + 8,
+    ).getFloat64(0, Endian.little);
     _pos += 8;
     return v;
   }
@@ -342,11 +521,13 @@ class _R {
       final hasAlt = u8();
       final altitude = hasAlt == 1 ? f64() : null;
       final tsMs = _rawI64();
-      result.add(TrackPoint(
-        position: GeoPoint(latitude: latitude, longitude: longitude),
-        altitudeMeters: altitude,
-        timestamp: DateTime.fromMillisecondsSinceEpoch(tsMs, isUtc: true),
-      ));
+      result.add(
+        TrackPoint(
+          position: GeoPoint(latitude: latitude, longitude: longitude),
+          altitudeMeters: altitude,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(tsMs, isUtc: true),
+        ),
+      );
     }
     return result;
   }
@@ -355,10 +536,12 @@ class _R {
     final n = u32();
     final result = <AttemptSample>[];
     for (var i = 0; i < n; i++) {
-      result.add(AttemptSample(
-        distance: Distance.meters(f64()),
-        elapsed: Elapsed.seconds(f64()),
-      ));
+      result.add(
+        AttemptSample(
+          distance: Distance.meters(f64()),
+          elapsed: Elapsed.seconds(f64()),
+        ),
+      );
     }
     return result;
   }

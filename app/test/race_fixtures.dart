@@ -30,6 +30,7 @@ class LinearGhostEngine extends FakeEngineService {
     required String routeId,
     required List<TrackPoint> points,
     required List<GeoPoint> routeGeometry,
+    bool movingTime = false,
   }) async {
     final length = polylineMeters(routeGeometry);
     final samples = <AttemptSample>[
@@ -92,7 +93,8 @@ GpsScenario raceScenario({
   required double fraction,
   required double movingSeconds,
 }) {
-  final lat = raceLine.first.latitude +
+  final lat =
+      raceLine.first.latitude +
       (raceLine.last.latitude - raceLine.first.latitude) * fraction;
   return GpsScenario(
     name: 'race_${fraction}_$movingSeconds',
@@ -100,10 +102,7 @@ GpsScenario raceScenario({
       GpsSample(after: const Duration(seconds: 1), position: raceLine.first),
       GpsSample(
         after: Duration(milliseconds: (movingSeconds * 1000).round()),
-        position: GeoPoint(
-          latitude: lat,
-          longitude: raceLine.first.longitude,
-        ),
+        position: GeoPoint(latitude: lat, longitude: raceLine.first.longitude),
       ),
     ],
   );

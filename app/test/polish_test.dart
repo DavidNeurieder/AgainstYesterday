@@ -41,6 +41,7 @@ class _FlakyEngine extends FakeEngineService {
     required String routeId,
     required List<TrackPoint> points,
     required List<GeoPoint> routeGeometry,
+    bool movingTime = false,
   }) {
     if (failures > 0) {
       failures--;
@@ -51,6 +52,7 @@ class _FlakyEngine extends FakeEngineService {
       routeId: routeId,
       points: points,
       routeGeometry: routeGeometry,
+      movingTime: movingTime,
     );
   }
 }
@@ -96,9 +98,9 @@ void main() {
   test('engine failure surfaces as error and retry recovers', () {
     fakeAsync((async) async {
       final engine = _FlakyEngine(failures: 1);
-      final c = ProviderContainer(overrides: [
-        engineServiceProvider.overrideWithValue(engine),
-      ]);
+      final c = ProviderContainer(
+        overrides: [engineServiceProvider.overrideWithValue(engine)],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
 
@@ -119,9 +121,9 @@ void main() {
   test('retry is a no-op when the engine keeps failing', () {
     fakeAsync((async) async {
       final engine = _FlakyEngine(failures: 100);
-      final c = ProviderContainer(overrides: [
-        engineServiceProvider.overrideWithValue(engine),
-      ]);
+      final c = ProviderContainer(
+        overrides: [engineServiceProvider.overrideWithValue(engine)],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
 
@@ -142,16 +144,18 @@ void main() {
   // ---------------------------------------------------------------------------
   testWidgets('record flow error state recovers via retry', (tester) async {
     final engine = _FlakyEngine(failures: 1);
-    await tester.pumpWidget(ProviderScope(
-      overrides: [
-        engineServiceProvider.overrideWithValue(engine),
-        // Seed a route so the flow picks one to prepare a ghost with.
-        persistenceStoreProvider.overrideWithValue(
-          seededStore(routes: [riverLoopRoute]),
-        ),
-      ],
-      child: const AgainstYesterdayApp(),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          engineServiceProvider.overrideWithValue(engine),
+          // Seed a route so the flow picks one to prepare a ghost with.
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: [riverLoopRoute]),
+          ),
+        ],
+        child: const AgainstYesterdayApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
@@ -173,15 +177,18 @@ void main() {
   // M14: a device-GPS activation refusal surfaces the real reason and points
   // at the matching settings, instead of blaming the engine.
   // ---------------------------------------------------------------------------
-  testWidgets('GPS activation refusal names the problem and opens settings',
-      (tester) async {
+  testWidgets('GPS activation refusal names the problem and opens settings', (
+    tester,
+  ) async {
     final refusal = _RefusingGpsSource(
       'Location services are off. Turn on GPS, then try again.',
     );
-    await tester.pumpWidget(ProviderScope(
-      overrides: [deviceGpsProvider.overrideWithValue(refusal)],
-      child: const AgainstYesterdayApp(),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [deviceGpsProvider.overrideWithValue(refusal)],
+        child: const AgainstYesterdayApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(FilledButton, 'RECORD ROUTE'));
@@ -191,10 +198,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
 
     expect(find.text('GPS UNAVAILABLE'), findsOneWidget);
-    expect(
-      find.textContaining('Location services are off.'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Location services are off.'), findsOneWidget);
     expect(find.text('Open location settings'), findsOneWidget);
 
     await tester.tap(find.text('Open location settings'));
@@ -205,14 +209,18 @@ void main() {
   // ---------------------------------------------------------------------------
   // M14: empty states on Home
   // ---------------------------------------------------------------------------
-  testWidgets('home shows the empty state when the catalog is empty', (tester) async {
+  testWidgets('home shows the empty state when the catalog is empty', (
+    tester,
+  ) async {
     final store = MemoryPersistenceStore();
     await store.write('routes', '[]');
     await store.write('activities', '[]');
-    await tester.pumpWidget(ProviderScope(
-      overrides: [persistenceStoreProvider.overrideWithValue(store)],
-      child: const MaterialApp(home: HomeScreen()),
-    ));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [persistenceStoreProvider.overrideWithValue(store)],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Your first race awaits.'), findsOneWidget);
@@ -228,17 +236,19 @@ void main() {
   // ---------------------------------------------------------------------------
   testWidgets('PerformanceGap exposes a spoken gap label', (tester) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(const ProviderScope(
-      child: MaterialApp(
-        home: Scaffold(
-          body: PerformanceGap(
-            difference: Elapsed.seconds(12),
-            distance: Distance.meters(1200),
-            state: AheadBehind.ahead,
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: PerformanceGap(
+              difference: Elapsed.seconds(12),
+              distance: Distance.meters(1200),
+              state: AheadBehind.ahead,
+            ),
           ),
         ),
       ),
-    ));
+    );
     final semantics = tester.getSemantics(find.byType(PerformanceGap));
     expect(semantics.label, contains('Ahead of PB'));
     expect(semantics.label, contains('0:12'));
@@ -247,20 +257,22 @@ void main() {
 
   testWidgets('live map annotates YOU and ghost markers', (tester) async {
     final handle = tester.ensureSemantics();
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: SizedBox(
-          height: 300,
-          child: RouteMap(
-            geometry: FakeEngineService.riverLoop,
-            you: FakeEngineService.riverLoop.first,
-            youProgress: 0,
-            ghost: FakeEngineService.riverLoop[3],
-            name: 'River Loop',
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 300,
+            child: RouteMap(
+              geometry: FakeEngineService.riverLoop,
+              you: FakeEngineService.riverLoop.first,
+              youProgress: 0,
+              ghost: FakeEngineService.riverLoop[3],
+              name: 'River Loop',
+            ),
           ),
         ),
       ),
-    ));
+    );
     await tester.pump();
     // Marker labels merge with the map's route-name label into one semantics
     // node, so match by pattern rather than exact label.

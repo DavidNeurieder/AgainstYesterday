@@ -37,6 +37,22 @@ abstract class EngineService {
     required String routeId,
     required List<TrackPoint> points,
     required List<GeoPoint> routeGeometry,
+    bool movingTime = false,
+  });
+
+  /// Raw geodesic length and duration of a point sequence, with no filtering.
+  Future<({double lengthMeters, double durationSeconds})> routeInfo({
+    required List<TrackPoint> points,
+  });
+
+  /// Creates a stateful live recorder owned by the engine.
+  ///
+  /// Pass [route] to follow a recognised course (coverage/progress/off-route
+  /// are computed against it) or `null` for a free run. [ghostSamples], when
+  /// present, are the reference PB attempt's `(distance, elapsed)` samples.
+  Future<LiveRunHandle> createLiveRun({
+    List<GeoPoint>? route,
+    List<AttemptSample>? ghostSamples,
   });
 
   /// Live ghost state at a given distance along the route.
@@ -60,6 +76,7 @@ abstract class EngineService {
     required double segmentDistanceMeters,
     required double routeDistanceMeters,
   });
+
   ///
   /// The ghost is built from a PB attempt walked at constant speed, so the
   /// engine can produce that timeline purely from geometry (no device GPS).

@@ -17,18 +17,15 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 
-typedef _NativeFn = Int32 Function(
-  Pointer<Uint8>,
-  Uint64,
-  Pointer<Pointer<Uint8>>,
-  Pointer<Uint64>,
-);
-typedef _DartFn = int Function(
-  Pointer<Uint8>,
-  int,
-  Pointer<Pointer<Uint8>>,
-  Pointer<Uint64>,
-);
+typedef _NativeFn =
+    Int32 Function(
+      Pointer<Uint8>,
+      Uint64,
+      Pointer<Pointer<Uint8>>,
+      Pointer<Uint64>,
+    );
+typedef _DartFn =
+    int Function(Pointer<Uint8>, int, Pointer<Pointer<Uint8>>, Pointer<Uint64>);
 
 /// Error thrown when the Rust engine reports a nonzero status.
 class GpsEngineException implements Exception {
@@ -56,17 +53,36 @@ final class GpsEngineFfi {
   late final _DartFn _createAttempt = _bind('gps_create_attempt');
   late final _DartFn _ghostStateAt = _bind('gps_ghost_state_at');
   late final _DartFn _liveGhostGap = _bind('gps_live_ghost_gap');
-  late final _DartFn _compareRouteSegments = _bind('gps_compare_route_segments');
+  late final _DartFn _compareRouteSegments = _bind(
+    'gps_compare_route_segments',
+  );
   late final _DartFn _generateRecording = _bind('gps_generate_recording');
-  late final void Function(Pointer<Uint8>) _free =
-      _lib.lookupFunction<Void Function(Pointer<Uint8>), void Function(Pointer<Uint8>)>(
-          'gps_free');
-  late final Pointer<Utf8> Function() _version =
-      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-          'gps_capi_version');
-  late final Pointer<Utf8> Function() _lastError =
-      _lib.lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
-          'gps_last_error');
+  late final _DartFn _routeInfo = _bind('gps_route_info');
+  late final _DartFn _liveNew = _bind('gps_live_new');
+  late final _DartFn _livePush = _bind('gps_live_push');
+  late final _DartFn _livePause = _bind('gps_live_pause');
+  late final _DartFn _liveResume = _bind('gps_live_resume');
+  late final _DartFn _liveFinish = _bind('gps_live_finish');
+  late final _DartFn _liveSeed = _bind('gps_live_seed');
+  late final _DartFn _liveSetGhost = _bind('gps_live_set_ghost');
+  late final _DartFn _liveSnapshot = _bind('gps_live_snapshot');
+  late final void Function(int) _liveFree = _lib
+      .lookupFunction<Void Function(Uint64), void Function(int)>(
+        'gps_live_free',
+      );
+  late final void Function(Pointer<Uint8>) _free = _lib
+      .lookupFunction<
+        Void Function(Pointer<Uint8>),
+        void Function(Pointer<Uint8>)
+      >('gps_free');
+  late final Pointer<Utf8> Function() _version = _lib
+      .lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+        'gps_capi_version',
+      );
+  late final Pointer<Utf8> Function() _lastError = _lib
+      .lookupFunction<Pointer<Utf8> Function(), Pointer<Utf8> Function()>(
+        'gps_last_error',
+      );
 
   _DartFn _bind(String name) => _lib.lookupFunction<_NativeFn, _DartFn>(name);
 
@@ -88,6 +104,25 @@ final class GpsEngineFfi {
       _invoke(_liveGhostGap, request, 'live_ghost_gap');
   Uint8List compareRouteSegments(Uint8List request) =>
       _invoke(_compareRouteSegments, request, 'compare_route_segments');
+  Uint8List routeInfo(Uint8List request) =>
+      _invoke(_routeInfo, request, 'route_info');
+  Uint8List liveNew(Uint8List request) =>
+      _invoke(_liveNew, request, 'live_new');
+  Uint8List livePush(Uint8List request) =>
+      _invoke(_livePush, request, 'live_push');
+  Uint8List livePause(Uint8List request) =>
+      _invoke(_livePause, request, 'live_pause');
+  Uint8List liveResume(Uint8List request) =>
+      _invoke(_liveResume, request, 'live_resume');
+  Uint8List liveFinish(Uint8List request) =>
+      _invoke(_liveFinish, request, 'live_finish');
+  Uint8List liveSeed(Uint8List request) =>
+      _invoke(_liveSeed, request, 'live_seed');
+  Uint8List liveSetGhost(Uint8List request) =>
+      _invoke(_liveSetGhost, request, 'live_set_ghost');
+  Uint8List liveSnapshot(Uint8List request) =>
+      _invoke(_liveSnapshot, request, 'live_snapshot');
+  void liveFree(int handle) => _liveFree(handle);
   Uint8List generateRecording(Uint8List request) =>
       _invoke(_generateRecording, request, 'generate_recording');
 

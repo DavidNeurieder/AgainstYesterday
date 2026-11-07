@@ -79,16 +79,18 @@ class FakeEngineService implements EngineService {
     final elapsed = Elapsed.seconds(
       points.isEmpty
           ? 0
-          : points.last.timestamp.difference(points.first.timestamp).inSeconds
-              .toDouble(),
+          : points.last.timestamp
+                .difference(points.first.timestamp)
+                .inSeconds
+                .toDouble(),
     );
     return ProcessedTrack(
       id: id,
       inputPoints: points.length,
       outputPoints: resampled.length,
-      originalDistance: Distance.meters(polylineMeters(
-        points.map((p) => p.position).toList(growable: false),
-      )),
+      originalDistance: Distance.meters(
+        polylineMeters(points.map((p) => p.position).toList(growable: false)),
+      ),
       processedDistance: Distance.meters(polylineMeters(resampled)),
       duration: elapsed,
       movingTime: elapsed,
@@ -124,11 +126,13 @@ class FakeEngineService implements EngineService {
     final score = MatchScore(
       startDistance: Distance.meters(startM),
       endDistance: Distance.meters(endM),
-      distanceRatio: polylineMeters(geometryA) /
+      distanceRatio:
+          polylineMeters(geometryA) /
           (polylineMeters(geometryB) <= 0 ? 1 : polylineMeters(geometryB)),
       spatialOverlap: nearFraction,
       directionSimilarity: nearFraction, // demo proxy
-      overallScore: 0.4 * nearFraction +
+      overallScore:
+          0.4 * nearFraction +
           0.25 * nearFraction +
           0.20 * _clamp01(1 - startM / 150) +
           0.15 * _clamp01(1 - endM / 150),
@@ -145,28 +149,35 @@ class FakeEngineService implements EngineService {
     required String routeId,
     required List<TrackPoint> points,
     required List<GeoPoint> routeGeometry,
+    bool movingTime = false,
   }) async {
     final cleaned = _dedupe(points);
     final route = _resample(routeGeometry, 25.0);
     final samples = <AttemptSample>[];
     var previousIndex = 0;
-    double lastElapsedSeconds = 0;
+    double elapsedSeconds = 0;
 
     for (var i = 1; i < route.length; i++) {
       final index = _nearestIndex(cleaned, route[i]);
       if (index == null || index < previousIndex) {
-        continue; // skip backtracking artifacts
+        continue;
+      }
+      if (movingTime) {
+        for (var j = math.max(1, previousIndex); j <= index; j++) {
+          elapsedSeconds += _movingDt(cleaned[j - 1], cleaned[j]);
+        }
+      } else {
+        elapsedSeconds =
+            cleaned[index].timestamp
+                .difference(cleaned.first.timestamp)
+                .inMilliseconds /
+            1000.0;
       }
       previousIndex = index;
-      lastElapsedSeconds = cleaned[index]
-              .timestamp
-              .difference(cleaned.first.timestamp)
-              .inMilliseconds /
-          1000.0;
       samples.add(
         AttemptSample(
           distance: Distance.meters(polylineMeters(route.sublist(0, i))),
-          elapsed: Elapsed.seconds(lastElapsedSeconds),
+          elapsed: Elapsed.seconds(elapsedSeconds),
         ),
       );
     }
@@ -174,9 +185,39 @@ class FakeEngineService implements EngineService {
     return Attempt(
       activityId: activityId,
       routeId: routeId,
-      elapsed: Elapsed.seconds(lastElapsedSeconds),
+      elapsed: Elapsed.seconds(elapsedSeconds),
       samples: samples,
     );
+  }
+
+  double _movingDt(TrackPoint a, TrackPoint b) {
+    final dt = b.timestamp.difference(a.timestamp).inMilliseconds / 1000.0;
+    if (dt <= 0) return 0;
+    if (dt < 5.0) return dt;
+    final speed = haversineMeters(a.position, b.position) / dt;
+    return speed >= 0.5 ? dt : 0;
+  }
+
+  @override
+  Future<({double lengthMeters, double durationSeconds})> routeInfo({
+    required List<TrackPoint> points,
+  }) async {
+    final coords = points.map((p) => p.position).toList(growable: false);
+    final duration = points.length < 2
+        ? 0.0
+        : points.last.timestamp
+                  .difference(points.first.timestamp)
+                  .inMilliseconds /
+              1000.0;
+    return (lengthMeters: polylineMeters(coords), durationSeconds: duration);
+  }
+
+  @override
+  Future<LiveRunHandle> createLiveRun({
+    List<GeoPoint>? route,
+    List<AttemptSample>? ghostSamples,
+  }) async {
+    return _FakeLiveRun(route: route, ghostSamples: ghostSamples);
   }
 
   @override
@@ -190,7 +231,9 @@ class FakeEngineService implements EngineService {
 
     final perAttempt = <List<RouteSegment>>[];
     for (final a in attempts) {
-      perAttempt.add(_routeSegments(a, segmentDistanceMeters, routeDistanceMeters));
+      perAttempt.add(
+        _routeSegments(a, segmentDistanceMeters, routeDistanceMeters),
+      );
     }
     final sectionCount = perAttempt.first.length;
     final result = <RouteSegmentComparison>[];
@@ -216,16 +259,18 @@ class FakeEngineService implements EngineService {
         minSpeed = 0;
         maxSpeed = 0;
       }
-      result.add(RouteSegmentComparison(
-        index: i,
-        startDistanceM: segs.first.startDistanceM,
-        endDistanceM: segs.first.endDistanceM,
-        segments: segs,
-        minSpeedMps: minSpeed,
-        maxSpeedMps: maxSpeed,
-        meanSpeedMps: count > 0 ? sum / count : 0,
-        speedSpreadMps: count > 0 ? (maxSpeed - minSpeed) : 0,
-      ));
+      result.add(
+        RouteSegmentComparison(
+          index: i,
+          startDistanceM: segs.first.startDistanceM,
+          endDistanceM: segs.first.endDistanceM,
+          segments: segs,
+          minSpeedMps: minSpeed,
+          maxSpeedMps: maxSpeed,
+          meanSpeedMps: count > 0 ? sum / count : 0,
+          speedSpreadMps: count > 0 ? (maxSpeed - minSpeed) : 0,
+        ),
+      );
     }
     return result;
   }
@@ -241,24 +286,36 @@ class FakeEngineService implements EngineService {
       final start = i * segmentDistance;
       final end = ((i + 1) * segmentDistance).clamp(0.0, routeDistance);
       if (start >= routeDistance) break;
-      final coveredEnd = end.clamp(0.0, attempt.samples.isEmpty ? 0.0 : attempt.samples.last.distance.meters);
-      final complete = (attempt.samples.isEmpty ? 0.0 : attempt.samples.last.distance.meters) >= end - 1e-9;
+      final coveredEnd = end.clamp(
+        0.0,
+        attempt.samples.isEmpty ? 0.0 : attempt.samples.last.distance.meters,
+      );
+      final complete =
+          (attempt.samples.isEmpty
+              ? 0.0
+              : attempt.samples.last.distance.meters) >=
+          end - 1e-9;
       double duration = 0;
-      if (start < (attempt.samples.isEmpty ? 0.0 : attempt.samples.last.distance.meters)) {
+      if (start <
+          (attempt.samples.isEmpty
+              ? 0.0
+              : attempt.samples.last.distance.meters)) {
         final tStart = _timeAt(attempt.samples, start) ?? 0;
         final tEnd = _timeAt(attempt.samples, coveredEnd) ?? tStart;
         duration = (tEnd - tStart).clamp(0, double.infinity);
       }
       final covered = (coveredEnd - start).clamp(0.0, double.infinity);
       final speed = duration > 0 ? covered / duration : 0.0;
-      out.add(RouteSegment(
-        index: i,
-        startDistanceM: start,
-        endDistanceM: end,
-        durationSeconds: duration,
-        averageSpeedMps: speed,
-        complete: complete,
-      ));
+      out.add(
+        RouteSegment(
+          index: i,
+          startDistanceM: start,
+          endDistanceM: end,
+          durationSeconds: duration,
+          averageSpeedMps: speed,
+          complete: complete,
+        ),
+      );
     }
     return out;
   }
@@ -279,10 +336,14 @@ class FakeEngineService implements EngineService {
     }
     if (j < 0) return null;
     if (j == 0) {
-      if (samples[0].distance.meters == distance) return samples[0].elapsed.seconds;
+      if (samples[0].distance.meters == distance) {
+        return samples[0].elapsed.seconds;
+      }
       return null;
     }
-    if (samples[j].distance.meters == distance) return samples[j].elapsed.seconds;
+    if (samples[j].distance.meters == distance) {
+      return samples[j].elapsed.seconds;
+    }
     final a = samples[j - 1];
     final b = samples[j];
     final d0 = a.distance.meters;
@@ -307,8 +368,9 @@ class FakeEngineService implements EngineService {
         ahead: false,
       );
     }
-    final difference =
-        Elapsed.seconds(live.elapsed.seconds - reference.elapsed.seconds);
+    final difference = Elapsed.seconds(
+      live.elapsed.seconds - reference.elapsed.seconds,
+    );
     return GhostState(
       distance: distance,
       timeDifference: difference,
@@ -343,12 +405,16 @@ class FakeEngineService implements EngineService {
         final a = samples[i - 1];
         final b = samples[i];
         final span = b.distance.meters - a.distance.meters;
-        final fraction = span <= 0 ? 0.0 : (distanceM - a.distance.meters) / span;
-        return a.elapsed.seconds + (b.elapsed.seconds - a.elapsed.seconds) * fraction;
+        final fraction = span <= 0
+            ? 0.0
+            : (distanceM - a.distance.meters) / span;
+        return a.elapsed.seconds +
+            (b.elapsed.seconds - a.elapsed.seconds) * fraction;
       }
     }
     return samples.last.elapsed.seconds;
   }
+
   double _nearFraction(List<GeoPoint> geometry, List<GeoPoint> other) {
     if (geometry.isEmpty || other.length < 2) {
       return 0.0;
@@ -381,8 +447,8 @@ class FakeEngineService implements EngineService {
     final t = lenSq == 0
         ? 0.0
         : (((p.latitude - a.latitude) * dx + (p.longitude - a.longitude) * dy) /
-                lenSq)
-            .clamp(0.0, 1.0);
+                  lenSq)
+              .clamp(0.0, 1.0);
     final projection = GeoPoint(
       latitude: a.latitude + t * dx,
       longitude: a.longitude + t * dy,
@@ -446,9 +512,11 @@ class FakeEngineService implements EngineService {
         if (t.isFinite && t >= 0.0 && t <= 1.0) {
           result.add(
             GeoPoint(
-              latitude: points[i - 1].latitude +
+              latitude:
+                  points[i - 1].latitude +
                   (points[i].latitude - points[i - 1].latitude) * t,
-              longitude: points[i - 1].longitude +
+              longitude:
+                  points[i - 1].longitude +
                   (points[i].longitude - points[i - 1].longitude) * t,
             ),
           );
@@ -470,7 +538,8 @@ class FakeEngineService implements EngineService {
     final angle = _random.nextDouble() * 6.283185307179586;
     final radius = meters * _random.nextDouble();
     final dLat = (radius * math.cos(angle)) / 111_320.0;
-    final dLon = (radius * math.sin(angle)) /
+    final dLon =
+        (radius * math.sin(angle)) /
         (111_320.0 * math.cos(p.latitude * 3.141592653589793 / 180.0));
     return GeoPoint(latitude: p.latitude + dLat, longitude: p.longitude + dLon);
   }
@@ -488,5 +557,324 @@ class _SeededRandom {
     // Numerical Recipes LCG.
     _state = (_state * 1103515245 + 12345) & 0x7fffffff;
     return _state / 0x7fffffff;
+  }
+}
+
+class _FakeLiveRun implements LiveRunHandle {
+  _FakeLiveRun({List<GeoPoint>? route, List<AttemptSample>? ghostSamples})
+    : _route = route,
+      _routeLength = route == null ? 0.0 : polylineMeters(route),
+      _ghostSamples = ghostSamples;
+
+  static const double _maxAccuracy = 50.0;
+  static const double _maxSpeed = 500.0 / 3.6;
+  static const double _maxJump = 200.0;
+  static const double _maxTimeGap = 60.0;
+  static const double _motionFloor = 0.5;
+  static const double _offRouteThreshold = 30.0;
+
+  final List<GeoPoint>? _route;
+  final double _routeLength;
+  List<AttemptSample>? _ghostSamples;
+
+  // Free-run cursor (engine filter semantics).
+  GpsFix? _anchor;
+  GpsFix? _pending;
+  bool _pendingIsJump = false;
+  double _committedM = 0, _committedS = 0, _pendingM = 0, _pendingS = 0;
+  double _lastSpeedMps = 0;
+
+  // Route axis.
+  double _routeCoverage = 0, _routeMoving = 0;
+  GpsFix? _routePrev;
+  double _routePace = 0;
+
+  GpsFix? _lastFix;
+  bool _paused = false;
+  bool _disposed = false;
+
+  bool _accepts(GpsFix fix) {
+    if (fix.accuracyMeters != null && fix.accuracyMeters! > _maxAccuracy) {
+      return false;
+    }
+    if (fix.speedMetersPerSecond != null &&
+        fix.speedMetersPerSecond! > _maxSpeed) {
+      return false;
+    }
+    return true;
+  }
+
+  bool _isJump(GpsFix a, GpsFix b) {
+    final gap = _dist(a, b);
+    if (gap > _maxJump) return true;
+    final dt = _dt(a, b);
+    if (dt <= 0) return false;
+    if (dt > _maxTimeGap) return false;
+    return gap / dt > _maxSpeed;
+  }
+
+  double _dt(GpsFix a, GpsFix b) =>
+      b.timestamp.difference(a.timestamp).inMilliseconds / 1000.0;
+
+  double _dist(GpsFix a, GpsFix b) => haversineMeters(
+    GeoPoint(latitude: a.latitude, longitude: a.longitude),
+    GeoPoint(latitude: b.latitude, longitude: b.longitude),
+  );
+
+  ({double m, double s}) _segment(GpsFix a, GpsFix b) {
+    final dt = _dt(a, b);
+    if (dt <= 0) return (m: 0.0, s: 0.0);
+    final m = _dist(a, b);
+    if (m / dt < _motionFloor) return (m: 0.0, s: 0.0);
+    return (m: m, s: dt);
+  }
+
+  void _commit(GpsFix a, GpsFix b) {
+    final seg = _segment(a, b);
+    _committedM += seg.m;
+    _committedS += seg.s;
+    _lastSpeedMps = seg.s > 0 ? seg.m / seg.s : 0;
+  }
+
+  void _recomputePending() {
+    final pending = _pending;
+    if (pending == null || _pendingIsJump) {
+      _pendingM = 0;
+      _pendingS = 0;
+      return;
+    }
+    final seg = _segment(_anchor!, pending);
+    _pendingM = seg.m;
+    _pendingS = seg.s;
+    _lastSpeedMps = seg.s > 0 ? seg.m / seg.s : 0;
+  }
+
+  void _addCursor(GpsFix fix) {
+    if (!_accepts(fix)) return;
+    if (_anchor == null) {
+      _anchor = fix;
+      return;
+    }
+    final pending = _pending;
+    if (pending != null && !(_pendingIsJump && _isJump(pending, fix))) {
+      _commit(_anchor!, pending);
+      _anchor = pending;
+    }
+    final anchor = _anchor!;
+    _pending = fix;
+    _pendingIsJump = _isJump(anchor, fix);
+    _recomputePending();
+  }
+
+  void _clearChain() {
+    _anchor = null;
+    _pending = null;
+    _pendingIsJump = false;
+    _pendingM = 0;
+    _pendingS = 0;
+    _lastSpeedMps = 0;
+  }
+
+  void _resetChain() {
+    _committedM += _pendingM;
+    _committedS += _pendingS;
+    _clearChain();
+  }
+
+  @override
+  void push(GpsFix fix) {
+    if (_disposed || _paused) return;
+    if (!_accepts(fix)) return;
+    if (_route != null && _routeLength > 0) {
+      final pos = GeoPoint(latitude: fix.latitude, longitude: fix.longitude);
+      final proj = projectOnPolyline(_route, pos);
+      if (proj != null) {
+        final covered = proj.distanceM.clamp(0.0, _routeLength);
+        if (covered > _routeCoverage) _routeCoverage = covered;
+      }
+      final prev = _routePrev;
+      if (prev != null) {
+        final dt = _dt(prev, fix);
+        final ground = _dist(prev, fix);
+        if (dt > 0 && ground / dt >= _motionFloor) {
+          _routeMoving += dt;
+          _routePace = ground / dt;
+        }
+      }
+      _routePrev = fix;
+      _addCursor(fix);
+    } else {
+      _addCursor(fix);
+    }
+    _lastFix = fix;
+  }
+
+  @override
+  void pause() {
+    if (_disposed || _paused) return;
+    _paused = true;
+    _resetChain();
+    _routePrev = null;
+    _routePace = 0;
+  }
+
+  @override
+  void resume() {
+    _paused = false;
+  }
+
+  @override
+  void finish() {
+    if (_disposed) return;
+    if (_anchor != null && _pending != null) {
+      _commit(_anchor!, _pending!);
+    }
+    _pending = null;
+    _pendingIsJump = false;
+    _recomputePending();
+  }
+
+  @override
+  void seed({required double distanceMeters, required double movingSeconds}) {
+    final d = math.max(0.0, distanceMeters);
+    final m = math.max(0.0, movingSeconds);
+    _committedM = d;
+    _committedS = m;
+    _clearChain();
+    _routeCoverage = d;
+    _routeMoving = m;
+    _routePrev = null;
+    _routePace = 0;
+    _lastFix = null;
+    _paused = false;
+  }
+
+  @override
+  void setGhost(List<AttemptSample>? samples) {
+    _ghostSamples = samples;
+  }
+
+  double get _distance => _route != null
+      ? _routeCoverage.clamp(0.0, _routeLength)
+      : (_committedM + _pendingM);
+
+  double get _moving =>
+      _route != null ? _routeMoving : (_committedS + _pendingS);
+
+  double get _paceMps => _route != null ? _routePace : _lastSpeedMps;
+
+  @override
+  LiveEngineSnapshot snapshot() {
+    final dist = _distance;
+    final moving = _moving;
+    GeoPoint? pos;
+    if (_lastFix != null) {
+      pos = GeoPoint(
+        latitude: _lastFix!.latitude,
+        longitude: _lastFix!.longitude,
+      );
+    }
+    double? offRoute;
+    if (_route != null && pos != null) {
+      final proj = projectOnPolyline(_route, pos);
+      if (proj != null) {
+        final lateral = haversineMeters(pos, proj.point);
+        if (lateral >= _offRouteThreshold) offRoute = lateral;
+      }
+    }
+    final progress = _route != null && _routeLength > 0
+        ? (_routeCoverage / _routeLength).clamp(0.0, 1.0)
+        : 0.0;
+
+    LiveGhostSnapshot? ghost;
+    final samples = _ghostSamples;
+    if (samples != null && samples.isNotEmpty) {
+      final refTime = _referenceTimeAt(samples, dist);
+      final diff = moving - refTime;
+      final ghostDist = _distanceAt(samples, moving);
+      final spacing = _sampleSpacing(samples, dist);
+      final conf = (1.0 - (spacing - 10.0) / 50.0).clamp(0.0, 1.0);
+      ghost = LiveGhostSnapshot(
+        distanceMeters: dist,
+        timeDifferenceSeconds: diff,
+        ahead: diff < 0,
+        spatialGapMeters: ghostDist - dist,
+        confidence: conf,
+      );
+    }
+
+    return LiveEngineSnapshot(
+      distanceMeters: dist,
+      movingSeconds: moving,
+      paceMps: _paceMps,
+      routeProgress: progress,
+      offRouteMeters: offRoute,
+      accuracyMeters: _lastFix?.accuracyMeters,
+      position: pos,
+      ghost: ghost,
+    );
+  }
+
+  double _referenceTimeAt(List<AttemptSample> samples, double distanceM) {
+    if (distanceM <= 0) return 0;
+    if (distanceM <= samples.first.distance.meters) {
+      return samples.first.elapsed.seconds;
+    }
+    final last = samples.last;
+    if (distanceM >= last.distance.meters) return last.elapsed.seconds;
+    for (var i = 1; i < samples.length; i++) {
+      final b = samples[i];
+      if (distanceM <= b.distance.meters) {
+        if ((b.distance.meters - distanceM).abs() < 1e-9) {
+          return b.elapsed.seconds;
+        }
+        final a = samples[i - 1];
+        final span = b.distance.meters - a.distance.meters;
+        if (span <= 0) return b.elapsed.seconds;
+        final frac = (distanceM - a.distance.meters) / span;
+        return a.elapsed.seconds +
+            (b.elapsed.seconds - a.elapsed.seconds) * frac;
+      }
+    }
+    return last.elapsed.seconds;
+  }
+
+  double _distanceAt(List<AttemptSample> samples, double elapsed) {
+    if (elapsed <= 0) return samples.first.distance.meters;
+    final last = samples.last;
+    if (elapsed >= last.elapsed.seconds) return last.distance.meters;
+    var i = samples.lastIndexWhere((s) => s.elapsed.seconds <= elapsed);
+    if (i < 0) return samples.first.distance.meters;
+    if (i == samples.length - 1) return last.distance.meters;
+    final a = samples[i];
+    final b = samples[i + 1];
+    final span = b.elapsed.seconds - a.elapsed.seconds;
+    if (span <= 0) return a.distance.meters;
+    final frac = (elapsed - a.elapsed.seconds) / span;
+    return a.distance.meters + (b.distance.meters - a.distance.meters) * frac;
+  }
+
+  double _sampleSpacing(List<AttemptSample> samples, double distanceM) {
+    if (samples.length < 2) {
+      return samples.isEmpty ? 0 : samples.last.distance.meters;
+    }
+    if (distanceM <= 0) return samples.first.distance.meters;
+    final last = samples.last;
+    if (distanceM >= last.distance.meters) {
+      return last.distance.meters - samples[samples.length - 2].distance.meters;
+    }
+    for (var i = 0; i < samples.length; i++) {
+      if (samples[i].distance.meters >= distanceM) {
+        return i == 0
+            ? samples[0].distance.meters
+            : samples[i].distance.meters - samples[i - 1].distance.meters;
+      }
+    }
+    return 0;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
   }
 }

@@ -188,6 +188,68 @@ class RouteSegmentComparison {
   final double speedSpreadMps;
 }
 
+/// A point-in-time view of a live run, computed entirely by the engine.
+class LiveEngineSnapshot {
+  const LiveEngineSnapshot({
+    required this.distanceMeters,
+    required this.movingSeconds,
+    required this.paceMps,
+    required this.routeProgress,
+    this.offRouteMeters,
+    this.accuracyMeters,
+    this.position,
+    this.ghost,
+  });
+
+  final double distanceMeters;
+  final double movingSeconds;
+  final double paceMps;
+  final double routeProgress;
+  final double? offRouteMeters;
+  final double? accuracyMeters;
+  final GeoPoint? position;
+  final LiveGhostSnapshot? ghost;
+}
+
+/// Engine-computed ghost comparison for the current live progress.
+class LiveGhostSnapshot {
+  const LiveGhostSnapshot({
+    required this.distanceMeters,
+    required this.timeDifferenceSeconds,
+    required this.ahead,
+    required this.spatialGapMeters,
+    required this.confidence,
+  });
+
+  final double distanceMeters;
+  final double timeDifferenceSeconds;
+  final bool ahead;
+  final double spatialGapMeters;
+  final double confidence;
+
+  /// Where the ghost is along the route at the runner's current moving time.
+  double get ghostDistanceMeters => distanceMeters + spatialGapMeters;
+
+  GhostState toGhostState() => GhostState(
+        distance: Distance.meters(distanceMeters),
+        timeDifference: Elapsed.seconds(timeDifferenceSeconds),
+        ahead: ahead,
+      );
+}
+
+/// A stateful live recorder owned by the engine. The only place live-run
+/// calculations happen in production.
+abstract class LiveRunHandle {
+  void push(GpsFix fix);
+  void pause();
+  void resume();
+  void finish();
+  void seed({required double distanceMeters, required double movingSeconds});
+  void setGhost(List<AttemptSample>? samples);
+  LiveEngineSnapshot snapshot();
+  void dispose();
+}
+
 /// A reference attempt (the PB) to ghost against.
 class Ghost {
   const Ghost({required this.attemptId, required this.samples});
