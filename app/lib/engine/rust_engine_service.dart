@@ -322,6 +322,8 @@ class _RustLiveRun implements LiveRunHandle {
     final gAhead = r.u8() == 1;
     final gSpatial = r.f64();
     final gConf = r.f64();
+    final matchStatus = r.u8();
+    final matchConfidence = r.f64();
     return LiveEngineSnapshot(
       distanceMeters: distanceMeters,
       movingSeconds: movingSeconds,
@@ -339,6 +341,8 @@ class _RustLiveRun implements LiveRunHandle {
               confidence: gConf,
             )
           : null,
+      matchStatus: matchStatus,
+      matchConfidence: matchConfidence,
     );
   }
 

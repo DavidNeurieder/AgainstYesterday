@@ -807,6 +807,21 @@ class _FakeLiveRun implements LiveRunHandle {
       );
     }
 
+    var matchStatus = LiveMatchStatusCode.none;
+    var matchConfidence = 0.0;
+    if (_route != null) {
+      if (_lastFix == null) {
+        matchStatus = LiveMatchStatusCode.initializing;
+        matchConfidence = 0.0;
+      } else if (offRoute != null) {
+        matchStatus = LiveMatchStatusCode.offRoute;
+        matchConfidence = 0.3;
+      } else {
+        matchStatus = LiveMatchStatusCode.matched;
+        matchConfidence = 1.0;
+      }
+    }
+
     return LiveEngineSnapshot(
       distanceMeters: dist,
       movingSeconds: moving,
@@ -816,6 +831,8 @@ class _FakeLiveRun implements LiveRunHandle {
       accuracyMeters: _lastFix?.accuracyMeters,
       position: pos,
       ghost: ghost,
+      matchStatus: matchStatus,
+      matchConfidence: matchConfidence,
     );
   }
 

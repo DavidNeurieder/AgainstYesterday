@@ -189,6 +189,18 @@ class RouteSegmentComparison {
 }
 
 /// A point-in-time view of a live run, computed entirely by the engine.
+/// Route-matching state (engine-reported, additive).
+/// 0 none/free-run, 1 initializing, 2 matched, 3 uncertain, 4 off-route, 5 reacquiring.
+class LiveMatchStatusCode {
+  const LiveMatchStatusCode._();
+  static const int none = 0;
+  static const int initializing = 1;
+  static const int matched = 2;
+  static const int uncertain = 3;
+  static const int offRoute = 4;
+  static const int reacquiring = 5;
+}
+
 class LiveEngineSnapshot {
   const LiveEngineSnapshot({
     required this.distanceMeters,
@@ -199,6 +211,8 @@ class LiveEngineSnapshot {
     this.accuracyMeters,
     this.position,
     this.ghost,
+    this.matchStatus = LiveMatchStatusCode.none,
+    this.matchConfidence = 0.0,
   });
 
   final double distanceMeters;
@@ -209,6 +223,12 @@ class LiveEngineSnapshot {
   final double? accuracyMeters;
   final GeoPoint? position;
   final LiveGhostSnapshot? ghost;
+
+  /// Route-matching state (additive). See [LiveMatchStatusCode].
+  final int matchStatus;
+
+  /// Confidence in the route match, `0.0..=1.0` (additive).
+  final double matchConfidence;
 }
 
 /// Engine-computed ghost comparison for the current live progress.

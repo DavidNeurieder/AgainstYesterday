@@ -23,7 +23,7 @@
 use crate::geo::{Coordinate, distance};
 use crate::ghost::{GhostState, confidence_for_spacing};
 use crate::gps::GpsFix;
-use crate::route::{ContinuityConfig, Route, RouteMatcher, RouteObservation};
+use crate::route::{ContinuityConfig, MatchStatus, Route, RouteMatcher, RouteObservation};
 use crate::track::CursorConfig;
 use crate::track::filtering::{FilterCursor, fix_passes_sensor_checks};
 use crate::units::{Distance, Duration, Speed};
@@ -60,6 +60,24 @@ pub struct LiveGhostSnapshot {
     pub confidence: f64,
 }
 
+/// Route-matching state surfaced to the UI (additive).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum LiveMatchStatus {
+    /// Free-running (no route) or no status.
+    None = 0,
+    /// Gathering initial evidence.
+    Initializing = 1,
+    /// Confidently matched.
+    Matched = 2,
+    /// Ambiguous / degraded; reliable progress preserved.
+    Uncertain = 3,
+    /// Sustained deviation; progress frozen.
+    OffRoute = 4,
+    /// Seeking stable re-entry after an off-route deviation.
+    Reacquiring = 5,
+}
+
 /// A point-in-time view of a live run, cheap to copy out to the UI.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LiveSnapshot {
@@ -78,6 +96,10 @@ pub struct LiveSnapshot {
     pub accuracy: Option<Distance>,
     /// Latest position, when at least one fix has arrived.
     pub position: Option<Coordinate>,
+    /// Route-matching state (additive; `None` when free-running).
+    pub match_status: LiveMatchStatus,
+    /// Confidence in the current route match, `0.0..=1.0` (additive).
+    pub match_confidence: f64,
 }
 
 /// The ghost a live run races against.
@@ -231,6 +253,8 @@ pub struct LiveRecorder {
     /// Lateral error of the last accepted route match, used for off-route
     /// reporting (from the continuity match, not a global re-projection).
     last_lateral: Option<Distance>,
+    /// Confidence of the last route match, `0.0..=1.0`.
+    last_match_confidence: f64,
 
     last_fix: Option<GpsFix>,
     paused: bool,
@@ -255,6 +279,7 @@ impl LiveRecorder {
             route_pace: Speed::ZERO,
             matcher,
             last_lateral: None,
+            last_match_confidence: 0.0,
             last_fix: None,
             paused: false,
         }
@@ -320,6 +345,7 @@ impl LiveRecorder {
             }
         }
         self.last_lateral = Some(projection.lateral_error);
+        self.last_match_confidence = step.confidence.value();
 
         if let (Some(prev_coord), Some(prev_time)) = (self.route_last_ground, self.route_last_time)
         {
@@ -377,6 +403,7 @@ impl LiveRecorder {
         self.route_last_time = None;
         self.route_pace = Speed::ZERO;
         self.last_lateral = None;
+        self.last_match_confidence = 0.0;
         if let Some(matcher) = self.matcher.as_mut() {
             matcher.seed(Distance::from_meters(d));
         }
@@ -449,6 +476,15 @@ impl LiveRecorder {
             None
         };
 
+        let match_status = match self.matcher.as_ref().map(|m| m.status()) {
+            None => LiveMatchStatus::None,
+            Some(MatchStatus::Initializing) => LiveMatchStatus::Initializing,
+            Some(MatchStatus::Matched) => LiveMatchStatus::Matched,
+            Some(MatchStatus::Uncertain) => LiveMatchStatus::Uncertain,
+            Some(MatchStatus::OffRoute) => LiveMatchStatus::OffRoute,
+            Some(MatchStatus::Reacquiring) => LiveMatchStatus::Reacquiring,
+        };
+
         LiveSnapshot {
             distance: self.distance(),
             moving: self.moving(),
@@ -457,6 +493,12 @@ impl LiveRecorder {
             off_route,
             accuracy: self.last_fix.and_then(|fix| fix.accuracy),
             position: self.last_fix.map(|fix| fix.coordinate),
+            match_status,
+            match_confidence: if self.route.is_some() {
+                self.last_match_confidence
+            } else {
+                0.0
+            },
         }
     }
 

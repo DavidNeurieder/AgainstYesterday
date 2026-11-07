@@ -830,6 +830,8 @@ fn live_snapshot(bytes: &[u8]) -> Result<Vec<u8>, String> {
         w.f64(0.0);
         w.f64(0.0);
     }
+    w.u8(snap.match_status as u8);
+    w.f64(snap.match_confidence);
     Ok(w.data)
 }
 
