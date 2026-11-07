@@ -46,6 +46,9 @@ pub mod geo;
 /// statistics and processing (filtering, simplification, resampling).
 pub mod track;
 
+/// Stateful live-run recording driven by raw fixes.
+pub mod live;
+
 /// GPX track input: adapter from GPX XML documents to validated [`Track`]s.
 pub mod gpx;
 
@@ -85,11 +88,15 @@ pub use attempt::{
 pub use error::{GeoError, GpxError, RouteError, TrackError, TrackField};
 pub use evaluate::{ConfusionMatrix, LabeledPair, evaluate, parse_manifest, standard_pipeline};
 pub use geo::{Bearing, Coordinate, PolylineBounds, Projection};
-pub use ghost::{Ghost, GhostSnapshot, GhostState, live_ghost_gap};
+pub use ghost::{
+    Ghost, GhostSnapshot, GhostState, confidence_for_spacing, live_ghost_gap, live_ghost_snapshot,
+    sample_spacing_at,
+};
 pub use gps::{
     Fixture, GpsFix, GpsQuality, GpsTrace, ProcessedSample, RejectionReason, TrackProcessing,
 };
 pub use gpx::{parse_gpx, read_gpx, read_gpx_file, write_gpx, write_gpx_file};
+pub use live::{LiveConfig, LiveGhost, LiveGhostSnapshot, LiveRecorder, LiveSnapshot};
 pub use route::{
     CanonicalError, CanonicalizeConfig, ContinuityConfig, ContinuousProjection, DiscoveredRoute,
     MatchConfig, MatchScore, PreparedTrack, Route, RouteCatalog, RoutePoint, TrackAddition,
@@ -97,9 +104,9 @@ pub use route::{
     compare_prepared, compare_with,
 };
 pub use track::{
-    FilterConfig, FilterReason, MovingConfig, ProcessingReport, RouteSegment,
-    RouteSegmentComparison, SegmentComparison, SegmentError, SimplifyConfig, Track, TrackPoint,
-    TrackSegment, compare_route_segments, compare_segments, filter, filter_detailed,
+    CursorConfig, FilterConfig, FilterCursor, FilterReason, MovingConfig, ProcessingReport,
+    RouteSegment, RouteSegmentComparison, SegmentComparison, SegmentError, SimplifyConfig, Track,
+    TrackPoint, TrackSegment, compare_route_segments, compare_segments, filter, filter_detailed,
     resample_by_distance, route_segments, segments, simplify,
 };
 // Common aliases for the sectionwise comparison API.

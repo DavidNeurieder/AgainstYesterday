@@ -24,6 +24,16 @@ pub const MIN_HIGH_CONFIDENCE_SPACING_M: f64 = 10.0;
 /// `confidence == 0.0` (and below which it stays 0).
 pub const LOW_CONFIDENCE_SPACING_M: f64 = 60.0;
 
+/// Maps a reference-sample spacing (meters) to a `0.0..=1.0` confidence.
+///
+/// `1.0` at or below [`MIN_HIGH_CONFIDENCE_SPACING_M`], `0.0` at or above
+/// [`LOW_CONFIDENCE_SPACING_M`], linear in between.
+pub fn confidence_for_spacing(spacing_m: f64) -> f64 {
+    (1.0 - (spacing_m - MIN_HIGH_CONFIDENCE_SPACING_M)
+        / (LOW_CONFIDENCE_SPACING_M - MIN_HIGH_CONFIDENCE_SPACING_M))
+        .clamp(0.0, 1.0)
+}
+
 /// The duel state between the runner and the ghost at one instant or at one
 /// distance.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -151,29 +161,22 @@ impl Ghost {
     /// Confidence in an interpolation at `distance_m`, from the reference
     /// attempt's closest sample spacing.
     fn confidence_at(&self, distance_m: f64) -> f64 {
-        let samples = &self.reference.samples;
-        let spacing = sample_spacing_at(samples, distance_m);
-        (1.0 - (spacing - MIN_HIGH_CONFIDENCE_SPACING_M)
-            / (LOW_CONFIDENCE_SPACING_M - MIN_HIGH_CONFIDENCE_SPACING_M))
-            .clamp(0.0, 1.0)
+        confidence_for_spacing(sample_spacing_at(&self.reference.samples, distance_m))
     }
 }
 
-/// The reference-sample interval (meters) that brackets (or precedes)
-/// `distance_m` — the interval over which a [`crate::attempt::Attempt::time_at`]
-/// interpolation takes place, and therefore how much the sampling cadence
-/// influences the ghost gap.
-fn sample_spacing_at(samples: &[AttemptSample], distance_m: f64) -> f64 {
-    let last = samples.last().expect("attempt is never empty");
+fn attempt_sample_spacing_at(samples: &[AttemptSample], distance_m: f64) -> f64 {
+    let last = match samples.last() {
+        Some(sample) => sample,
+        None => return f64::INFINITY,
+    };
     if samples.len() == 1 || last.distance.meters() <= 0.0 {
         return last.distance.meters().abs();
     }
     if distance_m <= 0.0 {
-        // Before the first sample: the interval reaching the start line.
         return samples[0].distance.meters();
     }
     if distance_m >= last.distance.meters() {
-        // At or past the finish: the final interval.
         return samples[samples.len() - 1].distance.meters()
             - samples[samples.len() - 2].distance.meters();
     }
@@ -181,14 +184,40 @@ fn sample_spacing_at(samples: &[AttemptSample], distance_m: f64) -> f64 {
         .iter()
         .position(|s| s.distance.meters() >= distance_m)
     {
-        let near = samples[j].distance.meters();
         if j == 0 {
-            near // interval from the start line to the first sample
+            samples[j].distance.meters()
         } else {
-            near - samples[j - 1].distance.meters()
+            samples[j].distance.meters() - samples[j - 1].distance.meters()
         }
     } else {
         0.0
+    }
+}
+
+/// The reference-sample interval (meters) bracketing `distance_m`.
+///
+/// Public so the live recorder can rate ghost confidence from a standalone
+/// reference profile without building a full [`Attempt`]/[`Ghost`] pair.
+pub fn sample_spacing_at(samples: &[AttemptSample], distance_m: f64) -> f64 {
+    attempt_sample_spacing_at(samples, distance_m)
+}
+
+/// A live-run gap paired with its confidence, computed from the runner's
+/// progress and a reference [`Attempt`].
+pub fn live_ghost_snapshot(
+    reference: &Attempt,
+    current_distance: Distance,
+    moving: Duration,
+) -> GhostSnapshot {
+    let state = live_ghost_gap(reference, current_distance, moving, Distance::ZERO);
+    let reference_distance = reference.distance_at(moving).unwrap_or(reference.distance);
+    GhostSnapshot {
+        state,
+        spatial_gap: Distance::from_meters(reference_distance.meters() - current_distance.meters()),
+        confidence: confidence_for_spacing(sample_spacing_at(
+            &reference.samples,
+            current_distance.meters(),
+        )),
     }
 }
 
