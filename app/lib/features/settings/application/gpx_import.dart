@@ -42,9 +42,17 @@ GpxTrack parseGpxTrackDetails(String contents) {
       caseSensitive: false,
       dotAll: true,
     ).firstMatch(inner);
-    timestamps.add(
-      timeMatch == null ? null : DateTime.tryParse(timeMatch.group(1)!.trim()),
-    );
+    var timestamp = timeMatch?.group(1)?.trim();
+    if (timestamp != null &&
+        !timestamp.endsWith('Z') &&
+        !RegExp(r'[+-]\d{2}:\d{2}$').hasMatch(timestamp)) {
+      timestamp = '$timestamp' 'Z';
+    }
+    DateTime? parsed;
+    if (timestamp != null) {
+      parsed = DateTime.tryParse(timestamp);
+    }
+    timestamps.add(parsed);
   }
   return GpxTrack(points: points, timestamps: timestamps);
 }
