@@ -623,6 +623,8 @@ pub unsafe extern "C" fn gps_compare_route_segments(
 ) -> c_int {
     dispatch(input, input_len, output, output_len, compare_route_segments_impl)
 }
+#[unsafe(no_mangle)]
+/// Evaluates a ghost duel at a fixed route distance.
 ///
 /// # Safety
 /// See [`gps_process_track`].

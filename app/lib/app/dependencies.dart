@@ -45,10 +45,10 @@ final engineServiceProvider = Provider<EngineService>((_) {
   final candidates = libraryPath.isNotEmpty
       ? [libraryPath]
       : <String>[
-          'libgps_engine.so',
           '../target/release/libgps_engine.so',
           'target/release/libgps_engine.so',
           'build/libgps_engine.so',
+          'libgps_engine.so',
         ];
   for (final candidate in candidates) {
     try {
