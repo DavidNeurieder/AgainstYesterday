@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
+import '../../../app/dependencies.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/units.dart';
@@ -250,7 +251,14 @@ class SettingsScreen extends ConsumerWidget {
       return;
     }
     final routeRepo = ref.read(routeRepositoryProvider.notifier);
-    var imported = 0;
+    final engineService = ref.read(engineServiceProvider);
+    // Start from the existing catalog so imported tracks group onto routes
+    // that are already saved, not just onto each other.
+    final accepted = [...ref.read(routeRepositoryProvider)];
+    var importedTracks = 0;
+    var newRoutes = 0;
+    var grouped = 0;
+    var counter = 0;
     for (final file in result.files) {
       String? contents;
       if (file.bytes != null) {
@@ -265,31 +273,67 @@ class SettingsScreen extends ConsumerWidget {
       if (contents == null) continue;
       final geometry = parseGpxTrack(contents);
       if (geometry.length < 2) continue;
+      importedTracks++;
       final name = (file.name.isNotEmpty ? file.name : 'Imported track')
           .replaceAll(RegExp(r'\.gpx$', caseSensitive: false), '');
-      final id = 'imported-${DateTime.now().microsecondsSinceEpoch}-$imported';
-      final route = engine.Route(
-        id: id,
-        name: name,
-        distance: Distance.meters(engine.polylineMeters(geometry)),
-        geometry: geometry,
-      );
-      await routeRepo.saveRoute(route);
-      imported++;
+      // Try to find an existing (or already-imported) route that is the same
+      // course, so repeated recordings collapse onto one route instead of
+      // spawning duplicates.
+      String? matchedId;
+      final importedTrack = geometryToTrack(geometry);
+      for (final route in accepted) {
+        final match = await engineService.matchRoutes(
+          a: importedTrack,
+          b: geometryToTrack(route.geometry),
+        );
+        if (match.sameRoute) {
+          matchedId = route.id;
+          break;
+        }
+      }
+      if (matchedId != null) {
+        final index = accepted.indexWhere((r) => r.id == matchedId);
+        final route = accepted[index];
+        accepted[index] = engine.Route(
+          id: route.id,
+          name: route.name,
+          distance: route.distance,
+          geometry: route.geometry,
+          attemptCount: route.attemptCount + 1,
+          personalBest: route.personalBest,
+        );
+        await routeRepo.saveRoute(accepted[index]);
+        grouped++;
+      } else {
+        final id = 'imported-${DateTime.now().microsecondsSinceEpoch}-$counter';
+        counter++;
+        final route = engine.Route(
+          id: id,
+          name: name,
+          distance: Distance.meters(engine.polylineMeters(geometry)),
+          geometry: geometry,
+          attemptCount: 1,
+        );
+        accepted.add(route);
+        await routeRepo.saveRoute(route);
+        newRoutes++;
+      }
     }
-    if (imported == 0) {
+    if (importedTracks == 0) {
       messenger.showSnackBar(
         const SnackBar(
           content: Text('No usable tracks found in the selected files.'),
         ),
       );
-    } else {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Imported $imported track${imported == 1 ? '' : 's'}.'),
-        ),
-      );
+      return;
     }
+    final summary = grouped == 0
+        ? 'Imported $importedTracks track${importedTracks == 1 ? '' : 's'} '
+              'into $newRoutes new route${newRoutes == 1 ? '' : 's'}.'
+        : 'Imported $importedTracks track${importedTracks == 1 ? '' : 's'}: '
+              '$newRoutes new route${newRoutes == 1 ? '' : 's'}, '
+              '$grouped grouped onto existing routes.';
+    messenger.showSnackBar(SnackBar(content: Text(summary)));
   }
 
   Future<void> _confirmDeleteAll(BuildContext context, WidgetRef ref) async {
@@ -308,9 +352,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           FilledButton(
             key: const ValueKey('confirm-delete-all'),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.errorFill,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.errorFill),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
@@ -322,15 +364,21 @@ class SettingsScreen extends ConsumerWidget {
     }
     await _deleteAllData(ref);
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('All data deleted.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('All data deleted.')));
     }
   }
 
   Future<void> _deleteAllData(WidgetRef ref) async {
     final store = ref.read(persistenceStoreProvider);
-    for (final key in ['routes', 'activities', 'run_snapshot', 'settings', 'offline_regions']) {
+    for (final key in [
+      'routes',
+      'activities',
+      'run_snapshot',
+      'settings',
+      'offline_regions',
+    ]) {
       try {
         store.remove(key);
       } catch (_) {

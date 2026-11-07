@@ -12,6 +12,18 @@ library;
 
 import '../../../engine/models.dart';
 
+/// Converts a geometry into a synthetic track so the engine's route matcher
+/// (which works on recordings) can compare two courses. Timestamps are spaced
+/// one second apart; matching is shape-based, so the absolute timing is
+/// irrelevant.
+List<TrackPoint> geometryToTrack(List<GeoPoint> geometry) => [
+  for (var i = 0; i < geometry.length; i++)
+    TrackPoint(
+      position: geometry[i],
+      timestamp: DateTime.fromMillisecondsSinceEpoch(i * 1000, isUtc: true),
+    ),
+];
+
 /// Extracts every `<trkpt>` position from a GPX document, in file order.
 ///
 /// Both attribute orders are accepted (`lat` before or after `lon`), as are
