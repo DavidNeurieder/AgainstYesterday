@@ -62,17 +62,29 @@ class RouteDetailScreen extends ConsumerWidget {
             height: 180,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: GestureDetector(
-                onTap: () => _showExpandedMap(context, route, attempts),
-                child: ref.watch(mapSurfaceProvider).build(
-                  context,
-                  MapScene(
-                    geometry: route.geometry,
-                    you: route.geometry.first,
-                    youProgress: 0,
-                    staticView: true,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ref.watch(mapSurfaceProvider).build(
+                    context,
+                    MapScene(
+                      geometry: route.geometry,
+                      you: route.geometry.first,
+                      youProgress: 0,
+                      staticView: true,
+                    ),
                   ),
-                ),
+                  Positioned.fill(
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _showExpandedMap(context, route, attempts),
+                        splashColor: Colors.white10,
+                        highlightColor: Colors.white10,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
