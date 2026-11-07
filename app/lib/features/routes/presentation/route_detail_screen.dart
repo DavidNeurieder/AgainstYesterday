@@ -100,7 +100,41 @@ class RouteDetailScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.lg),
           _StatRow(label: 'Personal Best', value: stats.pb),
           _StatRow(label: 'Average', value: stats.average),
+          _StatRow(label: 'Median', value: stats.median),
           _StatRow(label: 'Last', value: stats.last),
+          if (stats.fastest != null && stats.slowest != null) ...[
+            _StatRow(label: 'Fastest', value: stats.fastest),
+            _StatRow(label: 'Slowest', value: stats.slowest),
+            _StatRow(label: 'Range', value: stats.range),
+          ],
+          if (stats.stdDev != null)
+            _StatRow(label: 'Std. deviation', value: stats.stdDev),
+          if (stats.trendSecondsPerRun != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Trend (s/run)',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    '${stats.trendSecondsPerRun! >= 0 ? '+' : ''}'
+                    '${stats.trendSecondsPerRun!.toStringAsFixed(1)}'
+                    ' (${stats.trendSecondsPerRun! < 0 ? 'improving' : 'slowing'})',
+                    textAlign: TextAlign.right,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: AppSpacing.lg),
           if (attempts.isNotEmpty) ...[
             Text(
@@ -131,7 +165,8 @@ class RouteDetailScreen extends ConsumerWidget {
                   ),
             )
           else
-            for (final attempt in attempts) _AttemptRow(attempt: attempt),
+            for (final attempt in attempts)
+              _AttemptRow(attempt: attempt, pb: stats.pb),
         ],
       ),
     );
@@ -304,14 +339,16 @@ class _ChartPainter extends CustomPainter {
 }
 
 class _AttemptRow extends StatelessWidget {
-  const _AttemptRow({required this.attempt});
+  const _AttemptRow({required this.attempt, this.pb});
 
   final Activity attempt;
+  final Elapsed? pb;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final duration = attempt.duration!;
+    final delta = pb == null ? null : duration.seconds - pb!.seconds;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       // §7: the date wraps instead of pushing the duration off the row at a
@@ -334,6 +371,21 @@ class _AttemptRow extends StatelessWidget {
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
+          if (delta != null) ...[
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              delta == 0
+                  ? 'PB'
+                  : (delta > 0
+                      ? '+${Elapsed.seconds(delta).format()}'
+                      : '-${Elapsed.seconds(-delta).format()}'),
+              textAlign: TextAlign.right,
+              style: textTheme.bodySmall?.copyWith(
+                color: delta <= 0 ? AppColors.ahead : AppColors.behind,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
         ],
       ),
     );

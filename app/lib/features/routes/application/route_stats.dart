@@ -18,6 +18,12 @@ class RouteStats {
     required this.average,
     required this.last,
     required this.runs,
+    this.median,
+    this.fastest,
+    this.slowest,
+    this.stdDev,
+    this.range,
+    this.trendSecondsPerRun,
   });
 
   /// Fastest ever on this route (seed PB when no history beats it).
@@ -32,6 +38,25 @@ class RouteStats {
   /// Number of known runs (at least the route's own counter when history
   /// is empty, so seeded demo routes read naturally).
   final int runs;
+
+  /// Median attempt time (lower half / upper half average for even counts).
+  final Elapsed? median;
+
+  /// Fastest recorded attempt (ignoring a seed PB that is not in history).
+  final Elapsed? fastest;
+
+  /// Slowest recorded attempt.
+  final Elapsed? slowest;
+
+  /// Population standard deviation of attempt times, in seconds.
+  final Elapsed? stdDev;
+
+  /// Spread between the slowest and fastest recorded attempt.
+  final Elapsed? range;
+
+  /// Linear trend of attempt times over chronological order, in seconds per
+  /// run (negative means getting faster).
+  final double? trendSecondsPerRun;
 }
 
 /// Computes [RouteStats] for [route] from its [attempts] (activities that
@@ -47,6 +72,7 @@ RouteStats computeRouteStats({
   durations.sort((a, b) => a.seconds.compareTo(b.seconds));
 
   final fastest = durations.isNotEmpty ? durations.first : null;
+  final slowest = durations.isNotEmpty ? durations.last : null;
   final pb = _best(route.personalBest, fastest);
 
   final average = durations.isEmpty
@@ -54,6 +80,37 @@ RouteStats computeRouteStats({
       : Elapsed.seconds(
           durations.fold<num>(0, (sum, e) => sum + e.seconds) /
               durations.length);
+
+  // Median: average of the two middle values for an even count.
+  final median = durations.isEmpty
+      ? null
+      : durations.length.isOdd
+          ? durations[durations.length ~/ 2]
+          : Elapsed.seconds(
+              (durations[durations.length ~/ 2 - 1].seconds +
+                      durations[durations.length ~/ 2].seconds) /
+                  2,
+            );
+
+  // Population standard deviation.
+  final stdDev = durations.length < 2
+      ? null
+      : Elapsed.seconds(
+          math.sqrt(
+            durations.fold<double>(
+                  0,
+                  (sum, e) => sum + math.pow(e.seconds - average!.seconds, 2),
+                ) /
+                durations.length,
+          ),
+        );
+
+  final range = (fastest == null || slowest == null)
+      ? null
+      : Elapsed.seconds(slowest.seconds - fastest.seconds);
+
+  // Trend: slope of duration over chronological run order (seconds per run).
+  final trendSecondsPerRun = _trend(attempts);
 
   final recent = [...attempts]..sort(
       (a, b) => b.startedAt.compareTo(a.startedAt),
@@ -69,7 +126,40 @@ RouteStats computeRouteStats({
     runs: attempts.isEmpty
         ? route.attemptCount
         : math.max(route.attemptCount, attempts.length),
+    median: median,
+    fastest: fastest,
+    slowest: slowest,
+    stdDev: stdDev,
+    range: range,
+    trendSecondsPerRun: trendSecondsPerRun,
   );
+}
+
+/// Slope (seconds per run) of attempt durations over chronological order,
+/// or null with fewer than two timed attempts. Negative means improving.
+double? _trend(List<Activity> attempts) {
+  final timed = [
+    for (final a in attempts)
+      if (a.duration != null) a,
+  ]..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+  if (timed.length < 2) {
+    return null;
+  }
+  final n = timed.length;
+  final xs = List<double>.generate(n, (i) => i.toDouble());
+  final ys = [for (final a in timed) a.duration!.seconds];
+  final meanX = xs.reduce((a, b) => a + b) / n;
+  final meanY = ys.reduce((a, b) => a + b) / n;
+  var num = 0.0;
+  var den = 0.0;
+  for (var i = 0; i < n; i++) {
+    num += (xs[i] - meanX) * (ys[i] - meanY);
+    den += (xs[i] - meanX) * (xs[i] - meanX);
+  }
+  if (den == 0) {
+    return null;
+  }
+  return num / den;
 }
 
 /// The faster of [a] and [b]; either may be null.

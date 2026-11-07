@@ -50,6 +50,11 @@ void main() {
     await tester.pumpAndSettle();
 
     // §23 blocks.
+    await tester.dragUntilVisible(
+      find.text('Performance'),
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
     expect(find.text('Personal Best'), findsOneWidget);
     expect(find.text('Average'), findsOneWidget);
     expect(find.text('Last'), findsOneWidget);

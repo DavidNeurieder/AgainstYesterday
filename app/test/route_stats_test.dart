@@ -100,16 +100,45 @@ void main() {
     expect(stats.last?.seconds, 1455);
   });
 
-  test('no PB anywhere leaves pb and friends null but counts runs', () {
-    final route = Route(
-      id: 'x',
-      name: 'New route',
-      distance: const Distance.meters(1000),
-      geometry: FakeEngineService.riverLoop,
-      attemptCount: 0,
+  test('median and spread are computed from attempt times', () {
+    final stats = computeRouteStats(
+      route: Route(
+        id: 'x',
+        name: 'New route',
+        distance: const Distance.meters(4760),
+        geometry: FakeEngineService.riverLoop,
+        attemptCount: 0,
+      ),
+      attempts: [
+        _attempt(id: 'a1', seconds: 100, started: DateTime.utc(2026, 1, 1)),
+        _attempt(id: 'a2', seconds: 200, started: DateTime.utc(2026, 1, 2)),
+        _attempt(id: 'a3', seconds: 300, started: DateTime.utc(2026, 1, 3)),
+        _attempt(id: 'a4', seconds: 400, started: DateTime.utc(2026, 1, 4)),
+      ],
     );
-    final stats = computeRouteStats(route: route, attempts: const []);
-    expect(stats.pb, isNull);
-    expect(stats.runs, 0);
+    expect(stats.median?.seconds, closeTo(250, 0.1));
+    expect(stats.fastest?.seconds, 100);
+    expect(stats.slowest?.seconds, 400);
+    expect(stats.range?.seconds, 300);
+    expect(stats.stdDev?.seconds, closeTo(111.8, 0.2));
+  });
+
+  test('trend is negative when runs get faster', () {
+    final stats = computeRouteStats(
+      route: Route(
+        id: 'x',
+        name: 'New route',
+        distance: const Distance.meters(4760),
+        geometry: FakeEngineService.riverLoop,
+        attemptCount: 0,
+      ),
+      attempts: [
+        _attempt(id: 'a1', seconds: 400, started: DateTime.utc(2026, 1, 1)),
+        _attempt(id: 'a2', seconds: 300, started: DateTime.utc(2026, 1, 2)),
+        _attempt(id: 'a3', seconds: 200, started: DateTime.utc(2026, 1, 3)),
+      ],
+    );
+    expect(stats.trendSecondsPerRun, isNotNull);
+    expect(stats.trendSecondsPerRun!, lessThan(0));
   });
 }
