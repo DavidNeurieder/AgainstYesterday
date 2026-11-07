@@ -378,6 +378,8 @@ class _WorldFit {
     return px;
   }
 
+  Offset projectStatic(GeoPoint p) => _raw(p);
+
   Offset _raw(GeoPoint p) {
     final x = (p.longitude - _minLon) * math.cos(_latMid * math.pi / 180);
     final y = _maxLat - p.latitude;
@@ -484,4 +486,95 @@ class _MapPainter extends CustomPainter {
       old.shift != shift ||
       old.follow != follow ||
       old.followAt != followAt;
+}
+
+const List<Color> kAttemptColors = <Color>[
+  Color(0xFF34C77B),
+  Color(0xFF4F8CFF),
+  Color(0xFFE0A83B),
+  Color(0xFFEE5A53),
+  Color(0xFF9B6BFF),
+  Color(0xFF3EC7C7),
+  Color(0xFFFF6FA3),
+  Color(0xFF8593A7),
+];
+
+Color attemptColor(int index) => kAttemptColors[index % kAttemptColors.length];
+
+class RouteComparisonMap extends StatelessWidget {
+  const RouteComparisonMap({
+    super.key,
+    required this.geometry,
+    required this.attemptTracks,
+  });
+
+  final List<GeoPoint> geometry;
+  final List<List<GeoPoint>> attemptTracks;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final viewport = Size(constraints.maxWidth, constraints.maxHeight);
+      final all = <GeoPoint>[
+        ...geometry,
+        ...attemptTracks.expand((t) => t),
+      ];
+      final world = _WorldFit(
+        geometry: all.isEmpty ? geometry : all,
+        viewport: viewport,
+      );
+      return CustomPaint(
+        size: viewport,
+        painter: _ComparisonPainter(
+          world: world,
+          geometry: geometry,
+          tracks: attemptTracks,
+        ),
+      );
+    });
+  }
+}
+
+class _ComparisonPainter extends CustomPainter {
+  _ComparisonPainter({
+    required this.world,
+    required this.geometry,
+    required this.tracks,
+  });
+
+  final _WorldFit world;
+  final List<GeoPoint> geometry;
+  final List<List<GeoPoint>> tracks;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _drawPolyline(canvas, geometry, AppColors.ghost.withValues(alpha: 0.45), 3);
+    for (var i = 0; i < tracks.length; i++) {
+      _drawPolyline(canvas, tracks[i], attemptColor(i), 3);
+    }
+  }
+
+  void _drawPolyline(Canvas canvas, List<GeoPoint> points, Color color, double width) {
+    if (points.length < 2) {
+      return;
+    }
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = width
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final path = Path();
+    final first = world.projectStatic(points.first);
+    path.moveTo(first.dx, first.dy);
+    for (var i = 1; i < points.length; i++) {
+      final p = world.projectStatic(points[i]);
+      path.lineTo(p.dx, p.dy);
+    }
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ComparisonPainter old) =>
+      old.geometry != geometry || old.tracks != tracks;
 }

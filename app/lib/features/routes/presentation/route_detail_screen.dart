@@ -27,6 +27,7 @@ import '../../map/offline_regions.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/route_stats.dart';
+import '../../../widgets/route_map.dart';
 
 class RouteDetailScreen extends ConsumerWidget {
   const RouteDetailScreen({super.key, required this.routeId});
@@ -61,13 +62,16 @@ class RouteDetailScreen extends ConsumerWidget {
             height: 180,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: ref.watch(mapSurfaceProvider).build(
-                context,
-                MapScene(
-                  geometry: route.geometry,
-                  you: route.geometry.first,
-                  youProgress: 0,
-                  staticView: true,
+              child: GestureDetector(
+                onTap: () => _showExpandedMap(context, route, attempts),
+                child: ref.watch(mapSurfaceProvider).build(
+                  context,
+                  MapScene(
+                    geometry: route.geometry,
+                    you: route.geometry.first,
+                    youProgress: 0,
+                    staticView: true,
+                  ),
                 ),
               ),
             ),
@@ -534,6 +538,113 @@ class _NotFoundScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}Future<void> _showExpandedMap(
+  BuildContext context,
+  Route route,
+  List<Activity> attempts,
+) async {
+  final tracks = <List<GeoPoint>>[
+    for (final a in attempts)
+      if (a.track != null && a.track!.length >= 2)
+        [for (final t in a.track!) t.position],
+  ];
+  await showDialog<void>(
+    context: context,
+    builder: (context) {
+      final size = MediaQuery.of(context).size;
+      return Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: SizedBox(
+          width: size.width * 0.92,
+          height: size.height * 0.78,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '${route.name} — attempts',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: RouteComparisonMap(
+                      geometry: route.geometry,
+                      attemptTracks: tracks,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text('Legend', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: AppSpacing.xs),
+                Expanded(
+                  flex: 0,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 160),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _LegendRow(
+                            color: AppColors.ghost.withValues(alpha: 0.6),
+                            label: 'Route',
+                          ),
+                          for (var i = 0; i < attempts.length; i++)
+                            if (attempts[i].track != null &&
+                                attempts[i].track!.length >= 2)
+                              _LegendRow(
+                                color: attemptColor(i),
+                                label:
+                                    '${dateLabelFor(attempts[i].startedAt.toLocal())}'
+                                    ' · ${attempts[i].duration?.format() ?? '—'}',
+                              ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _LegendRow extends StatelessWidget {
+  const _LegendRow({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text(label)),
+        ],
       ),
     );
   }
