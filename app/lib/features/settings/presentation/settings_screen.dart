@@ -251,6 +251,7 @@ class SettingsScreen extends ConsumerWidget {
       return;
     }
     final routeRepo = ref.read(routeRepositoryProvider.notifier);
+    final activityRepo = ref.read(activityRepositoryProvider.notifier);
     final engineService = ref.read(engineServiceProvider);
     // Start from the existing catalog so imported tracks group onto routes
     // that are already saved, not just onto each other.
@@ -271,11 +272,34 @@ class SettingsScreen extends ConsumerWidget {
         }
       }
       if (contents == null) continue;
-      final geometry = parseGpxTrack(contents);
+      final details = parseGpxTrackDetails(contents);
+      final geometry = details.points;
       if (geometry.length < 2) continue;
       importedTracks++;
       final name = (file.name.isNotEmpty ? file.name : 'Imported track')
           .replaceAll(RegExp(r'\.gpx$', caseSensitive: false), '');
+      final timestamps = details.timestamps;
+      final startedAt =
+          timestamps.whereType<DateTime>().cast<DateTime?>().firstWhere(
+            (t) => t != null,
+            orElse: () => null,
+          ) ??
+          DateTime.now().toUtc();
+      final validTimes = timestamps.whereType<DateTime>().toList();
+      final duration = validTimes.length >= 2
+          ? validTimes.last.difference(validTimes.first)
+          : null;
+      final elapsed = duration == null || duration.inMilliseconds <= 0
+          ? null
+          : Elapsed.seconds(duration.inMilliseconds / 1000.0);
+      final distance = Distance.meters(engine.polylineMeters(geometry));
+      final trackPoints = [
+        for (var i = 0; i < geometry.length; i++)
+          engine.TrackPoint(
+            position: geometry[i],
+            timestamp: timestamps[i] ?? startedAt,
+          ),
+      ];
       // Try to find an existing (or already-imported) route that is the same
       // course, so repeated recordings collapse onto one route instead of
       // spawning duplicates.
@@ -300,9 +324,20 @@ class SettingsScreen extends ConsumerWidget {
           distance: route.distance,
           geometry: route.geometry,
           attemptCount: route.attemptCount + 1,
-          personalBest: route.personalBest,
+          personalBest: _bestElapsed(route.personalBest, elapsed),
         );
         await routeRepo.saveRoute(accepted[index]);
+        await activityRepo.saveActivity(
+          engine.Activity(
+            id: 'act-imported-${DateTime.now().microsecondsSinceEpoch}-$counter',
+            routeId: route.id,
+            startedAt: startedAt,
+            duration: elapsed,
+            distance: distance,
+            performance: elapsed?.format(),
+            track: trackPoints,
+          ),
+        );
         grouped++;
       } else {
         final id = 'imported-${DateTime.now().microsecondsSinceEpoch}-$counter';
@@ -310,12 +345,24 @@ class SettingsScreen extends ConsumerWidget {
         final route = engine.Route(
           id: id,
           name: name,
-          distance: Distance.meters(engine.polylineMeters(geometry)),
+          distance: distance,
           geometry: geometry,
           attemptCount: 1,
+          personalBest: elapsed,
         );
         accepted.add(route);
         await routeRepo.saveRoute(route);
+        await activityRepo.saveActivity(
+          engine.Activity(
+            id: 'act-imported-${DateTime.now().microsecondsSinceEpoch}-$counter',
+            routeId: route.id,
+            startedAt: startedAt,
+            duration: elapsed,
+            distance: distance,
+            performance: elapsed?.format(),
+            track: trackPoints,
+          ),
+        );
         newRoutes++;
       }
     }
@@ -334,6 +381,12 @@ class SettingsScreen extends ConsumerWidget {
               '$newRoutes new route${newRoutes == 1 ? '' : 's'}, '
               '$grouped grouped onto existing routes.';
     messenger.showSnackBar(SnackBar(content: Text(summary)));
+  }
+
+  Elapsed? _bestElapsed(Elapsed? a, Elapsed? b) {
+    if (a == null) return b;
+    if (b == null) return a;
+    return a.seconds <= b.seconds ? a : b;
   }
 
   Future<void> _confirmDeleteAll(BuildContext context, WidgetRef ref) async {

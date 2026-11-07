@@ -4,13 +4,54 @@
 /// Minimal GPX track-point reader for Settings → Import GPX.
 ///
 /// The app only needs the geometry of a `<trk>`: every `<trkpt>` becomes a
-/// [GeoPoint], in document order. Elevation, time and extensions are ignored —
-/// imported tracks are routes, and the recording pipeline owns live fixes.
-/// Like the exporter this is dependency-free string/regex work; the format we
-/// accept is the small, fixed one every GPX writer emits.
+/// [GeoPoint], in document order. Elevation, time and extensions are ignored
+/// for the route shape, but timestamps are retained separately so imported
+/// recordings can be compared statistically.
 library;
 
 import '../../../engine/models.dart';
+
+/// A parsed GPX track: its geometry and the (possibly missing or sentinel)
+/// timestamp of every point, in the same order.
+class GpxTrack {
+  const GpxTrack({required this.points, required this.timestamps});
+
+  final List<GeoPoint> points;
+  final List<DateTime?> timestamps;
+}
+
+/// Parses a GPX document into geometry plus per-point timestamps.
+///
+/// Points without a usable position are dropped, along with their timestamp.
+/// Timestamps that cannot be parsed become `null` rather than failing the
+/// point, so a track with bad clock data still imports its shape.
+GpxTrack parseGpxTrackDetails(String contents) {
+  final points = <GeoPoint>[];
+  final timestamps = <DateTime?>[];
+  for (final match in _trackPointDetailed.allMatches(contents)) {
+    final attributes = match.group(1)!;
+    final inner = match.group(2) ?? '';
+    final lat = _attribute('lat', attributes);
+    final lon = _attribute('lon', attributes);
+    if (lat == null || lon == null) {
+      continue;
+    }
+    points.add(GeoPoint(latitude: lat, longitude: lon));
+    final timeMatch = RegExp(
+      r'<time>(.*?)</time>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(inner);
+    timestamps.add(
+      timeMatch == null ? null : DateTime.tryParse(timeMatch.group(1)!.trim()),
+    );
+  }
+  return GpxTrack(points: points, timestamps: timestamps);
+}
+
+/// Extracts every `<trkpt>` position from a GPX document, in file order.
+List<GeoPoint> parseGpxTrack(String contents) =>
+    parseGpxTrackDetails(contents).points;
 
 /// Converts a geometry into a synthetic track so the engine's route matcher
 /// (which works on recordings) can compare two courses. Timestamps are spaced
@@ -24,27 +65,12 @@ List<TrackPoint> geometryToTrack(List<GeoPoint> geometry) => [
     ),
 ];
 
-/// Extracts every `<trkpt>` position from a GPX document, in file order.
-///
-/// Both attribute orders are accepted (`lat` before or after `lon`), as are
-/// self-closing tags and double- or single-quoted values. Malformed points are
-/// skipped rather than failing the whole file.
-List<GeoPoint> parseGpxTrack(String contents) {
-  final points = <GeoPoint>[];
-  for (final tag in _trackPoint.allMatches(contents)) {
-    final attributes = tag.group(1)!;
-    final lat = _attribute('lat', attributes);
-    final lon = _attribute('lon', attributes);
-    if (lat == null || lon == null) {
-      continue;
-    }
-    points.add(GeoPoint(latitude: lat, longitude: lon));
-  }
-  return points;
-}
-
-/// A `<trkpt ...>` opening/self-closing tag and its attribute string.
-final RegExp _trackPoint = RegExp(r'<trkpt\b([^>]*)>', caseSensitive: false);
+/// A `<trkpt ...>` opening/self-closing tag, its attributes and inner XML.
+final RegExp _trackPointDetailed = RegExp(
+  r'<trkpt\b([^>]*)(?:>(.*?)</trkpt>|/>)',
+  caseSensitive: false,
+  dotAll: true,
+);
 
 /// One numeric attribute of a tag, whichever quote style it uses.
 double? _attribute(String name, String attributes) {
