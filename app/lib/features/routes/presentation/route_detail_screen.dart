@@ -783,7 +783,7 @@ class _SegmentComparisonSectionState
           );
           attempts.add(att);
         } catch (e) {
-          firstError ??= e.toString();
+          firstError ??= '${a.id}: $e';
         }
       }
       if (attempts.length < 2) {
