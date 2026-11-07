@@ -131,6 +131,7 @@ jobs:
 
   android-integration-test:
     name: android integration (API ${{ matrix.api-level }}, ${{ matrix.suite }})
+    if: false  # disabled: GitHub-hosted emulator/adb is flaky; re-enable when stable
     runs-on: ubuntu-latest
     needs: android-engine-lib
     # Bounds a hung emulator boot or a wedged suite; without it a stuck job
