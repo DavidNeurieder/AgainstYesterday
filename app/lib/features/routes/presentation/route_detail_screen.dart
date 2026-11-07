@@ -28,6 +28,8 @@ import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/route_stats.dart';
 import '../../../widgets/route_map.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 class RouteDetailScreen extends ConsumerWidget {
   const RouteDetailScreen({super.key, required this.routeId});
@@ -585,9 +587,50 @@ class _NotFoundScreen extends StatelessWidget {
                 Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: RouteComparisonMap(
-                      geometry: route.geometry,
-                      attemptTracks: tracks,
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: tracks.isNotEmpty && tracks.first.isNotEmpty
+                            ? LatLng(tracks.first.first.latitude, tracks.first.first.longitude)
+                            : (route.geometry.isNotEmpty
+                                ? LatLng(route.geometry.first.latitude, route.geometry.first.longitude)
+                                : const LatLng(0, 0)),
+                        initialZoom: 14,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'dev.neurieder.against_yesterday',
+                        ),
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: [
+                                for (final p in route.geometry)
+                                  LatLng(p.latitude, p.longitude),
+                              ],
+                              strokeWidth: 3,
+                              color: AppColors.ghost.withValues(alpha: 0.45),
+                            ),
+                          ],
+                        ),
+                        for (var i = 0; i < tracks.length; i++)
+                          PolylineLayer(
+                            polylines: [
+                              Polyline(
+                                points: [
+                                  for (final p in tracks[i])
+                                    LatLng(p.latitude, p.longitude),
+                                ],
+                                strokeWidth: 3,
+                                color: attemptColor(i),
+                              ),
+                            ],
+                          ),
+                        const SimpleAttributionWidget(
+                          source: Text('© OpenStreetMap contributors'),
+                        ),
+                      ],
                     ),
                   ),
                 ),
