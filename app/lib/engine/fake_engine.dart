@@ -180,6 +180,119 @@ class FakeEngineService implements EngineService {
   }
 
   @override
+  Future<List<RouteSegmentComparison>> compareRouteSegments({
+    required List<Attempt> attempts,
+    required double segmentDistanceMeters,
+    required double routeDistanceMeters,
+  }) async {
+    if (attempts.isEmpty) return const [];
+    if (segmentDistanceMeters <= 0 || routeDistanceMeters <= 0) return const [];
+
+    final perAttempt = <List<RouteSegment>>[];
+    for (final a in attempts) {
+      perAttempt.add(_routeSegments(a, segmentDistanceMeters, routeDistanceMeters));
+    }
+    final sectionCount = perAttempt.first.length;
+    final result = <RouteSegmentComparison>[];
+    for (var i = 0; i < sectionCount; i++) {
+      final segs = <RouteSegment>[for (final v in perAttempt) v[i]];
+      double minSpeed = 0, maxSpeed = 0, sum = 0;
+      var count = 0;
+      var first = true;
+      for (final s in segs) {
+        if (s.durationSeconds <= 0) continue;
+        if (first) {
+          minSpeed = s.averageSpeedMps;
+          maxSpeed = s.averageSpeedMps;
+          first = false;
+        } else {
+          if (s.averageSpeedMps < minSpeed) minSpeed = s.averageSpeedMps;
+          if (s.averageSpeedMps > maxSpeed) maxSpeed = s.averageSpeedMps;
+        }
+        sum += s.averageSpeedMps;
+        count++;
+      }
+      if (count == 0) {
+        minSpeed = 0;
+        maxSpeed = 0;
+      }
+      result.add(RouteSegmentComparison(
+        index: i,
+        startDistanceM: segs.first.startDistanceM,
+        endDistanceM: segs.first.endDistanceM,
+        segments: segs,
+        minSpeedMps: minSpeed,
+        maxSpeedMps: maxSpeed,
+        meanSpeedMps: count > 0 ? sum / count : 0,
+        speedSpreadMps: count > 0 ? (maxSpeed - minSpeed) : 0,
+      ));
+    }
+    return result;
+  }
+
+  List<RouteSegment> _routeSegments(
+    Attempt attempt,
+    double segmentDistance,
+    double routeDistance,
+  ) {
+    final n = (routeDistance / segmentDistance).ceil().clamp(1, 1 << 30);
+    final out = <RouteSegment>[];
+    for (var i = 0; i < n; i++) {
+      final start = i * segmentDistance;
+      final end = ((i + 1) * segmentDistance).clamp(0.0, routeDistance);
+      if (start >= routeDistance) break;
+      final coveredEnd = end.clamp(0.0, attempt.samples.isEmpty ? 0.0 : attempt.samples.last.distance.meters);
+      final complete = (attempt.samples.isEmpty ? 0.0 : attempt.samples.last.distance.meters) >= end - 1e-9;
+      double duration = 0;
+      if (start < (attempt.samples.isEmpty ? 0.0 : attempt.samples.last.distance.meters)) {
+        final tStart = _timeAt(attempt.samples, start) ?? 0;
+        final tEnd = _timeAt(attempt.samples, coveredEnd) ?? tStart;
+        duration = (tEnd - tStart).clamp(0, double.infinity);
+      }
+      final covered = (coveredEnd - start).clamp(0.0, double.infinity);
+      final speed = duration > 0 ? covered / duration : 0.0;
+      out.add(RouteSegment(
+        index: i,
+        startDistanceM: start,
+        endDistanceM: end,
+        durationSeconds: duration,
+        averageSpeedMps: speed,
+        complete: complete,
+      ));
+    }
+    return out;
+  }
+
+  double? _timeAt(List<AttemptSample> samples, double distance) {
+    if (samples.isEmpty) return null;
+    if (distance <= 0) return 0;
+    final last = samples.last;
+    if (distance > last.distance.meters) return null;
+    if (distance == last.distance.meters) return last.elapsed.seconds;
+    // find j
+    int j = -1;
+    for (var i = 0; i < samples.length; i++) {
+      if (samples[i].distance.meters >= distance) {
+        j = i;
+        break;
+      }
+    }
+    if (j < 0) return null;
+    if (j == 0) {
+      if (samples[0].distance.meters == distance) return samples[0].elapsed.seconds;
+      return null;
+    }
+    if (samples[j].distance.meters == distance) return samples[j].elapsed.seconds;
+    final a = samples[j - 1];
+    final b = samples[j];
+    final d0 = a.distance.meters;
+    final d1 = b.distance.meters;
+    if (d1 <= d0) return b.elapsed.seconds;
+    final frac = (distance - d0) / (d1 - d0);
+    return a.elapsed.seconds + frac * (b.elapsed.seconds - a.elapsed.seconds);
+  }
+
+  @override
   GhostState ghostStateAt({
     required Ghost ghost,
     required Attempt current,

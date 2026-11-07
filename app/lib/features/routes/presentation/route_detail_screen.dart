@@ -14,6 +14,7 @@ import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/dependencies.dart';
 import '../../../core/date_labels.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
@@ -67,15 +68,17 @@ class RouteDetailScreen extends ConsumerWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  ref.watch(mapSurfaceProvider).build(
-                    context,
-                    MapScene(
-                      geometry: route.geometry,
-                      you: route.geometry.first,
-                      youProgress: 0,
-                      staticView: true,
-                    ),
-                  ),
+                  ref
+                      .watch(mapSurfaceProvider)
+                      .build(
+                        context,
+                        MapScene(
+                          geometry: route.geometry,
+                          you: route.geometry.first,
+                          youProgress: 0,
+                          staticView: true,
+                        ),
+                      ),
                   Positioned.fill(
                     child: Material(
                       color: Colors.transparent,
@@ -100,9 +103,9 @@ class RouteDetailScreen extends ConsumerWidget {
             '${stats.runs} ${stats.runs == 1 ? 'run' : 'runs'} · '
             '${stats.pb?.format() ?? 'no PB'} PB',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: AppSpacing.lg),
           // M19: the detail page races this exact route, never another one.
@@ -136,8 +139,8 @@ class RouteDetailScreen extends ConsumerWidget {
                     child: Text(
                       'Trend (s/run)',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -147,8 +150,8 @@ class RouteDetailScreen extends ConsumerWidget {
                     ' (${stats.trendSecondsPerRun! < 0 ? 'improving' : 'slowing'})',
                     textAlign: TextAlign.right,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ],
               ),
@@ -157,30 +160,31 @@ class RouteDetailScreen extends ConsumerWidget {
           if (attempts.isNotEmpty) ...[
             Text(
               'Performance',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: AppSpacing.sm),
-            _PerformanceChart(
-              attempts: attempts,
-              pb: stats.pb,
-            ),
+            _PerformanceChart(attempts: attempts, pb: stats.pb),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+          if (attempts.isNotEmpty) ...[
+            SegmentComparisonSection(route: route, attempts: attempts),
             const SizedBox(height: AppSpacing.lg),
           ],
           Text(
             'Attempts',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: AppSpacing.sm),
           if (attempts.isEmpty)
             Text(
               'No attempts on this route yet.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textMuted,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
             )
           else
             for (final attempt in attempts)
@@ -244,10 +248,7 @@ class _PerformanceChart extends StatelessWidget {
       for (final a in chronological) a.duration!.seconds,
     ];
     final baseline = pb?.seconds ?? durations.reduce(math.max);
-    final maxV = math.max(
-      durations.reduce(math.max),
-      baseline,
-    );
+    final maxV = math.max(durations.reduce(math.max), baseline);
     final fastest = durations.isEmpty ? null : durations.reduce(math.min);
 
     return SizedBox(
@@ -395,8 +396,8 @@ class _AttemptRow extends StatelessWidget {
               delta == 0
                   ? 'PB'
                   : (delta > 0
-                      ? '+${Elapsed.seconds(delta).format()}'
-                      : '-${Elapsed.seconds(-delta).format()}'),
+                        ? '+${Elapsed.seconds(delta).format()}'
+                        : '-${Elapsed.seconds(-delta).format()}'),
               textAlign: TextAlign.right,
               style: textTheme.bodySmall?.copyWith(
                 color: delta <= 0 ? AppColors.ahead : AppColors.behind,
@@ -420,50 +421,58 @@ class _OfflineDownloadCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final region = ref.watch(offlineRegionRepositoryProvider
-        .select((regions) => regions.where((r) => r.routeId == routeId).firstOrNull));
+    final region = ref.watch(
+      offlineRegionRepositoryProvider.select(
+        (regions) => regions.where((r) => r.routeId == routeId).firstOrNull,
+      ),
+    );
     final textTheme = Theme.of(context).textTheme;
 
     final Widget content = switch (region?.status) {
       OfflineRegionStatus.ready => Row(
-          children: [
-            const Icon(Icons.check_circle_outline,
-                size: 18, color: AppColors.ahead),
-            const SizedBox(width: AppSpacing.sm),
-            Text('Offline map ready — works without a connection.',
-                style: textTheme.bodySmall),
-          ],
-        ),
+        children: [
+          const Icon(
+            Icons.check_circle_outline,
+            size: 18,
+            color: AppColors.ahead,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            'Offline map ready — works without a connection.',
+            style: textTheme.bodySmall,
+          ),
+        ],
+      ),
       OfflineRegionStatus.downloading => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Downloading ${(region!.progress * 100).round()}%',
-              style: textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
-              ),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Downloading ${(region!.progress * 100).round()}%',
+            style: textTheme.bodySmall?.copyWith(
+              color: AppColors.textSecondary,
             ),
-            const SizedBox(height: AppSpacing.sm),
-            LinearProgressIndicator(
-              key: ValueKey('route-offline-progress-$routeId'),
-              value: region.progress,
-              color: AppColors.you,
-              backgroundColor: AppColors.outline,
-              minHeight: 4,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          LinearProgressIndicator(
+            key: ValueKey('route-offline-progress-$routeId'),
+            value: region.progress,
+            color: AppColors.you,
+            backgroundColor: AppColors.outline,
+            minHeight: 4,
+          ),
+        ],
+      ),
       OfflineRegionStatus.failed => Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              region!.errorText ?? 'Download failed.',
-              style: textTheme.bodySmall?.copyWith(color: AppColors.error),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _RetryButton(routeId: routeId),
-          ],
-        ),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            region!.errorText ?? 'Download failed.',
+            style: textTheme.bodySmall?.copyWith(color: AppColors.error),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _RetryButton(routeId: routeId),
+        ],
+      ),
       _ => _DownloadButton(routeId: routeId),
     };
 
@@ -495,8 +504,8 @@ class _DownloadButton extends ConsumerWidget {
       onPressed: route == null
           ? null
           : () => ref
-              .read(offlineRegionRepositoryProvider.notifier)
-              .downloadRoute(route),
+                .read(offlineRegionRepositoryProvider.notifier)
+                .downloadRoute(route),
       icon: const Icon(Icons.download_for_offline_outlined),
       label: const Text('Download offline map'),
     );
@@ -518,8 +527,8 @@ class _RetryButton extends ConsumerWidget {
       onPressed: route == null
           ? null
           : () => ref
-              .read(offlineRegionRepositoryProvider.notifier)
-              .downloadRoute(route),
+                .read(offlineRegionRepositoryProvider.notifier)
+                .downloadRoute(route),
       icon: const Icon(Icons.refresh),
       label: const Text('Try again'),
     );
@@ -555,7 +564,9 @@ class _NotFoundScreen extends StatelessWidget {
       ),
     );
   }
-}Future<void> _showExpandedMap(
+}
+
+Future<void> _showExpandedMap(
   BuildContext context,
   Route route,
   List<Activity> attempts,
@@ -589,18 +600,26 @@ class _NotFoundScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                     child: FlutterMap(
                       options: MapOptions(
-                        initialCenter: tracks.isNotEmpty && tracks.first.isNotEmpty
-                            ? LatLng(tracks.first.first.latitude, tracks.first.first.longitude)
+                        initialCenter:
+                            tracks.isNotEmpty && tracks.first.isNotEmpty
+                            ? LatLng(
+                                tracks.first.first.latitude,
+                                tracks.first.first.longitude,
+                              )
                             : (route.geometry.isNotEmpty
-                                ? LatLng(route.geometry.first.latitude, route.geometry.first.longitude)
-                                : const LatLng(0, 0)),
+                                  ? LatLng(
+                                      route.geometry.first.latitude,
+                                      route.geometry.first.longitude,
+                                    )
+                                  : const LatLng(0, 0)),
                         initialZoom: 14,
                       ),
                       children: [
                         TileLayer(
                           urlTemplate:
                               'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName: 'dev.neurieder.against_yesterday',
+                          userAgentPackageName:
+                              'dev.neurieder.against_yesterday',
                         ),
                         PolylineLayer(
                           polylines: [
@@ -699,6 +718,181 @@ class _LegendRow extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(child: Text(label)),
+        ],
+      ),
+    );
+  }
+}
+
+class SegmentComparisonSection extends ConsumerStatefulWidget {
+  const SegmentComparisonSection({
+    super.key,
+    required this.route,
+    required this.attempts,
+  });
+
+  final Route route;
+  final List<Activity> attempts;
+
+  @override
+  ConsumerState<SegmentComparisonSection> createState() =>
+      _SegmentComparisonSectionState();
+}
+
+class _SegmentComparisonSectionState
+    extends ConsumerState<SegmentComparisonSection> {
+  double _segmentDistance = 1000;
+  bool _loading = false;
+  List<RouteSegmentComparison>? _comparison;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  @override
+  void didUpdateWidget(covariant SegmentComparisonSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.route.id != widget.route.id ||
+        oldWidget.attempts.length != widget.attempts.length) {
+      _run();
+    }
+  }
+
+  Future<void> _run() async {
+    final engine = ref.read(engineServiceProvider);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final selected = widget.attempts.take(5).toList();
+      final attempts = <Attempt>[];
+      for (final a in selected) {
+        if (a.track == null || a.track!.length < 2) continue;
+        final att = await engine.createAttempt(
+          activityId: a.id,
+          routeId: widget.route.id,
+          points: a.track!,
+          routeGeometry: widget.route.geometry,
+        );
+        attempts.add(att);
+      }
+      if (attempts.length < 2) {
+        setState(() {
+          _comparison = null;
+          _loading = false;
+        });
+        return;
+      }
+      final result = await engine.compareRouteSegments(
+        attempts: attempts,
+        segmentDistanceMeters: _segmentDistance,
+        routeDistanceMeters: widget.route.distance.meters,
+      );
+      setState(() {
+        _comparison = result;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Segment comparison',
+          style: textTheme.titleMedium?.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Wrap(
+          spacing: AppSpacing.sm,
+          children: [
+            for (final d in const [500.0, 1000.0, 2000.0, 5000.0])
+              ChoiceChip(
+                label: Text(
+                  d >= 1000
+                      ? '${(d / 1000).toStringAsFixed(0)} km'
+                      : '${d.toStringAsFixed(0)} m',
+                ),
+                selected: _segmentDistance == d,
+                onSelected: (_) {
+                  setState(() => _segmentDistance = d);
+                  _run();
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (_loading)
+          const Center(child: CircularProgressIndicator())
+        else if (_error != null)
+          Text(
+            _error!,
+            style: textTheme.bodySmall?.copyWith(color: AppColors.error),
+          )
+        else if (_comparison == null || _comparison!.isEmpty)
+          Text(
+            'Need at least two activities with tracks to compare.',
+            style: textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+          )
+        else
+          _SegmentTable(comparison: _comparison!),
+      ],
+    );
+  }
+}
+
+class _SegmentTable extends StatelessWidget {
+  const _SegmentTable({required this.comparison});
+
+  final List<RouteSegmentComparison> comparison;
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columns: [
+          const DataColumn(label: Text('Seg')),
+          const DataColumn(label: Text('Start')),
+          const DataColumn(label: Text('End')),
+          for (var i = 0; i < comparison.first.segments.length; i++)
+            DataColumn(label: Text('Run ${i + 1}')),
+          const DataColumn(label: Text('Best')),
+          const DataColumn(label: Text('Spread')),
+        ],
+        rows: [
+          for (final c in comparison)
+            DataRow(
+              cells: [
+                DataCell(Text('${c.index + 1}')),
+                DataCell(Text('${c.startDistanceM.toStringAsFixed(0)}m')),
+                DataCell(Text('${c.endDistanceM.toStringAsFixed(0)}m')),
+                for (final s in c.segments)
+                  DataCell(
+                    Text(
+                      s.durationSeconds > 0
+                          ? '${(s.averageSpeedMps * 3.6).toStringAsFixed(1)} km/h'
+                          : '—',
+                    ),
+                  ),
+                DataCell(Text((c.maxSpeedMps * 3.6).toStringAsFixed(1))),
+                DataCell(Text((c.speedSpreadMps * 3.6).toStringAsFixed(1))),
+              ],
+            ),
         ],
       ),
     );

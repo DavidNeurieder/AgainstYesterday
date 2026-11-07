@@ -29,6 +29,7 @@ use crate::attempt::{Attempt, AttemptSample};
 use crate::geo::Coordinate;
 use crate::ghost::Ghost;
 use crate::route::{MatchConfig, Route, compare, compare_either_direction};
+use crate::track::segments::compare_route_segments;
 use crate::synthetic::Rng;
 use crate::track::{FilterConfig, MovingConfig, Track, TrackPoint};
 use crate::units::{Distance, Duration, Timestamp};
@@ -378,6 +379,58 @@ fn create_attempt(bytes: &[u8]) -> Result<Vec<u8>, String> {
 ///
 /// In: `[attempt] reference, [attempt] current, f64 distance_m`.
 /// Out: `f64 distance_m, f64 time_difference_s, u8 ahead`.
+
+/// `gps_compare_route_segments`
+///
+/// In: `f64 route_distance_m, f64 segment_distance_m, u32 attempt_count,
+/// then per attempt: [u32 sample_count, per sample: f64 distance_m, f64 elapsed_s]`.
+/// Out: `u32 segment_count, then per segment:
+/// u32 index, f64 start_distance_m, f64 end_distance_m,
+/// u32 attempt_count, per attempt: f64 duration_s, f64 avg_speed_mps, u8 complete,
+/// f64 min_speed_mps, f64 max_speed_mps, f64 mean_speed_mps, f64 speed_spread_mps`.
+fn compare_route_segments_impl(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let route_distance = Distance::from_meters(rd.f64()?);
+    let segment_distance = Distance::from_meters(rd.f64()?);
+    let attempt_count = rd.u32()? as usize;
+    let mut attempts = Vec::with_capacity(attempt_count.min(1_000_000));
+    for _ in 0..attempt_count {
+        let n = rd.u32()? as usize;
+        let mut samples = Vec::with_capacity(n.min(1_000_000));
+        for _ in 0..n {
+            let distance = Distance::from_meters(rd.f64()?);
+            let elapsed = Duration::from_secs(rd.f64()?);
+            samples.push(crate::attempt::AttemptSample { distance, elapsed });
+        }
+        let attempt = crate::attempt::Attempt::from_samples(samples)
+            .map_err(|e| e.to_string())?;
+        attempts.push(attempt);
+    }
+    rd.done("compare_route_segments")?;
+
+    let comparison = compare_route_segments(&attempts, segment_distance, route_distance)
+        .map_err(|e| e.to_string())?;
+
+    let mut w = Wr::default();
+    w.u32(comparison.len() as u32);
+    for c in &comparison {
+        w.u32(c.index as u32);
+        w.f64(c.start_distance.meters());
+        w.f64(c.end_distance.meters());
+        w.u32(c.segments.len() as u32);
+        for s in &c.segments {
+            w.f64(s.duration.as_secs());
+            w.f64(s.average_speed.mps());
+            w.u8(s.complete as u8);
+        }
+        w.f64(c.min_speed.mps());
+        w.f64(c.max_speed.mps());
+        w.f64(c.mean_speed.mps());
+        w.f64(c.speed_spread.mps());
+    }
+    Ok(w.data)
+}
+
 fn ghost_state_at(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let reference_samples = read_attempt(&mut rd)?;
@@ -558,7 +611,18 @@ pub unsafe extern "C" fn gps_create_attempt(
 }
 
 #[unsafe(no_mangle)]
-/// Evaluates a ghost duel at a fixed route distance.
+/// Compares multiple attempts section-by-section along a canonical route.
+///
+/// # Safety
+/// See [`gps_process_track`].
+pub unsafe extern "C" fn gps_compare_route_segments(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, compare_route_segments_impl)
+}
 ///
 /// # Safety
 /// See [`gps_process_track`].

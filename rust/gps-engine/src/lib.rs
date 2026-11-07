@@ -97,9 +97,10 @@ pub use route::{
     compare_prepared, compare_with,
 };
 pub use track::{
-    FilterConfig, FilterReason, MovingConfig, ProcessingReport, SegmentComparison, SegmentError,
-    SimplifyConfig, Track, TrackPoint, TrackSegment, compare_segments, filter, filter_detailed,
-    resample_by_distance, segments, simplify,
+    FilterConfig, FilterReason, MovingConfig, ProcessingReport, RouteSegment, RouteSegmentComparison,
+    SegmentComparison, SegmentError, SimplifyConfig, Track, TrackPoint, TrackSegment,
+    compare_route_segments, compare_segments, filter, filter_detailed, resample_by_distance,
+    route_segments, segments, simplify,
 };
 // Common aliases for the sectionwise comparison API.
 pub use track::segments::compare_segments as compare_sectionwise;

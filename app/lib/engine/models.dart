@@ -146,6 +146,48 @@ class Attempt {
   final List<AttemptSample> samples;
 }
 
+/// One fixed-distance slice of an attempt along a canonical route.
+class RouteSegment {
+  const RouteSegment({
+    required this.index,
+    required this.startDistanceM,
+    required this.endDistanceM,
+    required this.durationSeconds,
+    required this.averageSpeedMps,
+    required this.complete,
+  });
+
+  final int index;
+  final double startDistanceM;
+  final double endDistanceM;
+  final double durationSeconds;
+  final double averageSpeedMps;
+  final bool complete;
+}
+
+/// Section-by-section comparison of a group of attempts on one route.
+class RouteSegmentComparison {
+  const RouteSegmentComparison({
+    required this.index,
+    required this.startDistanceM,
+    required this.endDistanceM,
+    required this.segments,
+    required this.minSpeedMps,
+    required this.maxSpeedMps,
+    required this.meanSpeedMps,
+    required this.speedSpreadMps,
+  });
+
+  final int index;
+  final double startDistanceM;
+  final double endDistanceM;
+  final List<RouteSegment> segments;
+  final double minSpeedMps;
+  final double maxSpeedMps;
+  final double meanSpeedMps;
+  final double speedSpreadMps;
+}
+
 /// A reference attempt (the PB) to ghost against.
 class Ghost {
   const Ghost({required this.attemptId, required this.samples});

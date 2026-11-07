@@ -658,11 +658,32 @@ fn cmd_segments(args: &[String]) -> CmdResult {
     }
 
     let tracks: Vec<Track> = loaded.iter().map(|(_, raw)| process(raw).0).collect();
-    let comparison = compare_segments(&tracks, parsed.segments).map_err(|e| e.to_string())?;
+
+    let segments = if let Some(d) = parsed.distance {
+        let min_len = tracks
+            .iter()
+            .map(|t| {
+                let pts = t.points();
+                let mut cum = 0.0f64;
+                for i in 1..pts.len() {
+                    cum += gps_engine::geo::distance(pts[i - 1].coordinate(), pts[i].coordinate()).meters();
+                }
+                cum
+            })
+            .fold(f64::INFINITY, f64::min);
+        if !min_len.is_finite() || min_len <= 0.0 {
+            return Err("tracks have zero length".to_string());
+        }
+        ((min_len / d).ceil() as usize).max(1)
+    } else {
+        parsed.segments
+    };
+
+    let comparison = compare_segments(&tracks, segments).map_err(|e| e.to_string())?;
 
     println!(
         "Segments     {} sections across {} tracks",
-        parsed.segments,
+        segments,
         tracks.len()
     );
     if skipped > 0 {
@@ -699,12 +720,14 @@ fn cmd_segments(args: &[String]) -> CmdResult {
 struct SegmentsArgs {
     inputs: Vec<String>,
     segments: usize,
+    distance: Option<f64>,
 }
 
 fn parse_segments_args(args: &[String]) -> Result<SegmentsArgs, String> {
     let mut parsed = SegmentsArgs {
         inputs: Vec::new(),
         segments: 5,
+        distance: None,
     };
     let mut index = 0;
     while index < args.len() {
@@ -719,6 +742,22 @@ fn parse_segments_args(args: &[String]) -> Result<SegmentsArgs, String> {
                 if parsed.segments == 0 {
                     return Err("segments must be greater than zero".to_string());
                 }
+                index += 1;
+            }
+            "--distance" | "--segment-distance" => {
+                let value = args
+                    .get(index + 1)
+                    .ok_or_else(|| "--distance needs a value".to_string())?;
+                let d: f64 = value
+                    .parse()
+                    .map_err(|_| format!("invalid segment distance: {value}"))?;
+                if d <= 0.0 {
+                    return Err("segment distance must be greater than zero".to_string());
+                }
+                if parsed.distance.is_some() {
+                    return Err("specify either --segments or --distance, not both".to_string());
+                }
+                parsed.distance = Some(d);
                 index += 1;
             }
             flag if flag.starts_with('-') => return Err(format!("unknown argument: {flag}")),

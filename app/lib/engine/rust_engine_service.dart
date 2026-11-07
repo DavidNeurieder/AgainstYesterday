@@ -76,6 +76,52 @@ final class RustEngineService implements EngineService {
   }
 
   @override
+  Future<List<RouteSegmentComparison>> compareRouteSegments({
+    required List<Attempt> attempts,
+    required double segmentDistanceMeters,
+    required double routeDistanceMeters,
+  }) async {
+    final req = _W()
+      ..f64(routeDistanceMeters)
+      ..f64(segmentDistanceMeters)
+      ..u32(attempts.length);
+    for (final a in attempts) {
+      req.attempt(a.samples);
+    }
+    final r = _R(_ffi.compareRouteSegments(req.takeBytes()));
+    final count = r.u32();
+    final result = <RouteSegmentComparison>[];
+    for (var i = 0; i < count; i++) {
+      final index = r.u32();
+      final start = r.f64();
+      final end = r.f64();
+      final attemptCount = r.u32();
+      final segments = <RouteSegment>[];
+      for (var j = 0; j < attemptCount; j++) {
+        segments.add(RouteSegment(
+          index: index,
+          startDistanceM: start,
+          endDistanceM: end,
+          durationSeconds: r.f64(),
+          averageSpeedMps: r.f64(),
+          complete: r.u8() == 1,
+        ));
+      }
+      result.add(RouteSegmentComparison(
+        index: index,
+        startDistanceM: start,
+        endDistanceM: end,
+        segments: segments,
+        minSpeedMps: r.f64(),
+        maxSpeedMps: r.f64(),
+        meanSpeedMps: r.f64(),
+        speedSpreadMps: r.f64(),
+      ));
+    }
+    return result;
+  }
+
+  @override
   Future<Attempt> createAttempt({
     required String activityId,
     required String routeId,

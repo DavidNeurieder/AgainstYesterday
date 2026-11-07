@@ -54,7 +54,12 @@ abstract class EngineService {
     required double loopLengthM,
   });
 
-  /// Deterministically synthesizes a recording of the shared demo loop.
+  /// Compares attempts section-by-section along a canonical route.
+  Future<List<RouteSegmentComparison>> compareRouteSegments({
+    required List<Attempt> attempts,
+    required double segmentDistanceMeters,
+    required double routeDistanceMeters,
+  });
   ///
   /// The ghost is built from a PB attempt walked at constant speed, so the
   /// engine can produce that timeline purely from geometry (no device GPS).

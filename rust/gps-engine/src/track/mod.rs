@@ -15,6 +15,9 @@ pub use model::Track;
 pub use point::TrackPoint;
 pub use resampling::resample_by_distance;
 pub use reverse::reverse;
-pub use segments::{SegmentComparison, SegmentError, TrackSegment, compare_segments, segments};
+pub use segments::{
+    RouteSegment, RouteSegmentComparison, SegmentComparison, SegmentError, TrackSegment,
+    compare_route_segments, compare_segments, route_segments, segments,
+};
 pub use simplification::{SimplifyConfig, simplify};
 pub use statistics::{MovingConfig, moving_duration};

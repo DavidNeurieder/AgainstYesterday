@@ -208,3 +208,181 @@ pub fn compare_segments(
     }
     Ok(out)
 }
+
+
+// ---------------------------------------------------------------------------
+// Route-axis segmentation (fixed distance boundaries along a canonical route)
+// ---------------------------------------------------------------------------
+
+use crate::attempt::Attempt;
+
+/// One fixed-distance slice of an attempt along the canonical route.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RouteSegment {
+    /// Zero-based section index.
+    pub index: usize,
+    /// Distance from the route start to the section start.
+    pub start_distance: Distance,
+    /// Distance from the route start to the section end (route boundary).
+    pub end_distance: Distance,
+    /// Elapsed time across the part of the section the attempt actually covered.
+    pub duration: Duration,
+    /// Average speed over the covered part (0 if no time).
+    pub average_speed: Speed,
+    /// Whether the attempt covered the whole section.
+    pub complete: bool,
+}
+
+/// Per-section comparison of a group of attempts on the same route.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RouteSegmentComparison {
+    /// Zero-based section index.
+    pub index: usize,
+    /// Distance from the route start to the section start.
+    pub start_distance: Distance,
+    /// Distance from the route start to the section end (route boundary).
+    pub end_distance: Distance,
+    /// One entry per input attempt, in input order.
+    pub segments: Vec<RouteSegment>,
+    /// Slowest section speed among the attempts that covered it.
+    pub min_speed: Speed,
+    /// Fastest section speed among the attempts that covered it.
+    pub max_speed: Speed,
+    /// Arithmetic mean of the covering attempts' section speeds.
+    pub mean_speed: Speed,
+    /// Spread between fastest and slowest (max - min).
+    pub speed_spread: Speed,
+}
+
+/// Splits a single attempt into fixed-distance sections along the route.
+pub fn route_segments(
+    attempt: &Attempt,
+    segment_distance: Distance,
+    route_distance: Distance,
+) -> Result<Vec<RouteSegment>, SegmentError> {
+    if segment_distance.meters() <= 0.0 {
+        return Err(SegmentError::ZeroSegments);
+    }
+    if route_distance.meters() <= 0.0 {
+        return Err(SegmentError::ZeroLength);
+    }
+
+    let seg = segment_distance.meters();
+    let total = route_distance.meters();
+    let n = (total / seg).ceil() as usize;
+    let n = n.max(1);
+
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let start = (i as f64) * seg;
+        let end = ((i as f64 + 1.0) * seg).min(total);
+        if start >= total {
+            break;
+        }
+        let covered_end = end.min(attempt.distance.meters());
+        let complete = attempt.distance.meters() >= end - 1e-9;
+
+        let duration_secs = if start < attempt.distance.meters() {
+            let t_start = attempt.time_at(Distance::from_meters(start)).map(|d| d.as_secs()).unwrap_or(0.0);
+            let t_end = attempt.time_at(Distance::from_meters(covered_end)).map(|d| d.as_secs()).unwrap_or(t_start);
+            (t_end - t_start).max(0.0)
+        } else {
+            0.0
+        };
+        let duration = Duration::from_secs(duration_secs);
+        let covered = (covered_end - start).max(0.0);
+        let average_speed = if duration_secs > 0.0 {
+            Speed::from_mps(covered / duration_secs)
+        } else {
+            Speed::ZERO
+        };
+
+        out.push(RouteSegment {
+            index: i,
+            start_distance: Distance::from_meters(start),
+            end_distance: Distance::from_meters(end),
+            duration,
+            average_speed,
+            complete,
+        });
+    }
+    Ok(out)
+}
+
+/// Section-by-section comparison of a group of attempts on the same route.
+pub fn compare_route_segments(
+    attempts: &[Attempt],
+    segment_distance: Distance,
+    route_distance: Distance,
+) -> Result<Vec<RouteSegmentComparison>, SegmentError> {
+    if attempts.is_empty() {
+        return Err(SegmentError::NoTracks);
+    }
+    if segment_distance.meters() <= 0.0 {
+        return Err(SegmentError::ZeroSegments);
+    }
+    if route_distance.meters() <= 0.0 {
+        return Err(SegmentError::ZeroLength);
+    }
+
+    let per_attempt: Vec<Vec<RouteSegment>> = attempts
+        .iter()
+        .map(|a| route_segments(a, segment_distance, route_distance).unwrap_or_default())
+        .collect();
+
+    let section_count = per_attempt.first().map(|v| v.len()).unwrap_or(0);
+    let mut out = Vec::with_capacity(section_count);
+    for i in 0..section_count {
+        let segs: Vec<RouteSegment> = per_attempt.iter().map(|v| v[i].clone()).collect();
+        let mut min_speed = Speed::ZERO;
+        let mut max_speed = Speed::ZERO;
+        let mut sum = 0.0f64;
+        let mut count = 0usize;
+        let mut first = true;
+        for s in &segs {
+            if s.duration.as_secs() <= 0.0 {
+                continue;
+            }
+            if first {
+                min_speed = s.average_speed;
+                max_speed = s.average_speed;
+                first = false;
+            } else {
+                if s.average_speed.mps() < min_speed.mps() {
+                    min_speed = s.average_speed;
+                }
+                if s.average_speed.mps() > max_speed.mps() {
+                    max_speed = s.average_speed;
+                }
+            }
+            sum += s.average_speed.mps();
+            count += 1;
+        }
+        if count == 0 {
+            min_speed = Speed::ZERO;
+            max_speed = Speed::ZERO;
+        }
+        let mean_speed = if count > 0 {
+            Speed::from_mps(sum / count as f64)
+        } else {
+            Speed::ZERO
+        };
+        let speed_spread = Speed::from_mps((max_speed.mps() - min_speed.mps()).max(0.0));
+        let (start_distance, end_distance) = if let Some(s) = segs.first() {
+            (s.start_distance, s.end_distance)
+        } else {
+            (Distance::ZERO, Distance::ZERO)
+        };
+        out.push(RouteSegmentComparison {
+            index: i,
+            start_distance,
+            end_distance,
+            segments: segs,
+            min_speed,
+            max_speed,
+            mean_speed,
+            speed_spread,
+        });
+    }
+    Ok(out)
+}
