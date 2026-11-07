@@ -772,10 +772,11 @@ class _SegmentComparisonSectionState
       final attempts = <Attempt>[];
       for (final a in selected) {
         if (a.track == null || a.track!.length < 2) continue;
+        final sanitized = _monotonicTrack(a.track!);
         final att = await engine.createAttempt(
           activityId: a.id,
           routeId: widget.route.id,
-          points: a.track!,
+          points: sanitized,
           routeGeometry: widget.route.geometry,
         );
         attempts.add(att);
@@ -897,4 +898,28 @@ class _SegmentTable extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Ensures a track's timestamps are non-decreasing so the Rust engine's
+/// `Track` validation accepts them. Non-monotonic (or sentinel) timestamps
+/// are replaced with a synthetic one-second cadence, preserving positions.
+List<TrackPoint> _monotonicTrack(List<TrackPoint> points) {
+  var monotonic = true;
+  for (var i = 1; i < points.length; i++) {
+    if (points[i].timestamp.isBefore(points[i - 1].timestamp)) {
+      monotonic = false;
+      break;
+    }
+  }
+  if (monotonic) return points;
+  final start = points.first.timestamp;
+  return [
+    for (var i = 0; i < points.length; i++)
+      TrackPoint(
+        position: points[i].position,
+        altitudeMeters: points[i].altitudeMeters,
+        timestamp: start.add(Duration(seconds: i)),
+      ),
+  ];
 }
