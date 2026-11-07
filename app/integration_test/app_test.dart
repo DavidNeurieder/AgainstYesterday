@@ -162,6 +162,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Personal Best'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Attempts'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Attempts'), findsOneWidget);
 
     // Back returns to the library.
