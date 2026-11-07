@@ -782,6 +782,26 @@ class _SegmentComparisonSectionState
             routeGeometry: widget.route.geometry,
           );
           attempts.add(att);
+          continue;
+        } catch (_) {
+          // Fall through to synthetic timeline.
+        }
+        final synthetic = [
+          for (var i = 0; i < sanitized.length; i++)
+            TrackPoint(
+              position: sanitized[i].position,
+              altitudeMeters: sanitized[i].altitudeMeters,
+              timestamp: DateTime.fromMillisecondsSinceEpoch(i * 1000, isUtc: true),
+            ),
+        ];
+        try {
+          final att = await engine.createAttempt(
+            activityId: a.id,
+            routeId: widget.route.id,
+            points: synthetic,
+            routeGeometry: widget.route.geometry,
+          );
+          attempts.add(att);
         } catch (e) {
           firstError ??= '${a.id}: $e';
         }
