@@ -25,9 +25,11 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::slice;
 use std::sync::Arc;
 
-use crate::attempt::{Attempt, AttemptSample};
-use crate::geo::Coordinate;
+use crate::attempt::{Attempt, AttemptAxis, AttemptSample, MovingAxisConfig};
+use crate::geo::{Coordinate, polyline_length};
 use crate::ghost::Ghost;
+use crate::gps::GpsFix;
+use crate::live::{LiveConfig, LiveGhost, LiveRecorder};
 use crate::route::{MatchConfig, Route, compare, compare_either_direction};
 use crate::synthetic::Rng;
 use crate::track::segments::compare_route_segments;
@@ -118,6 +120,9 @@ impl Wr {
     fn u32(&mut self, v: u32) {
         self.data.extend_from_slice(&v.to_le_bytes());
     }
+    fn u64(&mut self, v: u64) {
+        self.data.extend_from_slice(&v.to_le_bytes());
+    }
     fn f64(&mut self, v: f64) {
         self.data.extend_from_slice(&v.to_le_bytes());
     }
@@ -154,6 +159,9 @@ impl<'a> Rd<'a> {
     }
     fn u32(&mut self) -> Result<u32, String> {
         Ok(u32::from_le_bytes(self.take(4)?.try_into().unwrap()))
+    }
+    fn u64(&mut self) -> Result<u64, String> {
+        Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
     fn i64(&mut self) -> Result<i64, String> {
         Ok(i64::from_le_bytes(self.take(8)?.try_into().unwrap()))
@@ -274,6 +282,87 @@ fn read_coordinates(rd: &mut Rd<'_>) -> Result<Vec<Coordinate>, String> {
     Ok(out)
 }
 
+#[allow(dead_code)]
+/// `[u32 n]` then per fix:
+/// `f64 lat, f64 lon, i64 unix-ms, u8 mask, [f64]*` where mask bit 0 =
+/// accuracy (m), 1 = altitude (m), 2 = speed (m/s), 3 = bearing (deg).
+fn read_fixes(rd: &mut Rd<'_>) -> Result<Vec<GpsFix>, String> {
+    let n = rd.u32()? as usize;
+    let mut out = Vec::with_capacity(n.min(1_000_000));
+    for i in 0..n {
+        out.push(read_fix(rd, i)?);
+    }
+    Ok(out)
+}
+
+fn read_fix(rd: &mut Rd<'_>, i: usize) -> Result<GpsFix, String> {
+    let lat = rd.f64()?;
+    let lon = rd.f64()?;
+    let coord = Coordinate::new(lat, lon).map_err(|e| format!("fix {i}: {e}"))?;
+    let timestamp = Timestamp::from_unix_ms(rd.i64()?);
+    let mask = rd.u8()?;
+    let mut fix = GpsFix::new(timestamp, coord);
+    if mask & 0x01 != 0 {
+        fix.accuracy = Some(Distance::from_meters(rd.f64()?));
+    }
+    if mask & 0x02 != 0 {
+        fix.altitude = Some(rd.f64()?);
+    }
+    if mask & 0x04 != 0 {
+        fix.speed = Some(crate::units::Speed::from_mps(rd.f64()?));
+    }
+    if mask & 0x08 != 0 {
+        let degrees = rd.f64()?;
+        fix.bearing = crate::geo::Bearing::from_degrees(degrees).ok();
+    }
+    Ok(fix)
+}
+
+#[allow(dead_code)]
+fn write_fix(w: &mut Wr, fix: &GpsFix) {
+    w.f64(fix.coordinate.latitude());
+    w.f64(fix.coordinate.longitude());
+    w.i64(fix.timestamp.unix_ms());
+    let mut mask = 0u8;
+    if fix.accuracy.is_some() {
+        mask |= 0x01;
+    }
+    if fix.altitude.is_some() {
+        mask |= 0x02;
+    }
+    if fix.speed.is_some() {
+        mask |= 0x04;
+    }
+    if fix.bearing.is_some() {
+        mask |= 0x08;
+    }
+    w.u8(mask);
+    if let Some(accuracy) = fix.accuracy {
+        w.f64(accuracy.meters());
+    }
+    if let Some(altitude) = fix.altitude {
+        w.f64(altitude);
+    }
+    if let Some(speed) = fix.speed {
+        w.f64(speed.mps());
+    }
+    if let Some(bearing) = fix.bearing {
+        w.f64(bearing.as_degrees());
+    }
+}
+
+fn read_live_ghost(rd: &mut Rd<'_>) -> Result<Option<LiveGhost>, String> {
+    let has = rd.u8()? != 0;
+    if !has {
+        return Ok(None);
+    }
+    let samples = read_attempt(rd)?
+        .into_iter()
+        .map(|s| (s.distance, s.elapsed))
+        .collect();
+    Ok(Some(LiveGhost { samples }))
+}
+
 /// `[u32 n]` then per sample: `f64 distance_m, f64 elapsed_s`.
 fn read_attempt(rd: &mut Rd<'_>) -> Result<Vec<AttemptSample>, String> {
     let n = rd.u32()? as usize;
@@ -350,7 +439,7 @@ fn match_routes(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
 /// `gps_create_attempt`
 ///
-/// In: `str activity_id, str route_id, [points], [coordinates]`.
+/// In: `str activity_id, str route_id, [points], [coordinates], [u8 axis]?`.
 /// Out: `f64 elapsed_s, u32 sample_count, then per sample:
 /// f64 distance_m, f64 elapsed_s`.
 fn create_attempt(bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -359,11 +448,20 @@ fn create_attempt(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let _route_id = rd.str()?;
     let points = read_points(&mut rd)?;
     let geometry = read_coordinates(&mut rd)?;
+    let axis = if rd.pos < rd.data.len() {
+        if rd.u8()? == 1 {
+            AttemptAxis::Moving
+        } else {
+            AttemptAxis::Clock
+        }
+    } else {
+        AttemptAxis::Clock
+    };
     rd.done("create_attempt")?;
 
     let track = Track::new(points).map_err(|e| e.to_string())?;
     let route = Route::new(geometry).map_err(|e| e.to_string())?;
-    let attempt = Attempt::from_track(&track, &route);
+    let attempt = Attempt::from_track_with(&track, &route, axis, &MovingAxisConfig::default());
 
     let mut w = Wr::default();
     w.f64(attempt.elapsed_time.as_secs());
@@ -372,6 +470,34 @@ fn create_attempt(bytes: &[u8]) -> Result<Vec<u8>, String> {
         w.f64(sample.distance.meters());
         w.f64(sample.elapsed.as_secs());
     }
+    Ok(w.data)
+}
+
+/// `gps_route_info`
+///
+/// In: `[points]` (TrackPoint encoding).
+/// Out: `f64 length_m, f64 duration_s` computed from the raw points in
+/// order, with no filtering.
+fn route_info(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let points = read_points(&mut rd)?;
+    rd.done("route_info")?;
+
+    let coords: Vec<Coordinate> = points.iter().map(|p| p.coordinate()).collect();
+    let length = polyline_length(&coords).meters();
+    let duration = if points.len() >= 2 {
+        points
+            .last()
+            .expect("len>=2")
+            .timestamp()
+            .elapsed_since(points.first().expect("len>=2").timestamp())
+            .as_secs()
+    } else {
+        0.0
+    };
+    let mut w = Wr::default();
+    w.f64(length);
+    w.f64(duration.max(0.0));
     Ok(w.data)
 }
 
@@ -558,8 +684,171 @@ fn jitter(c: Coordinate, noise: f64, rng: &mut Rng) -> Coordinate {
 }
 
 // ---------------------------------------------------------------------------
-// Exported entry points
+// Live recorder (opaque handle)
 // ---------------------------------------------------------------------------
+
+fn live_new(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let has_route = rd.u8()? != 0;
+    let route = if has_route {
+        Some(Route::new(read_coordinates(&mut rd)?).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    let ghost = read_live_ghost(&mut rd)?;
+    rd.done("live_new")?;
+
+    let mut rec = LiveRecorder::new(LiveConfig::default(), route);
+    rec.set_ghost(ghost);
+    let handle = (Box::into_raw(Box::new(rec)) as usize) as u64;
+    let mut w = Wr::default();
+    w.u64(handle);
+    Ok(w.data)
+}
+
+/// # Safety
+/// `handle` must be a live handle returned by `gps_live_new` and not yet freed.
+unsafe fn live_ref(handle: u64) -> Result<&'static mut LiveRecorder, String> {
+    if handle == 0 {
+        return Err("null live handle".into());
+    }
+    // SAFETY: the handle was produced by `Box::into_raw` in `live_new` and is
+    // valid until `gps_live_free` consumes it. The caller owns the handle and
+    // does not alias it across threads.
+    Ok(unsafe { &mut *(handle as usize as *mut LiveRecorder) })
+}
+
+fn live_push(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    let fix = read_fix(&mut rd, 0)?;
+    rd.done("live_push")?;
+    // SAFETY: see `live_ref`.
+    // SAFETY: see `live_ref`.
+    let rec = unsafe { live_ref(handle)? };
+    rec.push(fix);
+    Ok(Vec::new())
+}
+
+fn live_pause(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    rd.done("live_pause")?;
+    // SAFETY: see `live_ref`.
+    unsafe { live_ref(handle)? }.pause();
+    Ok(Vec::new())
+}
+
+fn live_resume(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    rd.done("live_resume")?;
+    // SAFETY: see `live_ref`.
+    unsafe { live_ref(handle)? }.resume();
+    Ok(Vec::new())
+}
+
+fn live_finish(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    rd.done("live_finish")?;
+    // SAFETY: see `live_ref`.
+    unsafe { live_ref(handle)? }.finish();
+    Ok(Vec::new())
+}
+
+fn live_seed(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    let distance = Distance::from_meters(rd.f64()?);
+    let moving = Duration::from_secs(rd.f64()?);
+    rd.done("live_seed")?;
+    // SAFETY: see `live_ref`.
+    unsafe { live_ref(handle)? }.seed(distance, moving);
+    Ok(Vec::new())
+}
+
+fn live_set_ghost(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    let ghost = read_live_ghost(&mut rd)?;
+    rd.done("live_set_ghost")?;
+    // SAFETY: see `live_ref`.
+    unsafe { live_ref(handle)? }.set_ghost(ghost);
+    Ok(Vec::new())
+}
+
+fn live_snapshot(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    rd.done("live_snapshot")?;
+    // SAFETY: see `live_ref`.
+    let rec = unsafe { live_ref(handle)? };
+    let snap = rec.snapshot();
+    let ghost = rec.ghost_snapshot();
+
+    let mut w = Wr::default();
+    w.f64(snap.distance.meters());
+    w.f64(snap.moving.as_secs());
+    w.f64(snap.pace.mps());
+    w.f64(snap.route_progress);
+    if let Some(off) = snap.off_route {
+        w.u8(1);
+        w.f64(off.meters());
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+    }
+    if let Some(acc) = snap.accuracy {
+        w.u8(1);
+        w.f64(acc.meters());
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+    }
+    if let Some(pos) = snap.position {
+        w.u8(1);
+        w.f64(pos.latitude());
+        w.f64(pos.longitude());
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+        w.f64(0.0);
+    }
+    if let Some(g) = ghost {
+        w.u8(1);
+        w.f64(g.state.distance.meters());
+        w.f64(g.state.time_difference.as_secs());
+        w.u8(g.state.ahead as u8);
+        w.f64(g.spatial_gap.meters());
+        w.f64(g.confidence);
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+        w.f64(0.0);
+        w.u8(0);
+        w.f64(0.0);
+        w.f64(0.0);
+    }
+    Ok(w.data)
+}
+
+/// Frees a live handle returned by `gps_live_new`. Null is ignored.
+///
+/// # Safety
+/// `handle` must be a live handle from `gps_live_new`, or zero.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn gps_live_free(handle: u64) {
+    if handle == 0 {
+        return;
+    }
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: see `live_ref`; this consumes the handle exactly once.
+        unsafe {
+            drop(Box::from_raw(handle as usize as *mut LiveRecorder));
+        }
+    }));
+}
 
 #[unsafe(no_mangle)]
 /// Cleans a recording ([points]) and returns a [ProcessedTrack]-shaped report.
@@ -665,6 +954,131 @@ pub unsafe extern "C" fn gps_generate_recording(
     dispatch(input, input_len, output, output_len, generate_recording)
 }
 
+#[unsafe(no_mangle)]
+/// Computes raw geodesic length and duration for a point sequence.
+///
+/// # Safety
+/// See [`gps_process_track`].
+pub unsafe extern "C" fn gps_route_info(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, route_info)
+}
+
+#[unsafe(no_mangle)]
+/// Creates a stateful live recorder and returns an opaque handle.
+///
+/// # Safety
+/// See [`gps_process_track`].
+pub unsafe extern "C" fn gps_live_new(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_new)
+}
+
+#[unsafe(no_mangle)]
+/// Feeds one raw fix into a live recorder.
+///
+/// # Safety
+/// See [`gps_process_track`]; the handle in the request must be live.
+pub unsafe extern "C" fn gps_live_push(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_push)
+}
+
+#[unsafe(no_mangle)]
+/// Pauses a live recorder.
+///
+/// # Safety
+/// See [`gps_live_push`].
+pub unsafe extern "C" fn gps_live_pause(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_pause)
+}
+
+#[unsafe(no_mangle)]
+/// Resumes a live recorder.
+///
+/// # Safety
+/// See [`gps_live_push`].
+pub unsafe extern "C" fn gps_live_resume(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_resume)
+}
+
+#[unsafe(no_mangle)]
+/// Flushes the closing chord of a live recorder.
+///
+/// # Safety
+/// See [`gps_live_push`].
+pub unsafe extern "C" fn gps_live_finish(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_finish)
+}
+
+#[unsafe(no_mangle)]
+/// Seeds a live recorder from a persisted snapshot.
+///
+/// # Safety
+/// See [`gps_live_push`].
+pub unsafe extern "C" fn gps_live_seed(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_seed)
+}
+
+#[unsafe(no_mangle)]
+/// Replaces the ghost profile of a live recorder.
+///
+/// # Safety
+/// See [`gps_live_push`].
+pub unsafe extern "C" fn gps_live_set_ghost(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_set_ghost)
+}
+
+#[unsafe(no_mangle)]
+/// Reads the current snapshot of a live recorder.
+///
+/// # Safety
+/// See [`gps_live_push`].
+pub unsafe extern "C" fn gps_live_snapshot(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, live_snapshot)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
