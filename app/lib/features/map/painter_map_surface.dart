@@ -20,10 +20,12 @@ class PainterMapSurface implements MapSurface {
   @override
   Widget build(BuildContext context, MapScene scene) => RouteMap(
         geometry: scene.geometry,
+        track: scene.track,
         you: scene.you,
         youProgress: scene.youProgress,
         ghost: scene.ghost,
         name: scene.name,
+        courseColor: scene.courseColor,
         staticView: scene.staticView,
       );
 }

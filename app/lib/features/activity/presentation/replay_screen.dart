@@ -46,6 +46,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
 
   Route? _route;
   List<GeoPoint> _geometry = const [];
+  List<TrackPoint>? _activityTrack;
 
   @override
   void initState() {
@@ -153,6 +154,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
       setState(() {
         _route = route;
         _geometry = geometry;
+        _activityTrack = activity.track;
         _handle = handle;
         _snapshot = snap;
         _loading = false;
@@ -283,6 +285,16 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
         ? _geometry.reversed.toList(growable: false)
         : _geometry;
 
+    // The actual recorded path, revealed up to the current replay point so a
+    // run that diverged from the planned course is still visible.
+    List<GeoPoint> trackGeometry = const [];
+    final trackPoints = _activityTrack;
+    if (_route != null && trackPoints != null && trackPoints.length >= 2) {
+      final n = snap.appliedFixes.clamp(0, trackPoints.length);
+      trackGeometry = [for (final p in trackPoints.take(n)) p.position];
+      if (trackGeometry.length < 2) trackGeometry = const [];
+    }
+
     GeoPoint? ghostPosition;
     final ghost = snap.ghost;
     if (ghost != null && geometry.length >= 2) {
@@ -321,6 +333,8 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
                         youProgress: snap.routeProgress,
                         ghost: ghostPosition,
                         name: _route?.name,
+                        courseColor: AppColors.pb,
+                        track: trackGeometry,
                       ),
                     )
                   else

@@ -109,6 +109,8 @@ class LiveRunScreen extends ConsumerWidget {
                         youProgress: state.routeProgress,
                         ghost: state.ghostPosition,
                         name: state.route?.name,
+                        courseColor: AppColors.pb,
+                        track: state.track,
                       ),
                     ),
                     // §18: the race screen stays underneath; the overlay

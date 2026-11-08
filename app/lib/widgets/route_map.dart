@@ -22,14 +22,19 @@ class RouteMap extends StatefulWidget {
   const RouteMap({
     super.key,
     required this.geometry,
+    this.track = const [],
     required this.you,
     required this.youProgress,
     this.ghost,
     this.name,
+    this.courseColor,
     this.staticView = false,
   });
 
   final List<GeoPoint> geometry;
+
+  /// The actual recorded GPS path, drawn on top of [geometry].
+  final List<GeoPoint> track;
 
   /// Current live position (YOU).
   final GeoPoint you;
@@ -42,6 +47,10 @@ class RouteMap extends StatefulWidget {
 
   /// Route name shown as a corner label.
   final String? name;
+
+  /// Colour for the whole course, when it must be visible under the travelled
+  /// line (record/replay). `null` keeps the faint backdrop.
+  final Color? courseColor;
 
   /// Renders the whole route fitted to the viewport with no markers,
   /// no follow and no panning — the route-detail thumbnail (§23).
@@ -89,7 +98,9 @@ class _RouteMapState extends State<RouteMap> {
                 follow: false,
                 followAt: widget.you,
                 geometry: widget.geometry,
+                track: widget.track,
                 youProgress: widget.youProgress,
+                courseColor: widget.courseColor,
               ),
             ),
           ),
@@ -115,7 +126,9 @@ class _RouteMapState extends State<RouteMap> {
                     follow: _follow,
                     followAt: widget.you,
                     geometry: widget.geometry,
+                    track: widget.track,
                     youProgress: widget.youProgress,
+                    courseColor: widget.courseColor,
                   ),
                 ),
               ),
@@ -395,7 +408,9 @@ class _MapPainter extends CustomPainter {
     required this.follow,
     required this.followAt,
     required this.geometry,
+    this.track = const [],
     required this.youProgress,
+    this.courseColor,
   });
 
   final _WorldFit world;
@@ -403,7 +418,9 @@ class _MapPainter extends CustomPainter {
   final bool follow;
   final GeoPoint followAt;
   final List<GeoPoint> geometry;
+  final List<GeoPoint> track;
   final double youProgress;
+  final Color? courseColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -422,7 +439,7 @@ class _MapPainter extends CustomPainter {
     ];
 
     final trace = Paint()
-      ..color = AppColors.ghost.withValues(alpha: 0.35)
+      ..color = courseColor ?? AppColors.ghost.withValues(alpha: 0.35)
       ..strokeWidth = 3
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
@@ -438,6 +455,20 @@ class _MapPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
       canvas.drawPath(_path(traveled), youLine);
+    }
+
+    if (track.length >= 2) {
+      final trackPoints = <Offset>[
+        for (final g in track)
+          world.project(g, shift: shift, follow: follow, followAt: followAt),
+      ];
+      final trackPaint = Paint()
+        ..color = AppColors.track
+        ..strokeWidth = 3
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      canvas.drawPath(_path(trackPoints), trackPaint);
     }
   }
 
@@ -482,7 +513,9 @@ class _MapPainter extends CustomPainter {
   @override
   bool shouldRepaint(_MapPainter old) =>
       old.geometry != geometry ||
+      old.track != track ||
       old.youProgress != youProgress ||
+      old.courseColor != courseColor ||
       old.shift != shift ||
       old.follow != follow ||
       old.followAt != followAt;

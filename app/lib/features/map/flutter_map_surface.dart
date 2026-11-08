@@ -168,7 +168,18 @@ class _FlutterMapRouteMapState extends State<FlutterMapRouteMap> {
                   Polyline(
                     points: geometry,
                     strokeWidth: 4,
-                    color: AppColors.ghost.withValues(alpha: 0.35),
+                    color: scene.courseColor ??
+                        AppColors.ghost.withValues(alpha: 0.35),
+                  ),
+                ],
+              ),
+            if (scene.track.length >= 2)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: scene.track.map(_toLatLng).toList(),
+                    strokeWidth: 4,
+                    color: AppColors.track,
                   ),
                 ],
               ),

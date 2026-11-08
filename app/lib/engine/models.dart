@@ -523,6 +523,7 @@ class LiveRunState {
     this.error,
     this.rawFixCount = 0,
     this.backgroundProtection = BackgroundProtection.inactive,
+    this.track = const [],
   });
 
   final RunStatus status;
@@ -579,6 +580,10 @@ class LiveRunState {
   /// Foreground-service protection for screen-off recording, kept separate
   /// from the run status (see [BackgroundProtection]).
   final BackgroundProtection backgroundProtection;
+
+  /// The actual recorded GPS path so far, so a run that diverges from the
+  /// planned course is still visible on the map.
+  final List<GeoPoint> track;
 }
 
 /// Position along a polyline at [distanceMeters] from its start (linear

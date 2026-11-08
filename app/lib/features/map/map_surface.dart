@@ -67,15 +67,22 @@ MapRenderer get selectedMapRenderer => mapRendererFromDefine(kMapViewDefine);
 class MapScene {
   const MapScene({
     required this.geometry,
+    this.track = const [],
     required this.you,
     required this.youProgress,
     this.ghost,
     this.name,
+    this.courseColor,
     this.staticView = false,
   });
 
   /// The route (or recorded track) to draw.
   final List<GeoPoint> geometry;
+
+  /// The actual recorded GPS path, drawn on top of [geometry] so a run that
+  /// diverges from the planned course is still visible. Empty when there is
+  /// no separate track (thumbnails, activity detail which uses [geometry]).
+  final List<GeoPoint> track;
 
   /// Current live position (YOU).
   final GeoPoint you;
@@ -88,6 +95,11 @@ class MapScene {
 
   /// Route name shown as a corner label.
   final String? name;
+
+  /// Colour for the whole course when it must stand out from the travelled
+  /// track (record and replay). `null` keeps the faint backdrop that
+  /// thumbnails use, so the recorded path stays the focus there.
+  final Color? courseColor;
 
   /// Fits the whole geometry with no follow or panning (route-detail
   /// thumbnail).

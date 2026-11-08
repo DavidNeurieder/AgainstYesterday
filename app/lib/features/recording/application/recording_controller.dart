@@ -806,6 +806,10 @@ class RecordingController extends Notifier<LiveRunState?> {
       startedAt: session.startedAt,
       rawFixCount: session.rawFixes.length,
       backgroundProtection: _protection,
+      track: [
+        for (final f in session.rawFixes)
+          GeoPoint(latitude: f.latitude, longitude: f.longitude),
+      ],
     );
   }
 

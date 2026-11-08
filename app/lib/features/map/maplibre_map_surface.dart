@@ -67,6 +67,9 @@ class MaplibreRouteMap extends StatefulWidget {
   /// The GeoJSON source holding the travelled fraction of the geometry.
   static const String traveledSourceId = 'against-yesterday-traveled';
 
+  /// The GeoJSON source holding the actual recorded GPS track.
+  static const String trackSourceId = 'against-yesterday-track';
+
   @override
   State<MaplibreRouteMap> createState() => _MaplibreRouteMapState();
 }
@@ -76,8 +79,12 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
   static const String _routeLayerId = 'against-yesterday-route-line';
   static const String _traveledSourceId = MaplibreRouteMap.traveledSourceId;
   static const String _traveledLayerId = 'against-yesterday-traveled-line';
+  static const String _trackSourceId = MaplibreRouteMap.trackSourceId;
+  static const String _trackLayerId = 'against-yesterday-track-line';
 
-  /// `AppColors.ghost` (#8593A7); map layers take CSS color strings.
+  /// The default course backdrop (`AppColors.ghost`, #8593A7) used when the
+  /// scene does not ask for a visible course colour. Map layers take CSS
+  /// colour strings.
   static const String _routeColor = '#8593A7';
 
   /// `AppColors.track` (#34C77B): the travelled GPS path, kept green so it
@@ -87,6 +94,14 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
   /// `AppColors.you` (#F2F4F8) and `AppColors.background` (#0E1116).
   static const String _youColor = '#F2F4F8';
   static const String _strokeColor = '#0E1116';
+
+  /// CSS hex (`#rrggbb`) for a scene colour; alpha is carried separately by
+  /// `lineOpacity`.
+  static String _cssHex(Color color) {
+    final argb = color.toARGB32();
+    final rgb = argb & 0xFFFFFF;
+    return '#${rgb.toRadixString(16).padLeft(6, '0')}';
+  }
 
   static const double _followZoom = 16;
 
@@ -187,12 +202,13 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       _routeSourceId,
       lineStringFeatureCollection(widget.scene.geometry),
     );
+    final course = widget.scene.courseColor;
     await controller.addLineLayer(
       _routeSourceId,
       _routeLayerId,
-      const LineLayerProperties(
-        lineColor: _routeColor,
-        lineOpacity: 0.35,
+      LineLayerProperties(
+        lineColor: course == null ? _routeColor : _cssHex(course),
+        lineOpacity: course == null ? 0.35 : 1.0,
         lineWidth: 4,
         lineJoin: 'round',
         lineCap: 'round',
@@ -207,6 +223,20 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     await controller.addLineLayer(
       _traveledSourceId,
       _traveledLayerId,
+      const LineLayerProperties(
+        lineColor: _traveledColor,
+        lineWidth: 4,
+        lineJoin: 'round',
+        lineCap: 'round',
+      ),
+    );
+    await controller.addGeoJsonSource(
+      _trackSourceId,
+      lineStringFeatureCollection(widget.scene.track),
+    );
+    await controller.addLineLayer(
+      _trackSourceId,
+      _trackLayerId,
       const LineLayerProperties(
         lineColor: _traveledColor,
         lineWidth: 4,
@@ -285,6 +315,10 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       lineStringFeatureCollection(
         traveledGeometry(scene.geometry, scene.youProgress),
       ),
+    );
+    await controller.setGeoJsonSource(
+      _trackSourceId,
+      lineStringFeatureCollection(scene.track),
     );
     await _syncMarker(controller, you: true, position: scene.you);
     await _syncMarker(controller, you: false, position: scene.ghost);
