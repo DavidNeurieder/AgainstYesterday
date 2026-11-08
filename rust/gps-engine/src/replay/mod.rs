@@ -392,4 +392,103 @@ mod tests {
         assert_eq!(s.duration().as_secs(), 20.0);
         assert_eq!(s.snapshot().total_fixes, 3);
     }
+
+    #[test]
+    fn replay_with_ghost_reports_gap() {
+        use crate::live::LiveGhost;
+        use crate::route::Route;
+        use crate::units::{Distance, Duration};
+        let route = Route::new(vec![coord(52.50000, 13.40000), coord(52.50500, 13.40000)]).unwrap();
+        let ghost = LiveGhost {
+            samples: vec![
+                (Distance::from_meters(0.0), Duration::from_secs(0.0)),
+                (Distance::from_meters(556.0), Duration::from_secs(200.0)),
+            ],
+        };
+        let mut s = ReplaySession::with_ghost(straight_fixes(), Some(route), Some(ghost));
+        s.play();
+        s.set_speed(8.0);
+        let mut snap = s.snapshot();
+        for _ in 0..200 {
+            snap = s.advance(Duration::from_secs(0.05));
+            if snap.finished() {
+                break;
+            }
+        }
+        assert!(snap.finished());
+        assert!(snap.ghost.is_some());
+        assert!(snap.distance.meters() > 150.0);
+    }
+
+    #[test]
+    fn replay_end_gap_matches_direct_live_recorder() {
+        use crate::live::{LiveConfig, LiveGhost, LiveRecorder};
+        use crate::route::Route;
+        use crate::units::{Distance, Duration};
+
+        let route = Route::new(vec![coord(52.50000, 13.40000), coord(52.50200, 13.40000)]).unwrap();
+        let ghost = LiveGhost {
+            samples: vec![
+                (Distance::from_meters(0.0), Duration::from_secs(0.0)),
+                (Distance::from_meters(222.39), Duration::from_secs(60.0)),
+            ],
+        };
+        let fixes = straight_fixes();
+
+        // "Normal" calculation: feed the same fixes through a LiveRecorder.
+        let mut direct = LiveRecorder::new(LiveConfig::default(), Some(route.clone()));
+        direct.set_ghost(Some(ghost.clone()));
+        for &f in &fixes {
+            direct.push(f);
+        }
+        direct.finish();
+        let direct_snap = direct.snapshot();
+        let direct_ghost = direct.ghost_snapshot().expect("ghost");
+
+        let run_replay = |speed: f64| {
+            let mut s =
+                ReplaySession::with_ghost(fixes.clone(), Some(route.clone()), Some(ghost.clone()));
+            s.play();
+            s.set_speed(speed);
+            let mut snap = s.snapshot();
+            for _ in 0..2000 {
+                snap = s.advance(Duration::from_secs(0.05));
+                if snap.finished() {
+                    break;
+                }
+            }
+            snap
+        };
+
+        let r1 = run_replay(1.0);
+        let r8 = run_replay(8.0);
+        for (label, snap) in [("1x", &r1), ("8x", &r8)] {
+            assert!(snap.finished(), "{label} not finished");
+            let g = snap.ghost.as_ref().expect("ghost");
+            assert!(
+                (snap.distance.meters() - direct_snap.distance.meters()).abs() < 0.5,
+                "{label} distance {} vs {}",
+                snap.distance.meters(),
+                direct_snap.distance.meters()
+            );
+            assert!(
+                (snap.moving.as_secs() - direct_snap.moving.as_secs()).abs() < 0.5,
+                "{label} moving {} vs {}",
+                snap.moving.as_secs(),
+                direct_snap.moving.as_secs()
+            );
+            assert_eq!(
+                g.state.ahead, direct_ghost.state.ahead,
+                "{label} ahead flag"
+            );
+            assert!(
+                (g.state.time_difference.as_secs() - direct_ghost.state.time_difference.as_secs())
+                    .abs()
+                    < 0.5,
+                "{label} gap {} vs {}",
+                g.state.time_difference.as_secs(),
+                direct_ghost.state.time_difference.as_secs()
+            );
+        }
+    }
 }

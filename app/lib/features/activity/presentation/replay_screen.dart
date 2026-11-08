@@ -173,6 +173,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
     final delta = (elapsed - _lastTick).inMicroseconds / 1000000.0;
     _lastTick = elapsed;
     if (delta <= 0 || delta > 1.0) {
+      // Drop jumps (background/resume, ticker restart) without accumulating.
       return;
     }
     final snap = handle.advance(delta);
