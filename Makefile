@@ -28,7 +28,7 @@ endif
 .PHONY: build build-release install run test test-rust-engine lint tz-test \
         connected-test connected-test-engine connected-test-gps \
         engine-build engine-test engine-lint engine-fmt engine-doc \
-        engine-android full-test clean
+        engine-android full-test full-test-device ci-test check clean
 
 build:
 	cd app && flutter build apk --debug \
@@ -45,9 +45,6 @@ run: engine-build
 # the native Rust engine) and sideloads it into the connected device/emulator.
 install: engine-android build
 	adb install -r app/build/app/outputs/flutter-apk/app-debug.apk
-
-test:
-	cd app && flutter test
 
 test-rust-engine: engine-build
 	cd app && flutter test --dart-define=REQUIRE_RUST_ENGINE=true
@@ -88,19 +85,23 @@ engine-doc:
 engine-android:
 	./app/tool/build_rust_engine_android.sh
 
+check:
+	cd app && flutter analyze
+	cargo fmt --all --check
+	cargo clippy --all-targets --all-features -- -D warnings
+
+test:
+	cd app && flutter test
+	cargo test --all-features
+
+ci-test: check test tz-test
+
 full-test:
-	@set -u; \
-	failures=""; \
-	run() { echo "==> $$1"; if timeout 1800 $(MAKE) $$1; then echo "   PASS: $$1"; else echo "   FAIL: $$1"; failures="$$failures $$1"; fi; }; \
-	run engine-fmt; run engine-lint; run engine-test; run engine-doc; \
-	run test-rust-engine; run lint; run tz-test; run connected-test-engine; \
-	echo "──────────────────────────────────────────────"; \
-	if [ -z "$$failures" ]; then \
-		echo "FULL TEST: everything passed"; \
-	else \
-		echo "FULL TEST: FAILED:$$failures"; \
-		exit 1; \
-	fi
+	bash app/tool/full_test.sh
+
+full-test-device:
+	DEVICE=1 bash app/tool/full_test.sh
+
 
 clean:
 	cd app && flutter clean
