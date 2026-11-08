@@ -73,6 +73,9 @@ pub mod synthetic;
 /// Standard processing pipeline and labeled-corpus evaluation (§33/§38–40).
 pub mod evaluate;
 
+/// Deterministic replay of recorded GPS traces.
+pub mod replay;
+
 /// Self-contained HTML map rendering for inspecting tracks in a browser.
 pub mod viz;
 
@@ -96,7 +99,10 @@ pub use gps::{
     Fixture, GpsFix, GpsQuality, GpsTrace, ProcessedSample, RejectionReason, TrackProcessing,
 };
 pub use gpx::{parse_gpx, read_gpx, read_gpx_file, write_gpx, write_gpx_file};
-pub use live::{LiveConfig, LiveGhost, LiveGhostSnapshot, LiveRecorder, LiveSnapshot};
+pub use live::{
+    LiveConfig, LiveGhost, LiveGhostSnapshot, LiveMatchStatus, LiveRecorder, LiveSnapshot,
+};
+pub use replay::{ReplaySession, ReplaySnapshot, ReplayState};
 pub use route::{
     CanonicalError, CanonicalizeConfig, ContinuityConfig, ContinuousProjection, DiscoveredRoute,
     MatchConfidence, MatchConfig, MatchScore, MatchStatus, MatchStep, PreparedTrack, Route,

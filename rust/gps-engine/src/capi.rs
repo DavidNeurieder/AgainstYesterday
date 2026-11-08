@@ -30,6 +30,7 @@ use crate::geo::{Coordinate, polyline_length};
 use crate::ghost::Ghost;
 use crate::gps::GpsFix;
 use crate::live::{LiveConfig, LiveGhost, LiveRecorder};
+use crate::replay::{ReplaySession, ReplayState};
 use crate::route::{MatchConfig, Route, compare, compare_either_direction};
 use crate::synthetic::Rng;
 use crate::track::segments::compare_route_segments;
@@ -1081,6 +1082,275 @@ pub unsafe extern "C" fn gps_live_snapshot(
 ) -> c_int {
     dispatch(input, input_len, output, output_len, live_snapshot)
 }
+
+// ---------------------------------------------------------------------------
+// Replay (opaque handle)
+// ---------------------------------------------------------------------------
+
+fn replay_new(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let fixes = read_fixes(&mut rd)?;
+    let has_route = rd.u8()? != 0;
+    let route = if has_route {
+        Some(Route::new(read_coordinates(&mut rd)?).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    let ghost = read_live_ghost(&mut rd)?;
+    rd.done("replay_new")?;
+
+    let session = ReplaySession::with_ghost(fixes, route, ghost);
+    let handle = (Box::into_raw(Box::new(session)) as usize) as u64;
+    let mut w = Wr::default();
+    w.u64(handle);
+    Ok(w.data)
+}
+
+/// # Safety
+/// `handle` must be a replay handle returned by `gps_replay_new` and not yet freed.
+unsafe fn replay_ref(handle: u64) -> Result<&'static mut ReplaySession, String> {
+    if handle == 0 {
+        return Err("null replay handle".into());
+    }
+    // SAFETY: produced by `Box::into_raw` in `replay_new`, valid until
+    // `gps_replay_free`. The caller owns the handle and does not alias it
+    // across threads.
+    Ok(unsafe { &mut *(handle as usize as *mut ReplaySession) })
+}
+
+fn write_replay_snapshot(w: &mut Wr, snap: &crate::replay::ReplaySnapshot) {
+    w.f64(snap.elapsed.as_secs());
+    w.f64(snap.total.as_secs());
+    w.u8(match snap.state {
+        ReplayState::Playing => 0,
+        ReplayState::Paused => 1,
+        ReplayState::Finished => 2,
+    });
+    w.f64(snap.speed);
+    w.u32(snap.applied_fixes as u32);
+    w.u32(snap.total_fixes as u32);
+    if let Some(pos) = snap.position {
+        w.u8(1);
+        w.f64(pos.latitude());
+        w.f64(pos.longitude());
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+        w.f64(0.0);
+    }
+    if let Some(acc) = snap.accuracy {
+        w.u8(1);
+        w.f64(acc.meters());
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+    }
+    w.f64(snap.distance.meters());
+    w.f64(snap.moving.as_secs());
+    w.f64(snap.pace.mps());
+    w.f64(snap.route_progress);
+    if let Some(off) = snap.off_route {
+        w.u8(1);
+        w.f64(off.meters());
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+    }
+    if let Some(g) = &snap.ghost {
+        w.u8(1);
+        w.f64(g.state.distance.meters());
+        w.f64(g.state.time_difference.as_secs());
+        w.u8(g.state.ahead as u8);
+        w.f64(g.spatial_gap.meters());
+        w.f64(g.confidence);
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+        w.f64(0.0);
+        w.u8(0);
+        w.f64(0.0);
+        w.f64(0.0);
+    }
+    w.u8(snap.match_status as u8);
+    w.f64(snap.match_confidence);
+}
+
+fn replay_play(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    rd.done("replay_play")?;
+    // SAFETY: see `replay_ref`.
+    unsafe { replay_ref(handle)? }.play();
+    Ok(Vec::new())
+}
+
+fn replay_pause(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    rd.done("replay_pause")?;
+    // SAFETY: see `replay_ref`.
+    unsafe { replay_ref(handle)? }.pause();
+    Ok(Vec::new())
+}
+
+fn replay_seek(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    let elapsed = Duration::from_secs(rd.f64()?);
+    rd.done("replay_seek")?;
+    // SAFETY: see `replay_ref`.
+    unsafe { replay_ref(handle)? }.seek(elapsed);
+    Ok(Vec::new())
+}
+
+fn replay_set_speed(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    let speed = rd.f64()?;
+    rd.done("replay_set_speed")?;
+    // SAFETY: see `replay_ref`.
+    unsafe { replay_ref(handle)? }.set_speed(speed);
+    Ok(Vec::new())
+}
+
+fn replay_advance(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    let delta = Duration::from_secs(rd.f64()?);
+    rd.done("replay_advance")?;
+    // SAFETY: see `replay_ref`.
+    let snap = unsafe { replay_ref(handle)? }.advance(delta);
+    let mut w = Wr::default();
+    write_replay_snapshot(&mut w, &snap);
+    Ok(w.data)
+}
+
+fn replay_snapshot(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let mut rd = Rd::new(bytes);
+    let handle = rd.u64()?;
+    rd.done("replay_snapshot")?;
+    // SAFETY: see `replay_ref`.
+    let snap = unsafe { replay_ref(handle)? }.snapshot();
+    let mut w = Wr::default();
+    write_replay_snapshot(&mut w, &snap);
+    Ok(w.data)
+}
+
+#[unsafe(no_mangle)]
+/// Creates a replay session and returns its handle.
+///
+/// # Safety
+/// See [`gps_process_track`].
+pub unsafe extern "C" fn gps_replay_new(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, replay_new)
+}
+
+#[unsafe(no_mangle)]
+/// Starts or resumes replay.
+///
+/// # Safety
+/// See [`gps_live_push`]; the handle must be a live replay handle.
+pub unsafe extern "C" fn gps_replay_play(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, replay_play)
+}
+
+#[unsafe(no_mangle)]
+/// Pauses replay.
+///
+/// # Safety
+/// See [`gps_replay_play`].
+pub unsafe extern "C" fn gps_replay_pause(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, replay_pause)
+}
+
+#[unsafe(no_mangle)]
+/// Seeks replay to an elapsed time in seconds.
+///
+/// # Safety
+/// See [`gps_replay_play`].
+pub unsafe extern "C" fn gps_replay_seek(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, replay_seek)
+}
+
+#[unsafe(no_mangle)]
+/// Sets the replay speed multiplier.
+///
+/// # Safety
+/// See [`gps_replay_play`].
+pub unsafe extern "C" fn gps_replay_set_speed(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, replay_set_speed)
+}
+
+#[unsafe(no_mangle)]
+/// Advances replay by a real-time delta (seconds) and returns a snapshot.
+///
+/// # Safety
+/// See [`gps_replay_play`].
+pub unsafe extern "C" fn gps_replay_advance(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, replay_advance)
+}
+
+#[unsafe(no_mangle)]
+/// Returns the current replay snapshot.
+///
+/// # Safety
+/// See [`gps_replay_play`].
+pub unsafe extern "C" fn gps_replay_snapshot(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    dispatch(input, input_len, output, output_len, replay_snapshot)
+}
+
+#[unsafe(no_mangle)]
+/// Frees a replay handle. Null is ignored.
+///
+/// # Safety
+/// `handle` must be a replay handle from `gps_replay_new`, or zero.
+pub unsafe extern "C" fn gps_replay_free(handle: u64) {
+    if handle == 0 {
+        return;
+    }
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: consumes the handle exactly once.
+        unsafe {
+            drop(Box::from_raw(handle as usize as *mut ReplaySession));
+        }
+    }));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
