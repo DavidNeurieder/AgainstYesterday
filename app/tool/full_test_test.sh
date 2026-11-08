@@ -37,21 +37,17 @@ make_fake_repo() {
     cat > "$root/bin/cargo" << 'EOF'
 #!/usr/bin/env bash
 # succeed unless CARGO_FAIL is set
-if [ "${CARGO_FAIL:-0}" = "1" ]; then exit 1; fi
+if [ "${CARGO_FAIL:-0}" = "1" ]; then echo 'boom <&>' >&2; exit 1; fi
+if [ "${SLOW:-0}" = "1" ]; then sleep 5; fi
 exit 0
 EOF
     cat > "$root/bin/flutter" << 'EOF'
 #!/usr/bin/env bash
-if [ "${FLUTTER_FAIL:-0}" = "1" ]; then exit 1; fi
+if [ "${FLUTTER_FAIL:-0}" = "1" ]; then echo 'flutter fail' >&2; exit 1; fi
+if [ "${SLOW:-0}" = "1" ]; then sleep 5; fi
 exit 0
 EOF
-    cat > "$root/bin/timeout" << 'EOF'
-#!/usr/bin/env bash
-# pass-through timeout
-shift 1
-"$@"
-EOF
-    chmod +x "$root/bin/cargo" "$root/bin/flutter" "$root/bin/timeout"
+    chmod +x "$root/bin/cargo" "$root/bin/flutter"
     echo "$root"
 }
 
@@ -102,5 +98,53 @@ fi
 rm -rf "$tmp"
 
 echo
+# Test 6: multiple simultaneous failures
+tmp=$(mktemp -d)
+make_fake_repo "$tmp" >/dev/null
+out=$(PATH="$tmp/bin:$PATH" QUICK=1 KEEP_LOGS=1 CARGO_FAIL=1 FLUTTER_FAIL=1 bash "$tmp/repo/app/tool/full_test.sh" 2>&1) || true
+assert "multiple failures reported" "FAILED:" "$out"
+rm -rf "$tmp"
+
+# Test 7: invalid MAX_PARALLEL rejected
+tmp=$(mktemp -d)
+make_fake_repo "$tmp" >/dev/null
+out=$(PATH="$tmp/bin:$PATH" QUICK=1 MAX_PARALLEL=0 bash "$tmp/repo/app/tool/full_test.sh" 2>&1) || true
+assert "invalid max_parallel rejected" "invalid MAX_PARALLEL" "$out"
+rm -rf "$tmp"
+
+# Test 8: timeout classification
+tmp=$(mktemp -d)
+make_fake_repo "$tmp" >/dev/null
+out=$(PATH="$tmp/bin:$PATH" QUICK=1 KEEP_LOGS=1 TIMEOUT=1 SLOW=1 bash "$tmp/repo/app/tool/full_test.sh" 2>&1) || true
+assert "timeout classified" "TIMEOUT" "$out"
+rm -rf "$tmp"
+
+# Test 9: parallel mode produces status for all targets
+tmp=$(mktemp -d)
+make_fake_repo "$tmp" >/dev/null
+PATH="$tmp/bin:$PATH" QUICK=1 KEEP_LOGS=1 PARALLEL=1 MAX_PARALLEL=2 bash "$tmp/repo/app/tool/full_test.sh" >/dev/null 2>&1 || true
+n=$(ls "$tmp/repo/build/full-test/"*.status 2>/dev/null | wc -l)
+if [ "$n" -ge 7 ]; then
+    echo "  PASS: parallel produced status files ($n)"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: parallel missing status files ($n)"
+    fail=$((fail + 1))
+fi
+rm -rf "$tmp"
+
+# Test 10: JUnit XML contains failure detail
+tmp=$(mktemp -d)
+make_fake_repo "$tmp" >/dev/null
+PATH="$tmp/bin:$PATH" QUICK=1 KEEP_LOGS=1 CARGO_FAIL=1 bash "$tmp/repo/app/tool/full_test.sh" >/dev/null 2>&1 || true
+if grep -q 'boom' "$tmp/repo/build/full-test/junit.xml" 2>/dev/null; then
+    echo "  PASS: junit contains failure detail"
+    pass=$((pass + 1))
+else
+    echo "  FAIL: junit missing failure detail"
+    fail=$((fail + 1))
+fi
+rm -rf "$tmp"
+
 echo "=== $pass passed, $fail failed ==="
 [ "$fail" -eq 0 ]
