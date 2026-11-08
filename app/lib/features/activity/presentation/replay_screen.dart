@@ -277,14 +277,20 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
     final pace = Speed.metersPerSecond(snap.paceMps);
     final moving = Elapsed.seconds(snap.movingSeconds);
 
+    // The engine orients the route to the recorded direction and reports it;
+    // draw and place the ghost along the same axis.
+    final geometry = snap.reversed
+        ? _geometry.reversed.toList(growable: false)
+        : _geometry;
+
     GeoPoint? ghostPosition;
     final ghost = snap.ghost;
-    if (ghost != null && _geometry.length >= 2) {
-      ghostPosition = pointAlongPolyline(_geometry, ghost.ghostDistanceMeters);
+    if (ghost != null && geometry.length >= 2) {
+      ghostPosition = pointAlongPolyline(geometry, ghost.ghostDistanceMeters);
     }
     final you = snap.position ??
         ghostPosition ??
-        (_geometry.isNotEmpty ? _geometry.first : null);
+        (geometry.isNotEmpty ? geometry.first : null);
 
     final offRoute = snap.offRouteMeters == null
         ? null
@@ -306,11 +312,11 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (you != null && _geometry.isNotEmpty)
+                  if (you != null && geometry.isNotEmpty)
                     mapSurface.build(
                       context,
                       MapScene(
-                        geometry: _geometry,
+                        geometry: geometry,
                         you: you,
                         youProgress: snap.routeProgress,
                         ghost: ghostPosition,

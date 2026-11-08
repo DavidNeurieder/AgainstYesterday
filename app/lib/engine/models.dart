@@ -288,6 +288,7 @@ class ReplaySnapshot {
     required this.movingSeconds,
     required this.paceMps,
     required this.routeProgress,
+    this.reversed = false,
     this.offRouteMeters,
     this.ghost,
     this.matchStatus = LiveMatchStatusCode.none,
@@ -306,6 +307,10 @@ class ReplaySnapshot {
   final double movingSeconds;
   final double paceMps;
   final double routeProgress;
+
+  /// `true` when the replay engine oriented the route to a track that ran it
+  /// backwards; presentation must draw progress/ghost along reversed geometry.
+  final bool reversed;
   final double? offRouteMeters;
   final LiveGhostSnapshot? ghost;
   final int matchStatus;

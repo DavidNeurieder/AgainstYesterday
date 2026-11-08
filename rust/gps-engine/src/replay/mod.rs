@@ -60,6 +60,9 @@ pub struct ReplaySnapshot {
     pub pace: Speed,
     /// Route progress `0.0..=1.0` (0 when free-running).
     pub route_progress: f64,
+    /// `true` when the route was oriented to a track that ran it backwards, so
+    /// presentation must draw progress/ghost along the reversed geometry.
+    pub reversed: bool,
     /// Lateral distance from the route, when off-route.
     pub off_route: Option<Distance>,
     /// Route-matching status.
@@ -92,6 +95,8 @@ pub struct ReplaySession {
     /// Index of the next fix not yet applied.
     cursor: usize,
     recorder: LiveRecorder,
+    /// `true` when the route was flipped to match a reverse traversal.
+    reversed: bool,
 }
 
 impl ReplaySession {
@@ -122,6 +127,28 @@ impl ReplaySession {
         });
         fixes.dedup_by(|a, b| (a.timestamp.unix_secs() - b.timestamp.unix_secs()).abs() < 1e-9);
 
+        // Orient the route (and the ghost's axis with it) to the direction the
+        // recorded track actually travelled. Coverage is monotone forward, so
+        // a reverse traversal would otherwise freeze at its first projection.
+        let reversed = match route.as_ref() {
+            Some(route) if fixes.len() >= 2 => route.runs_in_reverse(
+                fixes.first().expect("non-empty").coordinate,
+                fixes.last().expect("non-empty").coordinate,
+            ),
+            _ => false,
+        };
+        let route = if reversed {
+            route.map(|r| r.reversed())
+        } else {
+            route
+        };
+        let ghost = if reversed {
+            let length = route.as_ref().map(|r| r.length()).unwrap_or(Distance::ZERO);
+            ghost.map(|g| g.reversed(length))
+        } else {
+            ghost
+        };
+
         let t0 = fixes.first().map(|f| f.timestamp);
         let total = match (fixes.first(), fixes.last()) {
             (Some(a), Some(b)) => {
@@ -145,6 +172,7 @@ impl ReplaySession {
             state: ReplayState::Paused,
             cursor: 0,
             recorder,
+            reversed,
         }
     }
 
@@ -249,6 +277,7 @@ impl ReplaySession {
             moving: live.moving,
             pace: live.pace,
             route_progress: live.route_progress,
+            reversed: self.reversed,
             off_route: live.off_route,
             match_status: live.match_status,
             match_confidence: live.match_confidence,
@@ -277,10 +306,14 @@ impl ReplaySession {
             self.recorder.push(fix);
             self.cursor += 1;
         }
-        if self.state == ReplayState::Finished
-            || self.elapsed.as_secs() >= self.total.as_secs() - 1e-9
-        {
+        if target >= self.total.as_secs() - 1e-9 {
             self.recorder.finish();
+            // A replay that reached the end of a recording made on a route is
+            // a completed attempt: compare finish times with the ghost, exactly
+            // as the History PB delta does, independent of final GPS drift.
+            if self.route.is_some() {
+                self.recorder.complete_route();
+            }
         }
     }
 }
@@ -306,6 +339,38 @@ mod tests {
             fix(52.50150, 13.40000, 30),
             fix(52.50200, 13.40000, 40),
         ]
+    }
+
+    /// A generated constant-pace recording of `route`: one fix per second for
+    /// `seconds`, covering the whole route. `reversed` records the same course
+    /// from finish to start.
+    fn generated_fixes(route: &Route, seconds: u32, reversed: bool) -> Vec<GpsFix> {
+        let total = route.length().meters();
+        (0..=seconds)
+            .map(|s| {
+                let covered = total * (s as f64) / (seconds as f64);
+                let along = if reversed { total - covered } else { covered };
+                let c = route
+                    .coordinate_at(Distance::from_meters(along))
+                    .expect("within route");
+                GpsFix::new(Timestamp::from_unix_secs(s as f64), c)
+            })
+            .collect()
+    }
+
+    /// A generated reference ghost finishing `route` in `seconds`, sampled once
+    /// per second from 0 to the full length.
+    fn generated_ghost(route: &Route, seconds: u32) -> LiveGhost {
+        let total = route.length().meters();
+        let samples = (0..=seconds)
+            .map(|s| {
+                (
+                    Distance::from_meters(total * (s as f64) / (seconds as f64)),
+                    Duration::from_secs(s as f64),
+                )
+            })
+            .collect();
+        LiveGhost { samples }
     }
 
     #[test]
@@ -489,6 +554,58 @@ mod tests {
                 g.state.time_difference.as_secs(),
                 direct_ghost.state.time_difference.as_secs()
             );
+        }
+    }
+
+    #[test]
+    fn replay_end_gap_matches_duration_minus_best_for_generated_tracks() {
+        // Short generated recordings in both directions of the same course.
+        // The replay must end on the same number History shows: the activity's
+        // moving duration minus the best (ghost) time. The mid-run assertion
+        // keeps `complete_route` at the end from masking a frozen coverage
+        // curve (a reverse track projected onto the stored axis stalls at ~0).
+        let route =
+            Route::new(vec![coord(52.50000, 13.40000), coord(52.509005, 13.40000)]).unwrap();
+        let runner_seconds = 200.0;
+        let ghost_seconds = 160.0;
+        let expected_gap = runner_seconds - ghost_seconds;
+
+        for reversed in [false, true] {
+            let label = if reversed { "reversed" } else { "forward" };
+            let fixes = generated_fixes(&route, runner_seconds as u32, reversed);
+            let ghost = generated_ghost(&route, ghost_seconds as u32);
+            let mut s = ReplaySession::with_ghost(fixes, Some(route.clone()), Some(ghost));
+            s.play();
+
+            let mid = s.advance(Duration::from_secs(100.0));
+            assert!(!mid.finished(), "{label}: finished early");
+            assert_eq!(mid.reversed, reversed, "{label}: axis orientation");
+            assert!(
+                (mid.route_progress - 0.5).abs() < 0.05,
+                "{label}: mid-run route progress {} is not ~0.5",
+                mid.route_progress
+            );
+            let mid_ghost = mid.ghost.as_ref().expect("ghost").state;
+            assert!(
+                (mid_ghost.time_difference.as_secs() - 20.0).abs() < 2.0,
+                "{label}: mid-run gap {} is not ~20 s",
+                mid_ghost.time_difference.as_secs()
+            );
+
+            let end = s.advance(Duration::from_secs(150.0));
+            assert!(end.finished(), "{label}: not finished");
+            assert!(
+                (end.route_progress - 1.0).abs() < 1e-9,
+                "{label}: finished at progress {}",
+                end.route_progress
+            );
+            let g = end.ghost.as_ref().expect("ghost").state;
+            assert!(
+                (g.time_difference.as_secs() - expected_gap).abs() < 1.0,
+                "{label}: end gap {} vs expected duration-best {expected_gap}",
+                g.time_difference.as_secs()
+            );
+            assert!(!g.ahead, "{label}: slower run reported ahead");
         }
     }
 }

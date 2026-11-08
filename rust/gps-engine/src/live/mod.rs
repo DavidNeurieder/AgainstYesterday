@@ -46,6 +46,11 @@ impl Default for LiveConfig {
     }
 }
 
+/// How close to the route finish (in meters, along the route) the last
+/// accepted match must be for a completed recording to snap coverage to the
+/// full length.
+const FINISH_SNAP_M: f64 = 30.0;
+
 /// A ghost comparison bundled with the gap's confidence (the live analogue of
 /// [`crate::ghost::GhostSnapshot`], produced without a current [`Attempt`]).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -119,6 +124,29 @@ impl LiveGhost {
             .last()
             .map(|(_, elapsed)| *elapsed)
             .unwrap_or(Duration::ZERO)
+    }
+
+    /// The same profile expressed on the reverse route axis.
+    ///
+    /// A forward sample `(d, t)` becomes `(length - d, total - t)`, then the
+    /// series is reversed so both axes stay increasing. Used when a replay is
+    /// oriented to a track that ran the route backwards: the ghost must share
+    /// the replay's axis for progress and the time gap to line up.
+    pub fn reversed(&self, length: Distance) -> Self {
+        let total = self.elapsed_time().as_secs();
+        let len = length.meters();
+        let mut samples: Vec<(Distance, Duration)> = self
+            .samples
+            .iter()
+            .map(|(d, t)| {
+                (
+                    Distance::from_meters((len - d.meters()).clamp(0.0, len)),
+                    Duration::from_secs((total - t.as_secs()).max(0.0)),
+                )
+            })
+            .collect();
+        samples.reverse();
+        Self { samples }
     }
 
     /// Distance the ghost had covered at `elapsed`, saturating at its finish.
@@ -253,6 +281,10 @@ pub struct LiveRecorder {
     /// Lateral error of the last accepted route match, used for off-route
     /// reporting (from the continuity match, not a global re-projection).
     last_lateral: Option<Distance>,
+    /// Raw (pre-monotone-clamp) match of the last route observation. At the
+    /// finish it lets a run that ended on the finish line complete the route
+    /// even when the last few fixes were too noisy to be accepted.
+    last_raw: Option<Distance>,
     /// Confidence of the last route match, `0.0..=1.0`.
     last_match_confidence: f64,
 
@@ -279,6 +311,7 @@ impl LiveRecorder {
             route_pace: Speed::ZERO,
             matcher,
             last_lateral: None,
+            last_raw: None,
             last_match_confidence: 0.0,
             last_fix: None,
             paused: false,
@@ -345,6 +378,7 @@ impl LiveRecorder {
             }
         }
         self.last_lateral = Some(projection.lateral_error);
+        self.last_raw = Some(projection.raw);
         self.last_match_confidence = step.confidence.value();
 
         if let (Some(prev_coord), Some(prev_time)) = (self.route_last_ground, self.route_last_time)
@@ -403,6 +437,7 @@ impl LiveRecorder {
         self.route_last_time = None;
         self.route_pace = Speed::ZERO;
         self.last_lateral = None;
+        self.last_raw = None;
         self.last_match_confidence = 0.0;
         if let Some(matcher) = self.matcher.as_mut() {
             matcher.seed(Distance::from_meters(d));
@@ -413,10 +448,49 @@ impl LiveRecorder {
 
     /// FINISH: flush the withheld closing chord, mirroring the batch filter's
     /// unconditional final point.
+    ///
+    /// A recording that ended on the finish line completes the route even if
+    /// the last few fixes were too noisy for the matcher to accept: the run
+    /// covered the course, and a 20 m GPS wobble at the line must not change
+    /// the ghost gap.
     pub fn finish(&mut self) {
         self.cursor.flush();
-        // Route coverage/moving already reflect every accepted fix; nothing to
-        // flush there beyond keeping the cursor's final segment coherent.
+        let Some(route) = self.route.as_ref() else {
+            return;
+        };
+        let len = route.length().meters();
+        let raw = self
+            .last_raw
+            .map(|d| d.meters())
+            .unwrap_or(f64::NEG_INFINITY);
+        let lateral = self
+            .last_lateral
+            .map(|d| d.meters())
+            .unwrap_or(f64::INFINITY);
+        if lateral <= self.config.off_route_threshold.meters() && len - raw <= FINISH_SNAP_M {
+            self.route_coverage = self.route_coverage.max(len);
+            if let Some(matcher) = self.matcher.as_mut() {
+                matcher.snap_to(Distance::from_meters(len));
+            }
+        }
+    }
+
+    /// Marks the route as fully covered.
+    ///
+    /// Used by a replay that reaches the end of a recording made on a route:
+    /// the recorded run is a completed attempt, so its result must be compared
+    /// against the ghost's finish even when the final GPS fixes drifted short
+    /// of the line. Live recording never calls this — an aborted run keeps the
+    /// distance it actually covered.
+    pub fn complete_route(&mut self) {
+        let Some(route) = self.route.as_ref() else {
+            return;
+        };
+        let len = route.length();
+        self.route_coverage = self.route_coverage.max(len.meters());
+        if let Some(matcher) = self.matcher.as_mut() {
+            matcher.snap_to(len);
+        }
     }
 
     /// Distance on the active axis.
@@ -790,6 +864,58 @@ mod tests {
         assert!(
             recovered > detour_dist + 50.0,
             "coverage did not reacquire after rejoining: detour {detour_dist}, recovered {recovered}"
+        );
+    }
+
+    #[test]
+    fn off_route_detour_reacquires_with_coarse_sampling() {
+        // A real ride samples every few seconds, so consecutive fixes are tens
+        // of metres apart. Re-entry agreement must scale with elapsed time:
+        // with a fixed 20 m radius (the old rule) every 32 m sample looked
+        // inconsistent, the anchor reset on each one, and coverage stayed
+        // frozen forever after a detour.
+        let route = linear_route(&[(52.500_00, 13.400_00), (52.510_00, 13.400_00)]);
+        let mut rec = LiveRecorder::new(LiveConfig::default(), Some(route.clone()));
+
+        // Establish a confident match at ~5.6 m/s, one fix per second.
+        for i in 0..=20 {
+            let lat = 52.500_00 + (i as f64) * 0.00005;
+            rec.push(fix(lat, 13.400_00, i));
+        }
+        let on_route_dist = rec.distance().meters();
+        assert!(
+            on_route_dist > 100.0,
+            "expected progress, got {on_route_dist}"
+        );
+
+        // Detour ~200 m east for 4 fixes (still 4 s apart), long enough for
+        // the off-route hysteresis to latch.
+        for i in 1..=4 {
+            let lat = 52.501_00 + (i as f64) * 0.00005;
+            rec.push(fix(lat, 13.403_00, 20 + i * 4));
+        }
+        let detour_dist = rec.distance().meters();
+        assert!(
+            detour_dist <= on_route_dist + 1.0,
+            "coverage advanced during the detour: {on_route_dist} -> {detour_dist}"
+        );
+        assert!(
+            rec.snapshot().off_route.is_some(),
+            "detour should be reported off-route"
+        );
+
+        // Rejoin ~190 m ahead of the frozen coverage, then keep moving at
+        // 8 m/s (32 m per 4 s fix) — far more than the old 20 m radius.
+        let step = 32.0;
+        for i in 0..=3 {
+            let along = 300.0 + (i as f64) * step;
+            let lat = 52.500_00 + along / METERS_PER_DEGREE;
+            rec.push(fix(lat, 13.400_00, 36 + (i as i64 + 1) * 4));
+        }
+        let recovered = rec.distance().meters();
+        assert!(
+            recovered > detour_dist + 150.0,
+            "coarse-sampled rejoin did not reacquire: detour {detour_dist}, recovered {recovered}"
         );
     }
 

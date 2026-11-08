@@ -163,17 +163,29 @@ impl Attempt {
             .unix_ms();
         let route_len = route.length().meters();
 
+        // A track may run the route in reverse (the same course recorded in
+        // the other direction). Projecting it onto the stored axis would make
+        // coverage decrease and then saturate at its first value, collapsing
+        // the attempt into a constant-distance curve. Orient onto the
+        // direction the track actually travelled and keep the stored axis for
+        // forward runs.
+        let reversed = track_runs_reversed(track, route);
+        let along_route = |coordinate| {
+            let along = route
+                .project(coordinate)
+                .distance_along
+                .meters()
+                .clamp(0.0, route_len);
+            if reversed { route_len - along } else { along }
+        };
+
         let mut coverage = 0.0f64;
         let mut moving_elapsed = 0.0f64;
         let mut prev = None;
         let mut samples: Vec<AttemptSample> = Vec::with_capacity(track.len());
 
         for p in track.points() {
-            let along = route
-                .project(p.coordinate())
-                .distance_along
-                .meters()
-                .clamp(0.0, route_len);
+            let along = along_route(p.coordinate());
             coverage = coverage.max(along);
 
             let elapsed = match axis {
@@ -280,6 +292,19 @@ impl Attempt {
             a.distance.meters() + fraction * (b.distance.meters() - a.distance.meters()),
         ))
     }
+}
+
+/// `true` when the track travels the route from finish to start.
+///
+/// Compares the route projection of the first and last track points: a track
+/// whose start lies materially past its end on the stored axis is a reverse
+/// traversal. Loop routes (start ≈ end) keep the forward orientation.
+fn track_runs_reversed(track: &Track, route: &Route) -> bool {
+    let points = track.points();
+    let (Some(first), Some(last)) = (points.first(), points.last()) else {
+        return false;
+    };
+    points.len() >= 2 && route.runs_in_reverse(first.coordinate(), last.coordinate())
 }
 
 /// Moving time contributed by one segment, or `0.0` when it is a stop.
@@ -467,6 +492,43 @@ mod tests {
                 .as_secs()
                 > 0.0
         );
+    }
+
+    #[test]
+    fn reverse_traversal_yields_forward_coverage() {
+        // The same course recorded from finish to start must reduce to a
+        // normal 0 → length coverage curve. Projecting it onto the stored
+        // axis would make every sample sit near `length` and coverage would
+        // saturate at its first value, collapsing the attempt into a constant.
+        let route = straight_route();
+        let total = route.length().meters();
+        let points: Vec<TrackPoint> = (0..=200)
+            .map(|s| {
+                TrackPoint::new(
+                    crate::units::Timestamp::from_unix_ms(s * 1_000),
+                    route
+                        .coordinate_at(Distance::from_meters(total - total * s as f64 / 200.0))
+                        .expect("within route"),
+                )
+            })
+            .collect();
+        let track = Track::new(points).unwrap();
+        let attempt = Attempt::from_track(&track, &route);
+
+        let time = |d: f64| attempt.time_at(Distance::from_meters(d)).unwrap().as_secs();
+        let finish = attempt.distance.meters();
+        assert!(
+            (finish - total).abs() < 0.01,
+            "coverage {finish} did not reach route length {total}"
+        );
+        assert!((time(0.0) - 0.0).abs() < 1e-6);
+        assert!(
+            (time(total / 2.0) - 100.0).abs() < 0.01,
+            "halfway took {}",
+            time(total / 2.0)
+        );
+        assert!((time(finish) - 200.0).abs() < 1e-6);
+        assert!((attempt.elapsed_time.as_secs() - 200.0).abs() < 1e-6);
     }
 
     #[test]

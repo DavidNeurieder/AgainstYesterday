@@ -92,6 +92,17 @@ impl Route {
         Distance::from_meters(self.total)
     }
 
+    /// The same polyline traversed from finish to start.
+    ///
+    /// Distances on the reversed axis are `length() - distance` on this one.
+    /// Used to orient a replay to the direction the recorded track travelled,
+    /// so coverage advances monotonically in either direction.
+    pub fn reversed(&self) -> Self {
+        let mut geometry = self.geometry.clone();
+        geometry.reverse();
+        Self::new(geometry).expect("reversing a valid route keeps it valid")
+    }
+
     /// The route's start coordinate.
     pub fn start(&self) -> Coordinate {
         self.geometry[0]
@@ -162,6 +173,18 @@ impl Route {
             distance: projection.distance_along,
             coordinate: projection.projected,
         }
+    }
+
+    /// `true` when travelling from `start` to `end` runs this route backwards.
+    ///
+    /// Compares the projection of both endpoints on the stored axis; a clear
+    /// separation (2 % of the route, at least 10 m) marks a reverse traversal.
+    /// Loop routes (start ≈ end) keep the forward orientation.
+    pub fn runs_in_reverse(&self, start: Coordinate, end: Coordinate) -> bool {
+        let along_start = self.project(start).distance_along.meters();
+        let along_end = self.project(end).distance_along.meters();
+        let threshold = (self.total * 0.02).max(10.0);
+        along_start > along_end + threshold
     }
 
     /// Projects `point` onto the segments whose cumulative span intersects
@@ -667,8 +690,13 @@ impl RouteMatcher {
         };
         let backtracker = raw + self.config.max_backtrack.meters() < self.reliable_covered;
 
-        let (status, accepted) =
-            self.advance_state(lateral, confidence.value(), raw, route.length().meters());
+        let (status, accepted) = self.advance_state(
+            lateral,
+            confidence.value(),
+            raw,
+            route.length().meters(),
+            dt,
+        );
         self.status = status;
 
         let reported_distance = if accepted {
@@ -704,6 +732,7 @@ impl RouteMatcher {
         confidence: f64,
         raw: f64,
         route_len: f64,
+        dt: f64,
     ) -> (MatchStatus, bool) {
         let on_route = lateral <= self.off_route_m;
         let far_off_route = lateral > self.off_route_m * 1.5;
@@ -784,9 +813,23 @@ impl RouteMatcher {
                     return (MatchStatus::OffRoute, false);
                 }
                 if on_route && confidence >= 0.2 {
+                    // Re-entry is confirmed by a stable sequence of on-route
+                    // fixes, not by a fixed radius: consecutive samples of a
+                    // real ride are further apart than the old 20 m floor
+                    // (25 m per fix at cycling speed), which stalled recovery
+                    // forever. Allow the position to advance by no more than
+                    // the subject could plausibly travel in the elapsed time.
+                    let max_advance = if dt.is_finite() {
+                        REACQUIRE_AGREE_M + self.config.max_speed.mps() * dt.max(0.0)
+                    } else {
+                        f64::INFINITY
+                    };
                     let agrees = self
                         .reacq_progress
-                        .map(|p| (raw - p).abs() <= REACQUIRE_AGREE_M)
+                        .map(|p| {
+                            let advance = raw - p;
+                            advance <= max_advance && advance >= -REACQUIRE_AGREE_M
+                        })
                         .unwrap_or(true);
                     if agrees {
                         self.reacq_count += 1;
@@ -861,15 +904,26 @@ impl RouteMatcher {
             .unwrap_or(false);
         let runner_bearing = if moving { obs.bearing } else { None };
 
-        let expected_progress = if dt.is_finite() && dt > 0.0 {
-            let v = obs
-                .speed
-                .map(|s| s.mps())
-                .filter(|v| v.is_finite() && *v >= 0.0)
-                .unwrap_or((self.config.max_speed.mps() * 0.5).min(3.0));
-            Some(self.reliable_covered + v * dt)
+        // Progress plausibility is judged against the trusted coverage while
+        // tracking normally, but against the *re-entry* anchor while
+        // reacquiring. Anchoring a re-entry to the frozen `reliable_covered`
+        // makes a legitimate rejoin hundreds of metres ahead look impossible,
+        // so its confidence decays to zero and recovery never completes.
+        let progress_anchor = if global_reacq {
+            self.reacq_progress
         } else {
-            None
+            Some(self.reliable_covered)
+        };
+        let expected_progress = match progress_anchor {
+            Some(anchor) if dt.is_finite() && dt > 0.0 => {
+                let v = obs
+                    .speed
+                    .map(|s| s.mps())
+                    .filter(|v| v.is_finite() && *v >= 0.0)
+                    .unwrap_or((self.config.max_speed.mps() * 0.5).min(3.0));
+                Some(anchor + v * dt)
+            }
+            _ => None,
         };
 
         let mut scored: Vec<(f64, f64, f64)> = Vec::with_capacity(candidates.len());

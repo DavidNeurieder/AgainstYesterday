@@ -439,6 +439,7 @@ class _RustReplayRun implements ReplayHandle {
     final moving = r.f64();
     final pace = r.f64();
     final routeProgress = r.f64();
+    final reversed = r.u8() == 1;
     final hasOff = r.u8() == 1;
     final off = r.f64();
     final hasGhost = r.u8() == 1;
@@ -467,6 +468,7 @@ class _RustReplayRun implements ReplayHandle {
       movingSeconds: moving,
       paceMps: pace,
       routeProgress: routeProgress,
+      reversed: reversed,
       offRouteMeters: hasOff ? off : null,
       ghost: hasGhost
           ? LiveGhostSnapshot(

@@ -1149,6 +1149,7 @@ fn write_replay_snapshot(w: &mut Wr, snap: &crate::replay::ReplaySnapshot) {
     w.f64(snap.moving.as_secs());
     w.f64(snap.pace.mps());
     w.f64(snap.route_progress);
+    w.u8(snap.reversed as u8);
     if let Some(off) = snap.off_route {
         w.u8(1);
         w.f64(off.meters());
