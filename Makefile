@@ -94,7 +94,8 @@ test:
 	cd app && flutter test
 	cargo test --all-features
 
-ci-test: check test tz-test
+ci-test:
+	CI=1 bash app/tool/full_test.sh
 
 full-test:
 	bash app/tool/full_test.sh
