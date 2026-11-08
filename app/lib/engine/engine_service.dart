@@ -55,6 +55,15 @@ abstract class EngineService {
     List<AttemptSample>? ghostSamples,
   });
 
+  /// Creates a replay session over recorded raw fixes. [routeGeometry], when
+  /// present, enables route-aware progress/matching through the engine.
+  /// [ghostSamples], when present, drive the ahead/behind comparison.
+  Future<ReplayHandle> createReplay({
+    required List<GpsFix> fixes,
+    List<GeoPoint>? routeGeometry,
+    List<AttemptSample>? ghostSamples,
+  });
+
   /// Live ghost state at a given distance along the route.
   GhostState ghostStateAt({
     required Ghost ghost,

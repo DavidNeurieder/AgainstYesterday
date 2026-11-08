@@ -270,6 +270,69 @@ abstract class LiveRunHandle {
   void dispose();
 }
 
+/// Replay playback state.
+enum ReplayState { playing, paused, finished }
+
+/// Point-in-time replay state produced by the engine.
+class ReplaySnapshot {
+  const ReplaySnapshot({
+    required this.elapsedSeconds,
+    required this.totalSeconds,
+    required this.state,
+    required this.speed,
+    required this.appliedFixes,
+    required this.totalFixes,
+    this.position,
+    this.accuracyMeters,
+    required this.distanceMeters,
+    required this.movingSeconds,
+    required this.paceMps,
+    required this.routeProgress,
+    this.offRouteMeters,
+    this.ghost,
+    this.matchStatus = LiveMatchStatusCode.none,
+    this.matchConfidence = 0.0,
+  });
+
+  final double elapsedSeconds;
+  final double totalSeconds;
+  final ReplayState state;
+  final double speed;
+  final int appliedFixes;
+  final int totalFixes;
+  final GeoPoint? position;
+  final double? accuracyMeters;
+  final double distanceMeters;
+  final double movingSeconds;
+  final double paceMps;
+  final double routeProgress;
+  final double? offRouteMeters;
+  final LiveGhostSnapshot? ghost;
+  final int matchStatus;
+  final double matchConfidence;
+
+  bool get finished => state == ReplayState.finished;
+  double get progress =>
+      totalSeconds <= 0 ? 0.0 : (elapsedSeconds / totalSeconds).clamp(0.0, 1.0);
+
+  GhostState? get ghostGap => ghost?.toGhostState();
+}
+
+/// A stateful replay session owned by the engine (timeline/state in Rust,
+/// presentation driven by Flutter).
+abstract class ReplayHandle {
+  void play();
+  void pause();
+  void seek(double elapsedSeconds);
+  void setSpeed(double speed);
+
+  /// Advances by [deltaSeconds] of real time and returns the snapshot.
+  ReplaySnapshot advance(double deltaSeconds);
+
+  ReplaySnapshot snapshot();
+  void dispose();
+}
+
 /// A reference attempt (the PB) to ghost against.
 class Ghost {
   const Ghost({required this.attemptId, required this.samples});

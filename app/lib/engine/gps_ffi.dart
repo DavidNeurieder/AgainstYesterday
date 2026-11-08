@@ -70,6 +70,17 @@ final class GpsEngineFfi {
       .lookupFunction<Void Function(Uint64), void Function(int)>(
         'gps_live_free',
       );
+  late final _DartFn _replayNew = _bind('gps_replay_new');
+  late final _DartFn _replayPlay = _bind('gps_replay_play');
+  late final _DartFn _replayPause = _bind('gps_replay_pause');
+  late final _DartFn _replaySeek = _bind('gps_replay_seek');
+  late final _DartFn _replaySetSpeed = _bind('gps_replay_set_speed');
+  late final _DartFn _replayAdvance = _bind('gps_replay_advance');
+  late final _DartFn _replaySnapshot = _bind('gps_replay_snapshot');
+  late final void Function(int) _replayFree = _lib
+      .lookupFunction<Void Function(Uint64), void Function(int)>(
+        'gps_replay_free',
+      );
   late final void Function(Pointer<Uint8>) _free = _lib
       .lookupFunction<
         Void Function(Pointer<Uint8>),
@@ -123,6 +134,22 @@ final class GpsEngineFfi {
   Uint8List liveSnapshot(Uint8List request) =>
       _invoke(_liveSnapshot, request, 'live_snapshot');
   void liveFree(int handle) => _liveFree(handle);
+
+  Uint8List replayNew(Uint8List request) =>
+      _invoke(_replayNew, request, 'replay_new');
+  Uint8List replayPlay(Uint8List request) =>
+      _invoke(_replayPlay, request, 'replay_play');
+  Uint8List replayPause(Uint8List request) =>
+      _invoke(_replayPause, request, 'replay_pause');
+  Uint8List replaySeek(Uint8List request) =>
+      _invoke(_replaySeek, request, 'replay_seek');
+  Uint8List replaySetSpeed(Uint8List request) =>
+      _invoke(_replaySetSpeed, request, 'replay_set_speed');
+  Uint8List replayAdvance(Uint8List request) =>
+      _invoke(_replayAdvance, request, 'replay_advance');
+  Uint8List replaySnapshot(Uint8List request) =>
+      _invoke(_replaySnapshot, request, 'replay_snapshot');
+  void replayFree(int handle) => _replayFree(handle);
   Uint8List generateRecording(Uint8List request) =>
       _invoke(_generateRecording, request, 'generate_recording');
 

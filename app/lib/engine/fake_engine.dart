@@ -221,6 +221,19 @@ class FakeEngineService implements EngineService {
   }
 
   @override
+  Future<ReplayHandle> createReplay({
+    required List<GpsFix> fixes,
+    List<GeoPoint>? routeGeometry,
+    List<AttemptSample>? ghostSamples,
+  }) async {
+    return _FakeReplayRun(
+      fixes: fixes,
+      routeGeometry: routeGeometry,
+      ghostSamples: ghostSamples,
+    );
+  }
+
+  @override
   Future<List<RouteSegmentComparison>> compareRouteSegments({
     required List<Attempt> attempts,
     required double segmentDistanceMeters,
@@ -898,4 +911,239 @@ class _FakeLiveRun implements LiveRunHandle {
   void dispose() {
     _disposed = true;
   }
+}
+
+class _FakeReplayRun implements ReplayHandle {
+  _FakeReplayRun({
+    required List<GpsFix> fixes,
+    List<GeoPoint>? routeGeometry,
+    List<AttemptSample>? ghostSamples,
+  })  : _fixes = List<GpsFix>.from(fixes)
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp)),
+        _route = routeGeometry,
+        _ghostSamples = ghostSamples {
+    _t0 = _fixes.isEmpty ? null : _fixes.first.timestamp;
+    if (_fixes.length >= 2) {
+      _total = _fixes.last.timestamp
+              .difference(_fixes.first.timestamp)
+              .inMilliseconds /
+          1000.0;
+    } else {
+      _total = 0.0;
+    }
+  }
+
+  final List<GpsFix> _fixes;
+  final List<GeoPoint>? _route;
+  final List<AttemptSample>? _ghostSamples;
+  DateTime? _t0;
+  double _total = 0;
+  double _elapsed = 0;
+  double _speed = 1.0;
+  ReplayState _state = ReplayState.paused;
+  int _cursor = 0;
+
+  @override
+  void play() {
+    if (_fixes.isEmpty) {
+      _state = ReplayState.finished;
+      return;
+    }
+    if (_state == ReplayState.finished) {
+      seek(0);
+    }
+    _state = ReplayState.playing;
+  }
+
+  @override
+  void pause() {
+    if (_state == ReplayState.playing) _state = ReplayState.paused;
+  }
+
+  @override
+  void seek(double elapsedSeconds) {
+    final t = elapsedSeconds.clamp(0.0, _total);
+    _elapsed = t.isFinite ? t : 0.0;
+    _cursor = 0;
+    _applyUpTo(_elapsed);
+    if (_elapsed >= _total - 1e-9 && _fixes.isNotEmpty) {
+      _state = ReplayState.finished;
+    } else if (_state == ReplayState.finished) {
+      _state = ReplayState.paused;
+    }
+  }
+
+  @override
+  void setSpeed(double speed) {
+    if (speed.isFinite && speed > 0) _speed = speed.clamp(0.1, 32.0);
+  }
+
+  void _applyUpTo(double elapsed) {
+    final t0 = _t0;
+    if (t0 == null) return;
+    while (_cursor < _fixes.length) {
+      final at =
+          _fixes[_cursor].timestamp.difference(t0).inMilliseconds / 1000.0;
+      if (at > elapsed + 1e-9) break;
+      _cursor++;
+    }
+  }
+
+  double _ghostElapsedAt(List<AttemptSample> samples, double distanceM) {
+    if (samples.isEmpty) return 0;
+    if (distanceM <= 0) return samples.first.elapsed.seconds;
+    final last = samples.last;
+    if (distanceM >= last.distance.meters) return last.elapsed.seconds;
+    for (var i = 1; i < samples.length; i++) {
+      if (samples[i].distance.meters >= distanceM) {
+        final a = samples[i - 1];
+        final b = samples[i];
+        final span = b.distance.meters - a.distance.meters;
+        if (span <= 0) return b.elapsed.seconds;
+        final frac = (distanceM - a.distance.meters) / span;
+        return a.elapsed.seconds +
+            (b.elapsed.seconds - a.elapsed.seconds) * frac;
+      }
+    }
+    return last.elapsed.seconds;
+  }
+
+  double _ghostDistanceAt(List<AttemptSample> samples, double elapsed) {
+    if (samples.isEmpty) return 0;
+    if (elapsed <= 0) return samples.first.distance.meters;
+    final last = samples.last;
+    if (elapsed >= last.elapsed.seconds) return last.distance.meters;
+    var i = samples.lastIndexWhere((s) => s.elapsed.seconds <= elapsed);
+    if (i < 0) return samples.first.distance.meters;
+    if (i == samples.length - 1) return last.distance.meters;
+    final a = samples[i];
+    final b = samples[i + 1];
+    final span = b.elapsed.seconds - a.elapsed.seconds;
+    if (span <= 0) return a.distance.meters;
+    final frac = (elapsed - a.elapsed.seconds) / span;
+    return a.distance.meters + (b.distance.meters - a.distance.meters) * frac;
+  }
+
+  double _sampleSpacing(List<AttemptSample> samples, double distanceM) {
+    if (samples.length < 2) {
+      return samples.isEmpty ? 0 : samples.last.distance.meters;
+    }
+    if (distanceM <= 0) return samples.first.distance.meters;
+    final last = samples.last;
+    if (distanceM >= last.distance.meters) {
+      return last.distance.meters - samples[samples.length - 2].distance.meters;
+    }
+    for (var i = 0; i < samples.length; i++) {
+      if (samples[i].distance.meters >= distanceM) {
+        return i == 0
+            ? samples[0].distance.meters
+            : samples[i].distance.meters - samples[i - 1].distance.meters;
+      }
+    }
+    return 0;
+  }
+
+  ReplaySnapshot _snapshot() {
+    double dist = 0;
+    double paceMps = 0;
+    double moving = 0;
+    GeoPoint? pos;
+    double? accuracy;
+    if (_cursor > 0) {
+      final last = _fixes[_cursor - 1];
+      pos = GeoPoint(latitude: last.latitude, longitude: last.longitude);
+      accuracy = last.accuracyMeters;
+      for (var i = 1; i < _cursor; i++) {
+        final a = _fixes[i - 1];
+        final b = _fixes[i];
+        final d = haversineMeters(
+          GeoPoint(latitude: a.latitude, longitude: a.longitude),
+          GeoPoint(latitude: b.latitude, longitude: b.longitude),
+        );
+        final dt =
+            b.timestamp.difference(a.timestamp).inMilliseconds / 1000.0;
+        if (dt > 0 && d / dt >= 0.1) {
+          dist += d;
+          moving += dt;
+          paceMps = d / dt;
+        }
+      }
+    }
+    double routeProgress = 0;
+    double? offRoute;
+    final route = _route;
+    var progressDistance = dist;
+    if (route != null && route.length >= 2 && pos != null) {
+      final proj = projectOnPolyline(route, pos);
+      final total = polylineMeters(route);
+      if (proj != null && total > 0) {
+        routeProgress = (proj.distanceM / total).clamp(0.0, 1.0);
+        progressDistance = proj.distanceM;
+        final lateral = haversineMeters(pos, proj.point);
+        if (lateral >= 30.0) offRoute = lateral;
+      }
+    }
+    final onRoute = route != null && route.length >= 2;
+    LiveGhostSnapshot? ghost;
+    final samples = _ghostSamples;
+    if (samples != null && samples.isNotEmpty && (onRoute || dist > 0)) {
+      final refDistance = onRoute ? progressDistance : dist;
+      final refMoving = moving;
+      final ghostDist = _ghostDistanceAt(samples, refMoving);
+      final timeDiff = _ghostElapsedAt(samples, refDistance) - refMoving;
+      final spacing = _sampleSpacing(samples, refDistance);
+      final conf = spacing <= 0 ? 0.0 : (1.0 - spacing / 400.0).clamp(0.0, 1.0);
+      ghost = LiveGhostSnapshot(
+        distanceMeters: refDistance,
+        timeDifferenceSeconds: timeDiff,
+        ahead: timeDiff < 0,
+        spatialGapMeters: ghostDist - refDistance,
+        confidence: conf,
+      );
+    }
+    return ReplaySnapshot(
+      elapsedSeconds: _elapsed,
+      totalSeconds: _total,
+      state: _state,
+      speed: _speed,
+      appliedFixes: _cursor,
+      totalFixes: _fixes.length,
+      position: pos,
+      accuracyMeters: accuracy,
+      distanceMeters: onRoute ? progressDistance : dist,
+      movingSeconds: moving,
+      paceMps: paceMps,
+      routeProgress: routeProgress,
+      offRouteMeters: offRoute,
+      ghost: ghost,
+      matchStatus: onRoute
+          ? (offRoute != null
+              ? LiveMatchStatusCode.offRoute
+              : LiveMatchStatusCode.matched)
+          : LiveMatchStatusCode.none,
+      matchConfidence: onRoute ? 1.0 : 0.0,
+    );
+  }
+
+  @override
+  ReplaySnapshot advance(double deltaSeconds) {
+    if (_state == ReplayState.playing) {
+      final step = deltaSeconds * _speed;
+      if (step.isFinite && step > 0) {
+        _elapsed = (_elapsed + step).clamp(0.0, _total);
+        _applyUpTo(_elapsed);
+        if (_elapsed >= _total - 1e-9) {
+          _elapsed = _total;
+          _state = ReplayState.finished;
+        }
+      }
+    }
+    return _snapshot();
+  }
+
+  @override
+  ReplaySnapshot snapshot() => _snapshot();
+
+  @override
+  void dispose() {}
 }

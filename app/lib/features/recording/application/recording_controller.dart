@@ -29,6 +29,7 @@ import '../../../engine/engine_service.dart';
 import '../../../engine/fake_engine.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import 'ghost_profile.dart';
 import 'run_foreground_lifespan.dart';
 
 final recordingControllerProvider =
@@ -713,46 +714,20 @@ class RecordingController extends Notifier<LiveRunState?> {
   }
 
   /// Real PB profile from the fastest activity (moving-time axis), falling
-  /// back to a constant-pace analytic ghost. The fallback always calls
-  /// [EngineService.createAttempt] so test doubles that inject failure there
-  /// still observe the attempt.
+  /// back to a constant-pace analytic ghost. Delegates to [buildGhostSamples]
+  /// (shared with replay) so the engine is exercised identically.
   Future<List<AttemptSample>> _buildGhostSamples(
     EngineService engine,
     Route route,
     Elapsed pb,
-  ) async {
-    final fastest = _fastestActivityFor(route.id);
-    if (fastest?.track != null && fastest!.track!.length >= 2) {
-      try {
-        final attempt = await engine.createAttempt(
-          activityId: 'ghost-${route.id}',
-          routeId: route.id,
-          points: fastest.track!,
-          routeGeometry: route.geometry,
-          movingTime: true,
-        );
-        if (attempt.samples.isNotEmpty) return attempt.samples;
-      } catch (_) {
-        // Fall through to the analytic profile, which still exercises
-        // createAttempt so injected failures remain observable.
-      }
-    }
-
-    final length = sessionLoopLength(route);
-    final speed = pb.seconds > 0 ? length / pb.seconds : _baseSpeedMps;
-    final recording = engine.generateRecording(
-      noiseMeters: 1.0,
-      speedMetersPerSecond: speed,
-      sampleEverySeconds: 1.0,
+  ) {
+    return buildGhostSamples(
+      engine: engine,
+      route: route,
+      pb: pb,
+      fastestActivity: _fastestActivityFor(route.id),
+      baseSpeedMps: _baseSpeedMps,
     );
-    final attempt = await engine.createAttempt(
-      activityId: 'ghost-${route.id}',
-      routeId: route.id,
-      points: recording,
-      routeGeometry: route.geometry,
-      movingTime: false,
-    );
-    return attempt.samples;
   }
 
   double sessionLoopLength(Route route) => polylineMeters(route.geometry);

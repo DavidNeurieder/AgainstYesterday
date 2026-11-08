@@ -180,6 +180,30 @@ final class RustEngineService implements EngineService {
   }
 
   @override
+  Future<ReplayHandle> createReplay({
+    required List<GpsFix> fixes,
+    List<GeoPoint>? routeGeometry,
+    List<AttemptSample>? ghostSamples,
+  }) async {
+    final req = _W();
+    req.fixes(fixes);
+    if (routeGeometry != null) {
+      req.u8(1);
+      req.coordinates(routeGeometry);
+    } else {
+      req.u8(0);
+    }
+    if (ghostSamples != null) {
+      req.u8(1);
+      req.attempt(ghostSamples);
+    } else {
+      req.u8(0);
+    }
+    final r = _R(_ffi.replayNew(req.takeBytes()));
+    return _RustReplayRun(_ffi, r.u64());
+  }
+
+  @override
   GhostState ghostStateAt({
     required Ghost ghost,
     required Attempt current,
@@ -355,6 +379,133 @@ class _RustLiveRun implements LiveRunHandle {
   }
 }
 
+class _RustReplayRun implements ReplayHandle {
+  _RustReplayRun(this._ffi, this._handle);
+
+  final GpsEngineFfi _ffi;
+  int _handle;
+  bool _disposed = false;
+
+  void _check() {
+    if (_disposed) {
+      throw StateError('replay handle used after dispose');
+    }
+  }
+
+  @override
+  void play() {
+    _check();
+    _ffi.replayPlay((_W()..u64(_handle)).takeBytes());
+  }
+
+  @override
+  void pause() {
+    _check();
+    _ffi.replayPause((_W()..u64(_handle)).takeBytes());
+  }
+
+  @override
+  void seek(double elapsedSeconds) {
+    _check();
+    final req = _W()
+      ..u64(_handle)
+      ..f64(elapsedSeconds);
+    _ffi.replaySeek(req.takeBytes());
+  }
+
+  @override
+  void setSpeed(double speed) {
+    _check();
+    final req = _W()
+      ..u64(_handle)
+      ..f64(speed);
+    _ffi.replaySetSpeed(req.takeBytes());
+  }
+
+  ReplaySnapshot _readSnapshot(Uint8List bytes) {
+    final r = _R(bytes);
+    final elapsed = r.f64();
+    final total = r.f64();
+    final stateCode = r.u8();
+    final speed = r.f64();
+    final applied = r.u32();
+    final totalFixes = r.u32();
+    final hasPos = r.u8() == 1;
+    final lat = r.f64();
+    final lon = r.f64();
+    final hasAcc = r.u8() == 1;
+    final acc = r.f64();
+    final distance = r.f64();
+    final moving = r.f64();
+    final pace = r.f64();
+    final routeProgress = r.f64();
+    final hasOff = r.u8() == 1;
+    final off = r.f64();
+    final hasGhost = r.u8() == 1;
+    final gDistance = r.f64();
+    final gDiff = r.f64();
+    final gAhead = r.u8() == 1;
+    final gSpatial = r.f64();
+    final gConf = r.f64();
+    final matchStatus = r.u8();
+    final matchConfidence = r.f64();
+    final state = switch (stateCode) {
+      0 => ReplayState.playing,
+      2 => ReplayState.finished,
+      _ => ReplayState.paused,
+    };
+    return ReplaySnapshot(
+      elapsedSeconds: elapsed,
+      totalSeconds: total,
+      state: state,
+      speed: speed,
+      appliedFixes: applied,
+      totalFixes: totalFixes,
+      position: hasPos ? GeoPoint(latitude: lat, longitude: lon) : null,
+      accuracyMeters: hasAcc ? acc : null,
+      distanceMeters: distance,
+      movingSeconds: moving,
+      paceMps: pace,
+      routeProgress: routeProgress,
+      offRouteMeters: hasOff ? off : null,
+      ghost: hasGhost
+          ? LiveGhostSnapshot(
+              distanceMeters: gDistance,
+              timeDifferenceSeconds: gDiff,
+              ahead: gAhead,
+              spatialGapMeters: gSpatial,
+              confidence: gConf,
+            )
+          : null,
+      matchStatus: matchStatus,
+      matchConfidence: matchConfidence,
+    );
+  }
+
+  @override
+  ReplaySnapshot advance(double deltaSeconds) {
+    _check();
+    final req = _W()
+      ..u64(_handle)
+      ..f64(deltaSeconds);
+    return _readSnapshot(_ffi.replayAdvance(req.takeBytes()));
+  }
+
+  @override
+  ReplaySnapshot snapshot() {
+    _check();
+    return _readSnapshot(_ffi.replaySnapshot((_W()..u64(_handle)).takeBytes()));
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _ffi.replayFree(_handle);
+    _handle = 0;
+  }
+}
+
 final List<GeoPoint> _recordingGeometry = const [
   GeoPoint(latitude: 52.5050, longitude: 13.3600),
   GeoPoint(latitude: 52.5095, longitude: 13.3660),
@@ -423,6 +574,14 @@ class _W {
     if (fix.altitudeMeters != null) f64(fix.altitudeMeters!);
     if (fix.speedMetersPerSecond != null) f64(fix.speedMetersPerSecond!);
     if (fix.bearingDegrees != null) f64(fix.bearingDegrees!);
+    return this;
+  }
+
+  _W fixes(List<GpsFix> fixes) {
+    u32(fixes.length);
+    for (final f in fixes) {
+      fix(f);
+    }
     return this;
   }
 
