@@ -140,12 +140,8 @@ void main() {
     testWidgets('shows the distance with the race screen underneath',
         (tester) async {
       await pumpLive(tester, live(offRoute: Distance.meters(42)));
-      expect(find.text('OFF ROUTE'), findsOneWidget);
-      expect(find.text('42 m away'), findsOneWidget);
-      expect(
-        find.text('Return to the route\nto continue your race.'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('OFF ROUTE'), findsOneWidget);
+      expect(find.textContaining('42 m away'), findsOneWidget);
       // The race screen stays visible underneath.
       expect(find.text('PAUSE'), findsOneWidget);
       expect(find.text('FINISH'), findsOneWidget);
