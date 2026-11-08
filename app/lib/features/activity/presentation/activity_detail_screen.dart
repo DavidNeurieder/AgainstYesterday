@@ -65,6 +65,14 @@ class ActivityDetailScreen extends ConsumerWidget {
           tooltip: 'Back',
           onPressed: () => context.pop(),
         ),
+        actions: [
+          IconButton(
+            key: const ValueKey('replay-activity'),
+            icon: const Icon(Icons.replay_rounded),
+            tooltip: 'Replay',
+            onPressed: () => context.push('/activity/$activityId/replay'),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(

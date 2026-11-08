@@ -14,6 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/core/theme/app_colors.dart';
+import 'package:against_yesterday/core/theme/app_theme.dart';
 import 'package:against_yesterday/core/ui/split_row.dart';
 import 'package:against_yesterday/features/activity/presentation/activity_detail_screen.dart';
 import 'package:against_yesterday/features/result/application/splits.dart';
@@ -190,26 +191,32 @@ void main() {
     });
 
     testWidgets('the back button keeps the 48 px minimum', (tester) async {
+      final semantics = tester.ensureSemantics();
       await tester.pumpWidget(ProviderScope(
         overrides: [
           persistenceStoreProvider.overrideWithValue(
             seededStore(activities: [seedActivity()]),
           ),
         ],
-        child: const MaterialApp(
-          home: ActivityDetailScreen(activityId: 'act-001'),
+        child: MaterialApp(
+          theme: buildAppTheme().copyWith(
+            materialTapTargetSize: MaterialTapTargetSize.padded,
+          ),
+          home: const ActivityDetailScreen(activityId: 'act-001'),
         ),
       ));
       await tester.pumpAndSettle();
 
-      final back = tester.getSize(
+      final backNode = tester.getSemantics(
         find.descendant(
           of: find.byType(AppBar),
-          matching: find.byType(IconButton),
+          matching: find.byTooltip('Back'),
         ),
       );
+      final back = backNode.rect.size;
       expect(back.width, greaterThanOrEqualTo(48));
       expect(back.height, greaterThanOrEqualTo(48));
+      semantics.dispose();
     });
   });
 }

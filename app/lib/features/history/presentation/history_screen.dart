@@ -274,6 +274,18 @@ class _ActivityRowState extends ConsumerState<_ActivityRow> {
                   ),
                 ),
               const SizedBox(width: AppSpacing.xs),
+              if ((activity.rawFixes?.length ?? 0) >= 2 ||
+                  (activity.track?.length ?? 0) >= 2)
+                IconButton(
+                  key: ValueKey('replay-activity-${activity.id}'),
+                  onPressed: () {
+                    AppHaptics.light(ref);
+                    context.push('/activity/${activity.id}/replay');
+                  },
+                  icon: const Icon(Icons.replay_rounded),
+                  tooltip: 'Replay',
+                  color: AppColors.textMuted,
+                ),
               if (activity.track?.isNotEmpty ?? false)
                 IconButton(
                   key: ValueKey('export-activity-${activity.id}'),

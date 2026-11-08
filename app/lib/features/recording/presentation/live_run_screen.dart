@@ -17,11 +17,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
-import '../../../widgets/performance_gap.dart';
 import '../../map/map_surface.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
+import 'race_hud.dart';
 
 class LiveRunScreen extends ConsumerWidget {
   const LiveRunScreen({super.key, required this.state});
@@ -36,18 +36,13 @@ class LiveRunScreen extends ConsumerWidget {
     final mapSurface = ref.watch(mapSurfaceProvider);
     final controller = ref.read(recordingControllerProvider.notifier);
 
-    final gapState = switch (state.ghostGap) {
-      final GhostState gap => AheadBehind.fromGap(gap),
-      null => AheadBehind.unknown,
-    };
-
     return Scaffold(
       appBar: AppBar(
         title: Text(state.route?.name ?? 'New route'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.md),
-            child: _GpsPill(quality: state.gpsQuality),
+            child: GpsPill(quality: state.gpsQuality),
           ),
         ],
       ),
@@ -60,7 +55,7 @@ class LiveRunScreen extends ConsumerWidget {
               // §17: a transient banner for temporary GPS problems — it sits
               // above the race readout and vanishes once quality recovers.
               if (state.gpsQuality != 'good') ...[
-                const _WeakGpsBanner(),
+                const WeakGpsBanner(),
                 const SizedBox(height: AppSpacing.md),
               ],
               // A failed foreground-service start is said out loud: recording
@@ -94,33 +89,10 @@ class LiveRunScreen extends ConsumerWidget {
               // instead of being squeezed into a fixed 168 px box beside a
               // larger distance. Distance stays on screen as the supporting
               // read, muted so the ahead/behind colour owns the row.
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (state.ghostGap case final gap?) ...[
-                    _DistanceReadout(state.distance, units, secondary: true),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      // §2: the gap owns the rest of the row at its natural
-                      // size; scaleDown only steps in on the narrowest phones,
-                      // so an hour-long gap can never wrap mid-digit.
-                      child: FittedBox(
-                        alignment: Alignment.centerRight,
-                        fit: BoxFit.scaleDown,
-                        child: PerformanceGap(
-                          key: const ValueKey('live-gap'),
-                          difference: gap.timeDifference,
-                          distance: gap.distance,
-                          state: gapState,
-                        ),
-                      ),
-                    ),
-                  ] else
-                    // No ghost to race: distance *is* the hero readout.
-                    Expanded(
-                      child: _DistanceReadout(state.distance, units),
-                    ),
-                ],
+              RaceHeroRow(
+                distance: state.distance,
+                units: units,
+                ghostGap: state.ghostGap,
               ),
               const SizedBox(height: AppSpacing.md),
               Expanded(
@@ -142,7 +114,7 @@ class LiveRunScreen extends ConsumerWidget {
                     // §18: the race screen stays underneath; the overlay
                     // clears itself as soon as the runner is back on line.
                     if (state.offRoute case final Distance offRoute)
-                      _OffRouteBanner(distance: offRoute),
+                      OffRouteBanner(distance: offRoute),
                   ],
                 ),
               ),
@@ -153,20 +125,20 @@ class LiveRunScreen extends ConsumerWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: _Metric(
+                      child: HudMetric(
                         label: 'PACE',
                         value: state.pace.formatPaceWith(units),
                       ),
                     ),
                     Expanded(
-                      child: _Metric(
+                      child: HudMetric(
                         label: 'TIME',
                         value: state.elapsed.format(),
                         prominent: true,
                       ),
                     ),
                     Expanded(
-                      child: _Metric(
+                      child: HudMetric(
                         key: const ValueKey('live-fixes'),
                         label: 'FIXES',
                         value: '${state.rawFixCount}',
@@ -287,205 +259,6 @@ class _ProtectionBanner extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// §17: transient banner for a temporary GPS problem. Rendered only while
-/// quality is off 'good'; recovers on its own with the state.
-class _WeakGpsBanner extends StatelessWidget {
-  const _WeakGpsBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Semantics(
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: AppColors.gpsWarning.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.gpsWarning),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.gps_off, color: AppColors.gpsWarning),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'GPS SIGNAL WEAK',
-                    style: textTheme.titleSmall?.copyWith(
-                      color: AppColors.gpsWarning,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Your position may be temporarily inaccurate.',
-                    style: textTheme.bodySmall
-                        ?.copyWith(color: AppColors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// §18: off-route overlay — floats over the map so the race screen stays
-/// visible underneath. Shows the distance back to the nearest route point.
-class _OffRouteBanner extends StatelessWidget {
-  const _OffRouteBanner({required this.distance});
-
-  final Distance distance;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Semantics(
-      liveRegion: true,
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceHigh,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.gpsWarning),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'OFF ROUTE',
-                style: textTheme.titleLarge?.copyWith(
-                  color: AppColors.gpsWarning,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Return to the route\nto continue your race.',
-                textAlign: TextAlign.center,
-                style: textTheme.bodyMedium
-                    ?.copyWith(color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                '${distance.format()} away',
-                style: textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The gap shown to the hero (distance/time only — I/O, no logic).
-class _GpsPill extends StatelessWidget {
-  const _GpsPill({required this.quality});
-
-  final String quality;
-
-  @override
-  Widget build(BuildContext context) {
-    final good = quality == 'good';
-    final color = good ? AppColors.ahead : AppColors.gpsWarning;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            good ? Icons.gps_fixed : Icons.gps_off,
-            size: 14,
-            color: color,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            good ? 'GPS' : 'GPS ${quality.toUpperCase()}',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The live distance read (§2): the hero number of a free run, and the
-/// supporting readout beside a race's hero gap — smaller and muted so the
-/// ahead/behind colours stay the first thing the eye finds.
-class _DistanceReadout extends StatelessWidget {
-  const _DistanceReadout(
-    this.distance,
-    this.units, {
-    this.secondary = false,
-  });
-
-  final Distance distance;
-  final Units units;
-  final bool secondary;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Text(
-      distance.formatWith(units),
-      key: const ValueKey('live-distance'),
-      style: (secondary ? textTheme.headlineSmall : textTheme.displayMedium)
-          ?.copyWith(
-        fontWeight: FontWeight.w700,
-        color: secondary ? AppColors.textSecondary : null,
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
-    );
-  }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric({
-    super.key,
-    required this.label,
-    required this.value,
-    this.prominent = false,
-  });
-
-  final String label;
-  final String value;
-  final bool prominent;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Column(
-      children: [
-        Text(label, style: textTheme.labelSmall),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: (prominent
-                  ? textTheme.titleLarge
-                  : textTheme.titleMedium)
-              ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-        ),
-      ],
     );
   }
 }

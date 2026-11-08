@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/activity/presentation/activity_detail_screen.dart';
+import '../features/activity/presentation/replay_screen.dart';
 import '../features/dev/presentation/diagnostics_screen.dart';
 import '../features/history/presentation/history_screen.dart';
 import '../features/home/presentation/home_screen.dart';
@@ -125,6 +126,11 @@ GoRouter buildRouter() {
         path: '/activity/:id',
         builder: (context, state) =>
             ActivityDetailScreen(activityId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/activity/:id/replay',
+        builder: (context, state) =>
+            ReplayScreen(activityId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/route/:id',
