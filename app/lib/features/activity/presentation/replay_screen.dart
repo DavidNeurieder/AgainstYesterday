@@ -275,6 +275,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
   Widget _buildRace(BuildContext context, ReplaySnapshot snap) {
     final units = ref.watch(displayUnitProvider);
     final mapSurface = ref.watch(mapSurfaceProvider);
+    final textTheme = Theme.of(context).textTheme;
     final distance = Distance.meters(snap.distanceMeters);
     final pace = Speed.metersPerSecond(snap.paceMps);
     final moving = Elapsed.seconds(snap.movingSeconds);
@@ -324,23 +325,45 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (you != null && geometry.isNotEmpty)
-                    mapSurface.build(
-                      context,
-                      MapScene(
-                        geometry: geometry,
-                        you: you,
-                        youProgress: snap.routeProgress,
-                        ghost: ghostPosition,
-                        name: _route?.name,
-                        courseColor: AppColors.pb,
-                        track: trackGeometry,
-                      ),
-                    )
-                  else
-                    const Center(child: Text('No map data.')),
+                  (you != null && geometry.isNotEmpty)
+                      ? mapSurface.build(
+                          context,
+                          MapScene(
+                            geometry: geometry,
+                            you: you,
+                            youProgress: snap.routeProgress,
+                            ghost: ghostPosition,
+                            name: _route?.name,
+                            courseColor: AppColors.pb,
+                            track: trackGeometry,
+                          ),
+                        )
+                      : const Center(child: Text('No map data.')),
                   if (offRoute case final Distance d)
-                    OffRouteBanner(distance: d),
+                    Positioned(
+                      top: 8,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceHigh.withValues(alpha: 0.85),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'OFF ROUTE · ${d.format()} away',
+                            style: textTheme.labelSmall?.copyWith(
+                              color: AppColors.gpsWarning,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -487,7 +510,7 @@ class _ReplayControls extends StatelessWidget {
               key: const ValueKey('replay-speed'),
               value: _nearestSpeed(snapshot.speed),
               underline: const SizedBox.shrink(),
-              items: const [0.5, 1.0, 2.0, 4.0, 8.0]
+              items: const [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
                   .map(
                     (s) => DropdownMenuItem<double>(
                       value: s,
@@ -506,7 +529,7 @@ class _ReplayControls extends StatelessWidget {
   }
 
   double _nearestSpeed(double speed) {
-    const opts = [0.5, 1.0, 2.0, 4.0, 8.0];
+    const opts = [0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0];
     var best = opts[1];
     var bestD = (speed - best).abs();
     for (final o in opts) {

@@ -202,13 +202,15 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       _routeSourceId,
       lineStringFeatureCollection(widget.scene.geometry),
     );
-    final course = widget.scene.courseColor;
+    await controller.addGeoJsonSource(
+      _trackSourceId,
+      lineStringFeatureCollection(widget.scene.track),
+    );
     await controller.addLineLayer(
-      _routeSourceId,
-      _routeLayerId,
-      LineLayerProperties(
-        lineColor: course == null ? _routeColor : _cssHex(course),
-        lineOpacity: course == null ? 0.35 : 1.0,
+      _trackSourceId,
+      _trackLayerId,
+      const LineLayerProperties(
+        lineColor: _traveledColor,
         lineWidth: 4,
         lineJoin: 'round',
         lineCap: 'round',
@@ -230,15 +232,13 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
         lineCap: 'round',
       ),
     );
-    await controller.addGeoJsonSource(
-      _trackSourceId,
-      lineStringFeatureCollection(widget.scene.track),
-    );
+    final course = widget.scene.courseColor;
     await controller.addLineLayer(
-      _trackSourceId,
-      _trackLayerId,
-      const LineLayerProperties(
-        lineColor: _traveledColor,
+      _routeSourceId,
+      _routeLayerId,
+      LineLayerProperties(
+        lineColor: course == null ? _routeColor : _cssHex(course),
+        lineOpacity: course == null ? 0.35 : 1.0,
         lineWidth: 4,
         lineJoin: 'round',
         lineCap: 'round',

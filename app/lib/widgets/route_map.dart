@@ -438,25 +438,8 @@ class _MapPainter extends CustomPainter {
         world.project(g, shift: shift, follow: follow, followAt: followAt),
     ];
 
-    final trace = Paint()
-      ..color = courseColor ?? AppColors.ghost.withValues(alpha: 0.35)
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(_path(full), trace);
-
-    final traveled = _traveledPath(full, youProgress.clamp(0.0, 1.0));
-    if (traveled.length >= 2) {
-      final youLine = Paint()
-        ..color = AppColors.track
-        ..strokeWidth = 3
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(_path(traveled), youLine);
-    }
-
+    // Draw the recorded track first (green) so it shows where the run
+    // actually went, including detours off the course.
     if (track.length >= 2) {
       final trackPoints = <Offset>[
         for (final g in track)
@@ -470,6 +453,27 @@ class _MapPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round;
       canvas.drawPath(_path(trackPoints), trackPaint);
     }
+
+    final traveled = _traveledPath(full, youProgress.clamp(0.0, 1.0));
+    if (traveled.length >= 2) {
+      final youLine = Paint()
+        ..color = AppColors.track
+        ..strokeWidth = 3
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      canvas.drawPath(_path(traveled), youLine);
+    }
+
+    // The planned course is painted last (blue) so it stays visible on top
+    // of the track where the two overlap, while divergent parts stay green.
+    final trace = Paint()
+      ..color = courseColor ?? AppColors.ghost.withValues(alpha: 0.35)
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(_path(full), trace);
   }
 
   Path _path(List<Offset> points) {

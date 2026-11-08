@@ -162,17 +162,6 @@ class _FlutterMapRouteMapState extends State<FlutterMapRouteMap> {
               userAgentPackageName: 'dev.neurieder.against_yesterday',
               maxNativeZoom: 19,
             ),
-            if (geometry.length >= 2)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: geometry,
-                    strokeWidth: 4,
-                    color: scene.courseColor ??
-                        AppColors.ghost.withValues(alpha: 0.35),
-                  ),
-                ],
-              ),
             if (scene.track.length >= 2)
               PolylineLayer(
                 polylines: [
@@ -190,6 +179,17 @@ class _FlutterMapRouteMapState extends State<FlutterMapRouteMap> {
                     points: traveled,
                     strokeWidth: 4,
                     color: AppColors.track,
+                  ),
+                ],
+              ),
+            if (geometry.length >= 2)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: geometry,
+                    strokeWidth: 4,
+                    color: scene.courseColor ??
+                        AppColors.ghost.withValues(alpha: 0.35),
                   ),
                 ],
               ),

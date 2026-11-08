@@ -113,10 +113,31 @@ class LiveRunScreen extends ConsumerWidget {
                         track: state.track,
                       ),
                     ),
-                    // §18: the race screen stays underneath; the overlay
-                    // clears itself as soon as the runner is back on line.
                     if (state.offRoute case final Distance offRoute)
-                      OffRouteBanner(distance: offRoute),
+                      Positioned(
+                        top: 8,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.sm,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceHigh.withValues(alpha: 0.85),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'OFF ROUTE · ${offRoute.format()} away',
+                              style: textTheme.labelSmall?.copyWith(
+                                color: AppColors.gpsWarning,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
