@@ -26,6 +26,7 @@ String appSettingsToJson(AppSettings settings) => const JsonEncoder().convert({
   'onboarding': settings.onboardingSeen,
   'locationRationale': settings.locationRationaleSeen,
   'theme': settings.themeMode.name,
+  'replaySpeed': settings.replaySpeed,
 });
 
 AppSettings parseAppSettings(String json) {
@@ -47,6 +48,7 @@ AppSettings parseAppSettings(String json) {
       (m) => m.name == map['theme'],
       orElse: () => AppSettings.defaults.themeMode,
     ),
+    replaySpeed: (map['replaySpeed'] as num?)?.toDouble() ?? AppSettings.defaults.replaySpeed,
   );
 }
 
@@ -65,6 +67,11 @@ final countdownEnabledProvider = Provider<bool>((ref) =>
 /// The unit used to format distance, pace and speed across the app.
 final displayUnitProvider = Provider<Units>(
   (ref) => ref.watch(settingsRepositoryProvider).units,
+);
+
+/// Last-used replay playback speed.
+final replaySpeedProvider = Provider<double>(
+  (ref) => ref.watch(settingsRepositoryProvider).replaySpeed,
 );
 
 /// Which theme the app follows (§6).

@@ -40,6 +40,7 @@ class AppSettings {
     required this.onboardingSeen,
     required this.locationRationaleSeen,
     this.themeMode = AppThemeMode.dark,
+    this.replaySpeed = 1.0,
   });
 
   /// Vibrate on interactions (start, finish, phase changes, …).
@@ -73,6 +74,9 @@ class AppSettings {
   /// look.
   final AppThemeMode themeMode;
 
+  /// Last-used replay playback speed (§replay). Defaults to 1x.
+  final double replaySpeed;
+
   static const AppSettings defaults = AppSettings(
     hapticsEnabled: true,
     countdownEnabled: true,
@@ -89,6 +93,7 @@ class AppSettings {
     bool? onboardingSeen,
     bool? locationRationaleSeen,
     AppThemeMode? themeMode,
+    double? replaySpeed,
   }) =>
       AppSettings(
         hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
@@ -97,6 +102,7 @@ class AppSettings {
         onboardingSeen: onboardingSeen ?? this.onboardingSeen,
         locationRationaleSeen: locationRationaleSeen ?? this.locationRationaleSeen,
         themeMode: themeMode ?? this.themeMode,
+        replaySpeed: replaySpeed ?? this.replaySpeed,
       );
 
   @override
@@ -107,7 +113,8 @@ class AppSettings {
       other.units == units &&
       other.onboardingSeen == onboardingSeen &&
       other.locationRationaleSeen == locationRationaleSeen &&
-      other.themeMode == themeMode;
+      other.themeMode == themeMode &&
+      other.replaySpeed == replaySpeed;
 
   @override
   int get hashCode => Object.hash(
@@ -117,5 +124,6 @@ class AppSettings {
         onboardingSeen,
         locationRationaleSeen,
         themeMode,
+        replaySpeed,
       );
 }

@@ -150,6 +150,8 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
         handle.dispose();
         return;
       }
+      final persistedSpeed = ref.read(replaySpeedProvider);
+      handle.setSpeed(persistedSpeed);
       final snap = handle.snapshot();
       setState(() {
         _route = route;
@@ -212,6 +214,9 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
     final handle = _handle;
     if (handle == null) return;
     handle.setSpeed(speed);
+    final repo = ref.read(settingsRepositoryProvider.notifier);
+    final current = ref.read(settingsRepositoryProvider);
+    repo.save(current.copyWith(replaySpeed: speed));
     setState(() => _snapshot = handle.snapshot());
   }
 
