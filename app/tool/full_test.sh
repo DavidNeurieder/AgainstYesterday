@@ -256,16 +256,12 @@ fi
 RUN_DEVICE=0
 if [ "$QUICK" = "1" ]; then
     RUN_DEVICE=0
-elif [ "$DEVICE" = "1" ]; then
-    RUN_DEVICE=1
 elif [ "$CI" = "1" ]; then
     RUN_DEVICE=0
 else
-    if have adb && adb devices 2>/dev/null | grep -q "device$"; then
-        RUN_DEVICE=1
-    else
-        RUN_DEVICE=0
-    fi
+    # Run the on-device suite unless explicitly skipped; the integration
+    # script boots an emulator when none is connected.
+    RUN_DEVICE=1
 fi
 
 if [ "$DEVICE" = "1" ] && [ "$RUN_DEVICE" = "0" ]; then
@@ -277,7 +273,7 @@ EXPECTED_TARGETS=("${HOST_TARGETS[@]}")
 if [ "$RUN_DEVICE" = "1" ]; then
     run_one "connected-test-engine" bash -c 'cd "'"$APP_DIR"'" && ./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true'
 else
-    skip_target "connected-test-engine" "no device / QUICK=1 / CI"
+    skip_target "connected-test-engine" "QUICK=1 / CI"
     EXPECTED_TARGETS+=("connected-test-engine")
 fi
 
