@@ -28,13 +28,13 @@ endif
 .PHONY: build build-release install run test test-rust-engine lint tz-test \
         connected-test connected-test-engine connected-test-gps \
         engine-build engine-test engine-lint engine-fmt engine-doc \
-        engine-android full-test full-test-device ci-test check clean
+        engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean
 
-build:
+build: maplibre-fdroid-clean
 	cd app && flutter build apk --debug \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
-build-release: engine-android
+build-release: maplibre-fdroid-clean engine-android
 	cd app && flutter build apk --release \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
@@ -43,7 +43,7 @@ run: engine-build
 
 # Builds the debug APK (with Android cdylibs bundled, so the app auto-selects
 # the native Rust engine) and sideloads it into the connected device/emulator.
-install: engine-android build
+install: maplibre-fdroid-clean engine-android build
 	adb install -r app/build/app/outputs/flutter-apk/app-debug.apk
 
 test-rust-engine: engine-build
@@ -81,6 +81,11 @@ engine-fmt:
 
 engine-doc:
 	cargo doc --no-deps
+
+# Removes Google Play Services from the cached MapLibre plugin before a build,
+# so device artifacts stay F-Droid-clean. Safe to run repeatedly.
+maplibre-fdroid-clean:
+	./app/tool/fdroid_prebuild.sh
 
 engine-android:
 	./app/tool/build_rust_engine_android.sh
