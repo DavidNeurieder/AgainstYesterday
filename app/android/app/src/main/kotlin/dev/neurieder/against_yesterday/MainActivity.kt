@@ -8,8 +8,12 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
+import android.os.Looper
+import androidx.core.app.ActivityCompat
 import android.os.Build
 import android.os.Environment
 import android.os.PowerManager
@@ -17,6 +21,7 @@ import android.provider.MediaStore
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
@@ -33,6 +38,9 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private var pendingResult: MethodChannel.Result? = null
     private var pendingWrite: Pair<String, String>? = null
+    private var pendingPermissionResult: MethodChannel.Result? = null
+    private var locationListener: LocationListener? = null
+    private var locationSink: EventChannel.EventSink? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -61,6 +69,34 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LOCATION_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isLocationServiceEnabled" -> result.success(isLocationServiceEnabled())
+                    "checkPermission" -> result.success(checkLocationPermission())
+                    "requestPermission" -> requestLocationPermission(result)
+                    "openAppSettings" -> {
+                        openAppSettings()
+                        result.success(null)
+                    }
+                    "openLocationSettings" -> {
+                        openLocationSettings()
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, LOCATION_UPDATES_CHANNEL)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    locationSink = events
+                    startLocationUpdates()
+                }
+                override fun onCancel(arguments: Any?) {
+                    stopLocationUpdates()
+                    locationSink = null
+                }
+            })
     }
 
     /**
@@ -196,22 +232,41 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != STORAGE_REQUEST) return
-        val result = pendingResult
-        val write = pendingWrite
-        pendingResult = null
-        pendingWrite = null
-        if (result == null || write == null) return
-        if (grantResults.isNotEmpty() &&
-            grantResults[0] == PackageManager.PERMISSION_GRANTED
-        ) {
-            finishWrite(write.first, write.second, result)
-        } else {
-            result.error(
-                "permission-denied",
-                "Storage permission is required to save to Downloads.",
-                null,
-            )
+        when (requestCode) {
+            STORAGE_REQUEST -> {
+                val result = pendingResult
+                val write = pendingWrite
+                pendingResult = null
+                pendingWrite = null
+                if (result == null || write == null) return
+                if (grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED
+                ) {
+                    finishWrite(write.first, write.second, result)
+                } else {
+                    result.error(
+                        "permission-denied",
+                        "Storage permission is required to save to Downloads.",
+                        null,
+                    )
+                }
+            }
+            LOCATION_PERMISSION_REQUEST -> {
+                val result = pendingPermissionResult ?: return
+                pendingPermissionResult = null
+                val granted = grantResults.any { it == PackageManager.PERMISSION_GRANTED }
+                if (granted) {
+                    result.success("granted")
+                } else if (permissions.indices.any { i ->
+                        i < grantResults.size &&
+                            grantResults[i] != PackageManager.PERMISSION_GRANTED &&
+                            shouldShowRequestPermissionRationale(permissions[i])
+                    }) {
+                    result.success("denied")
+                } else {
+                    result.success("deniedForever")
+                }
+            }
         }
     }
 
@@ -285,9 +340,109 @@ class MainActivity : FlutterActivity() {
         return candidate
     }
 
+    private fun isLocationServiceEnabled(): Boolean {
+        val lm = getSystemService(LocationManager::class.java)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            lm.isLocationEnabled
+        } else {
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }
+    }
+
+    private fun checkLocationPermission(): String {
+        val fineGranted = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        val coarseGranted = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        return if (fineGranted || coarseGranted) "granted" else "denied"
+    }
+
+    private fun requestLocationPermission(result: MethodChannel.Result) {
+        if (checkLocationPermission() == "granted") {
+            result.success("granted")
+            return
+        }
+        if (pendingPermissionResult != null) {
+            result.success("denied")
+            return
+        }
+        pendingPermissionResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+            ),
+            LOCATION_PERMISSION_REQUEST,
+        )
+    }
+
+    private fun openAppSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", packageName, null)
+        }
+        startActivity(intent)
+    }
+
+    private fun openLocationSettings() {
+        startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+    }
+
+    private fun startLocationUpdates() {
+        stopLocationUpdates()
+        val lm = getSystemService(LocationManager::class.java)
+        val providers = mutableListOf<String>()
+        if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            providers.add(LocationManager.GPS_PROVIDER)
+        }
+        if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            providers.add(LocationManager.NETWORK_PROVIDER)
+        }
+        if (providers.isEmpty()) return
+        val listener = LocationListener { location ->
+            val sink = locationSink ?: return@LocationListener
+            val map = hashMapOf<String, Any?>(
+                "latitude" to location.latitude,
+                "longitude" to location.longitude,
+                "timestamp" to location.time,
+            )
+            if (location.hasAccuracy()) map["accuracy"] = location.accuracy.toDouble()
+            if (location.hasAltitude()) map["altitude"] = location.altitude
+            if (location.hasSpeed()) map["speed"] = location.speed.toDouble()
+            if (location.hasBearing()) map["bearing"] = location.bearing.toDouble()
+            sink.success(map)
+        }
+        locationListener = listener
+        for (provider in providers) {
+            try {
+                lm.requestLocationUpdates(provider, 1000L, 0f, listener, Looper.getMainLooper())
+            } catch (_: SecurityException) {
+            }
+        }
+    }
+
+    private fun stopLocationUpdates() {
+        locationListener?.let { listener ->
+            try {
+                getSystemService(LocationManager::class.java).removeUpdates(listener)
+            } catch (_: Exception) {
+            }
+        }
+        locationListener = null
+    }
+
+    override fun onDestroy() {
+        stopLocationUpdates()
+        super.onDestroy()
+    }
+
     private companion object {
         const val CHANNEL = "dev.neurieder.against_yesterday/files"
         const val RECORDING_CHANNEL = "dev.neurieder.against_yesterday/recording"
+        const val LOCATION_CHANNEL = "dev.neurieder.against_yesterday/location"
+        const val LOCATION_UPDATES_CHANNEL = "dev.neurieder.against_yesterday/location_updates"
+        const val LOCATION_PERMISSION_REQUEST = 7312
         const val STORAGE_REQUEST = 5416
         const val MIME_TYPE_GPX = "application/gpx+xml"
         const val PREFS = "against_yesterday"

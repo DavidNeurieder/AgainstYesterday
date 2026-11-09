@@ -8,25 +8,45 @@
 /// The source only performs *acquisition* ([GpsSource.ensureAvailable]) and
 /// exposes the unprocessed fix stream ([GpsSource.fixes]); it never sniffs or
 /// processes a fix. Conversion to the app's own [GpsFix] model happens here so
-/// the rest of the app stays ignorant of the geolocator API.
+/// the rest of the app stays ignorant of the platform location API.
 library;
 
-import 'package:geolocator/geolocator.dart';
+import 'dart:async';
+
+import 'package:flutter/services.dart';
 
 import 'models.dart';
 
-/// Maps a receiver update onto the app's raw [GpsFix] model, keeping every
-/// sensor field the platform actually reported (M15 Phase 12) and leaving the
-/// ones it didn't `null` — the app never invents a value to fill a gap.
-GpsFix gpsFixFromPosition(Position position) {
+/// Maps a platform location update onto the app's raw [GpsFix] model, keeping
+/// every sensor field the platform actually reported and leaving the ones it
+/// didn't `null` — the app never invents a value to fill a gap.
+GpsFix gpsFixFromPlatformMap(Map<String, dynamic> map) {
+  final timestampMs = map['timestamp'];
+  DateTime timestamp;
+  if (timestampMs is int) {
+    timestamp = DateTime.fromMillisecondsSinceEpoch(timestampMs, isUtc: true);
+  } else if (timestampMs is double) {
+    timestamp = DateTime.fromMillisecondsSinceEpoch(timestampMs.toInt(),
+        isUtc: true);
+  } else {
+    timestamp = DateTime.now().toUtc();
+  }
   return GpsFix(
-    timestamp: position.timestamp.toUtc(),
-    latitude: position.latitude,
-    longitude: position.longitude,
-    accuracyMeters: position.hasAccuracy ? position.accuracy : null,
-    altitudeMeters: position.hasAltitude ? position.altitude : null,
-    speedMetersPerSecond: position.hasSpeed ? position.speed : null,
-    bearingDegrees: position.hasHeading ? position.heading : null,
+    timestamp: timestamp,
+    latitude: (map['latitude'] as num).toDouble(),
+    longitude: (map['longitude'] as num).toDouble(),
+    accuracyMeters: map['accuracy'] == null
+        ? null
+        : (map['accuracy'] as num).toDouble(),
+    altitudeMeters: map['altitude'] == null
+        ? null
+        : (map['altitude'] as num).toDouble(),
+    speedMetersPerSecond: map['speed'] == null
+        ? null
+        : (map['speed'] as num).toDouble(),
+    bearingDegrees: map['bearing'] == null
+        ? null
+        : (map['bearing'] as num).toDouble(),
   );
 }
 
@@ -70,30 +90,35 @@ abstract interface class GpsSource {
   Future<void> openSettings();
 }
 
-/// The real device receiver backed by the geolocator plugin.
+/// The real device receiver backed by the platform's own location service
+/// (Android's [LocationManager] / iOS's [CLLocationManager]) — no Google Play
+/// Services, so the build stays F-Droid-clean.
 class DeviceGpsSource implements GpsSource {
   const DeviceGpsSource();
+
+  static const MethodChannel _method =
+      MethodChannel('dev.neurieder.against_yesterday/location');
+  static const EventChannel _events =
+      EventChannel('dev.neurieder.against_yesterday/location_updates');
 
   @override
   String get description => 'device GPS';
 
   @override
   Future<String?> ensureAvailable() async {
-    // The GMS-backed settings check behind this can hang forever on an
-    // offline/uncertified emulator (WAITING_FOR_SERVER), so time it out and
-    // optimistically continue — the fix stream surfaces a real problem
-    // through its own error path.
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled()
+    // The settings check behind this can hang forever on an offline/uncertified
+    // emulator, so time it out and optimistically continue — the fix stream
+    // surfaces a real problem through its own error path.
+    final serviceEnabled = await _isLocationServiceEnabled()
         .timeout(const Duration(seconds: 5), onTimeout: () => true);
     if (!serviceEnabled) {
       return 'Location services are off. Turn on GPS, then try again.';
     }
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+    var permission = await _checkPermission();
+    if (permission == 'denied') {
+      permission = await _requestPermission();
     }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+    if (permission != 'granted') {
       return 'Location permission is denied. Allow location access for '
           'Against Yesterday, then try again.';
     }
@@ -102,40 +127,58 @@ class DeviceGpsSource implements GpsSource {
 
   @override
   Future<bool> canAskPermission() async {
-    // The GMS-backed check can hang on an offline/uncertified emulator (see
-    // [ensureAvailable]); a hang is treated as "no dialog to explain", which
-    // is the conservative answer — the run proceeds exactly as before.
-    final permission = await Geolocator.checkPermission().timeout(
+    final permission = await _checkPermission().timeout(
       const Duration(seconds: 5),
-      onTimeout: () => LocationPermission.deniedForever,
+      onTimeout: () => 'deniedForever',
     );
-    return permission == LocationPermission.denied;
+    return permission == 'denied';
   }
 
   @override
   Stream<GpsFix> fixes() {
-    return Geolocator.getPositionStream(
-      locationSettings: AndroidSettings(
-        // Raw LocationManager fixes instead of the GMS FusedLocationProvider:
-        // the latter gates its first request behind a SettingsClient check
-        // that hangs forever (WAITING_FOR_SERVER) on offline/uncertified
-        // emulators, so no fix would ever arrive.
-        forceLocationManager: true,
-        accuracy: LocationAccuracy.best,
-        distanceFilter: 0,
-        // ~1 fix/sec, matching the engine's 1 Hz sample cadence.
-        intervalDuration: const Duration(seconds: 1),
-        timeLimit: null,
-      ),
-    ).map(gpsFixFromPosition);
+    return _events.receiveBroadcastStream().map((event) {
+      return gpsFixFromPlatformMap(Map<String, dynamic>.from(event as Map));
+    });
   }
 
   @override
   Future<void> openSettings() async {
-    if (!await Geolocator.isLocationServiceEnabled()) {
-      await Geolocator.openLocationSettings();
+    if (!await _isLocationServiceEnabled()) {
+      await _method.invokeMethod<void>('openLocationSettings');
       return;
     }
-    await Geolocator.openAppSettings();
+    await _method.invokeMethod<void>('openAppSettings');
+  }
+
+  static Future<bool> _isLocationServiceEnabled() async {
+    try {
+      return await _method.invokeMethod<bool>('isLocationServiceEnabled') ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  static Future<String> _checkPermission() async {
+    try {
+      return await _method.invokeMethod<String>('checkPermission') ?? 'denied';
+    } on MissingPluginException {
+      return 'deniedForever';
+    } on PlatformException {
+      return 'deniedForever';
+    }
+  }
+
+  static Future<String> _requestPermission() async {
+    try {
+      return await _method.invokeMethod<String>('requestPermission') ??
+          'denied';
+    } on MissingPluginException {
+      return 'deniedForever';
+    } on PlatformException {
+      return 'deniedForever';
+    }
   }
 }
