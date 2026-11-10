@@ -18,6 +18,7 @@ import '../../../core/ui/split_row.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../map/map_surface.dart';
+import 'elevation_profile.dart';
 import '../../result/application/splits.dart';
 import '../../settings/application/settings_controller.dart';
 
@@ -134,6 +135,17 @@ class ActivityDetailScreen extends ConsumerWidget {
                 ),
               ),
             ),
+          ],
+          if (activity.track case final track? when track.any((p) => p.altitudeMeters != null)) ...[
+            const SizedBox(height: AppSpacing.xl),
+            Text(
+              'Elevation',
+              style: textTheme.titleMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            ElevationProfile(track: track),
           ],
           if (splits.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xl),
