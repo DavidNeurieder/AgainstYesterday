@@ -129,6 +129,27 @@ class LiveRunScreen extends ConsumerWidget {
                         track: state.track,
                       ),
                     ),
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceHigh.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.sm,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            '${state.distance.formatWith(units)}'
+                            '${state.route != null ? ' · ${(state.routeProgress * 100).toStringAsFixed(0)}%' : ''}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ),
+                    ),
                     if (state.offRoute case final Distance offRoute)
                       Positioned(
                         top: 8,
