@@ -158,6 +158,56 @@ final class RustEngineService implements EngineService {
   }
 
   @override
+  Future<TrackAnalytics> analyzeTrack({
+    required List<TrackPoint> points,
+  }) async {
+    final req = _W()..points(points);
+    final bytes = _ffi.analyzeTrack(req.takeBytes());
+    final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+    final quality = json['quality'] as Map<String, dynamic>;
+    final paceSamples = (json['pace_samples'] as List<dynamic>? ?? [])
+        .map((e) {
+          final m = e as Map<String, dynamic>;
+          return (distanceMeters: (m['distance_m'] as num).toDouble(),
+              paceMsPerKm: (m['pace_ms_per_km'] as num).toInt());
+        })
+        .toList(growable: false);
+    final elevSamples = (json['elevation_samples'] as List<dynamic>? ?? [])
+        .map((e) {
+          final m = e as Map<String, dynamic>;
+          return (distanceMeters: (m['distance_m'] as num).toDouble(),
+              elevationMeters: (m['elevation_m'] as num).toDouble());
+        })
+        .toList(growable: false);
+    return TrackAnalytics(
+      distanceMeters: (json['distance_m'] as num).toDouble(),
+      elapsedTimeMs: (json['elapsed_time_ms'] as num).toInt(),
+      movingTimeMs: (json['moving_time_ms'] as num).toInt(),
+      pausedTimeMs: (json['paused_time_ms'] as num).toInt(),
+      stoppedTimeMs: (json['stopped_time_ms'] as num).toInt(),
+      averagePaceMsPerKm: json['average_pace_ms_per_km'] as int?,
+      averageSpeedMps: (json['average_speed_mps'] as num?)?.toDouble(),
+      movingSpeedMps: (json['moving_speed_mps'] as num?)?.toDouble(),
+      maxSpeedMps: (json['max_speed_mps'] as num?)?.toDouble(),
+      bestPaceMsPerKm: json['best_pace_ms_per_km'] as int?,
+      elevationGainMeters: (json['elevation_gain_m'] as num?)?.toDouble(),
+      elevationLossMeters: (json['elevation_loss_m'] as num?)?.toDouble(),
+      elevationMinMeters: (json['elevation_min_m'] as num?)?.toDouble(),
+      elevationMaxMeters: (json['elevation_max_m'] as num?)?.toDouble(),
+      paceSamples: paceSamples,
+      elevationSamples: elevSamples,
+      quality: TrackAnalyticsQuality(
+        acceptedSamples: (quality['accepted_samples'] as num).toInt(),
+        rejectedSamples: (quality['rejected_samples'] as num).toInt(),
+        coverageRatio: (quality['coverage_ratio'] as num).toDouble(),
+        gpsGapCount: (quality['gps_gap_count'] as num).toInt(),
+        hasSufficientDistance: quality['has_sufficient_distance'] as bool,
+        hasElevationData: quality['has_elevation_data'] as bool,
+      ),
+    );
+  }
+
+  @override
   Future<LiveRunHandle> createLiveRun({
     List<GeoPoint>? route,
     List<AttemptSample>? ghostSamples,

@@ -45,6 +45,11 @@ abstract class EngineService {
     required List<TrackPoint> points,
   });
 
+  /// Derived track analytics for [points], computed by the engine.
+  Future<TrackAnalytics> analyzeTrack({
+    required List<TrackPoint> points,
+  });
+
   /// Creates a stateful live recorder owned by the engine.
   ///
   /// Pass [route] to follow a recognised course (coverage/progress/off-route

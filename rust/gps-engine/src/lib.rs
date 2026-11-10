@@ -46,6 +46,9 @@ pub mod geo;
 /// statistics and processing (filtering, simplification, resampling).
 pub mod track;
 
+/// Track analytics derived from a validated [`Track`].
+pub mod analytics;
+
 /// Stateful live-run recording driven by raw fixes.
 pub mod live;
 

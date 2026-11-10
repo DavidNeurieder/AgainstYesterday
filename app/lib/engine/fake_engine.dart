@@ -213,6 +213,87 @@ class FakeEngineService implements EngineService {
   }
 
   @override
+  Future<TrackAnalytics> analyzeTrack({
+    required List<TrackPoint> points,
+  }) async {
+    final coords = points.map((p) => p.position).toList(growable: false);
+    final distance = polylineMeters(coords);
+    final elapsed = points.length < 2
+        ? 0.0
+        : points.last.timestamp
+                .difference(points.first.timestamp)
+                .inMilliseconds /
+            1000.0;
+    var moving = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      final dt =
+          points[i].timestamp.difference(points[i - 1].timestamp).inMilliseconds /
+          1000.0;
+      if (dt <= 0) continue;
+      if (dt < 5.0) {
+        moving += dt;
+        continue;
+      }
+      final speed = haversineMeters(points[i - 1].position, points[i].position) / dt;
+      if (speed >= 0.5) moving += dt;
+    }
+    final paused = (elapsed - moving).clamp(0.0, double.infinity);
+    var gain = 0.0;
+    var loss = 0.0;
+    double? minAlt;
+    double? maxAlt;
+    for (var i = 1; i < points.length; i++) {
+      final a = points[i - 1].altitudeMeters;
+      final b = points[i].altitudeMeters;
+      if (a != null && b != null) {
+        if (b > a) gain += b - a;
+        if (a > b) loss += a - b;
+      }
+      final alt = points[i].altitudeMeters;
+      if (alt != null) {
+        minAlt = minAlt == null ? alt : (alt < minAlt ? alt : minAlt);
+        maxAlt = maxAlt == null ? alt : (alt > maxAlt ? alt : maxAlt);
+      }
+    }
+    final hasAlt = points.any((p) => p.altitudeMeters != null);
+    return TrackAnalytics(
+      distanceMeters: distance,
+      elapsedTimeMs: (elapsed * 1000).round(),
+      movingTimeMs: (moving * 1000).round(),
+      pausedTimeMs: 0,
+      stoppedTimeMs: (paused * 1000).round(),
+      averagePaceMsPerKm: distance > 0 && moving > 0
+          ? (moving / (distance / 1000) * 1000).round()
+          : null,
+      averageSpeedMps: elapsed > 0 ? distance / elapsed : null,
+      movingSpeedMps: moving > 0 ? distance / moving : null,
+      maxSpeedMps: points.length < 2
+          ? null
+          : [
+              for (var i = 1; i < points.length; i++)
+                haversineMeters(points[i - 1].position, points[i].position) /
+                    (points[i].timestamp
+                            .difference(points[i - 1].timestamp)
+                            .inMilliseconds /
+                        1000.0),
+            ].where((v) => v.isFinite && v > 0).fold<double?>(null, (a, b) => a == null || b > a ? b : a),
+      bestPaceMsPerKm: null,
+      elevationGainMeters: hasAlt ? gain : null,
+      elevationLossMeters: hasAlt ? loss : null,
+      elevationMinMeters: minAlt,
+      elevationMaxMeters: maxAlt,
+      quality: TrackAnalyticsQuality(
+        acceptedSamples: points.length,
+        rejectedSamples: 0,
+        coverageRatio: points.length > 1 ? 1.0 : 0.0,
+        gpsGapCount: 0,
+        hasSufficientDistance: distance >= 100,
+        hasElevationData: hasAlt,
+      ),
+    );
+  }
+
+  @override
   Future<LiveRunHandle> createLiveRun({
     List<GeoPoint>? route,
     List<AttemptSample>? ghostSamples,

@@ -737,6 +737,65 @@ double haversineMeters(GeoPoint a, GeoPoint b) {
   return 2 * earthRadiusM * math.asin(math.min(1.0, math.sqrt(h)));
 }
 
+/// Derived track analytics produced by the Rust engine (M30).
+class TrackAnalytics {
+  const TrackAnalytics({
+    required this.distanceMeters,
+    required this.elapsedTimeMs,
+    required this.movingTimeMs,
+    required this.pausedTimeMs,
+    required this.stoppedTimeMs,
+    this.averagePaceMsPerKm,
+    this.averageSpeedMps,
+    this.movingSpeedMps,
+    this.maxSpeedMps,
+    this.bestPaceMsPerKm,
+    this.elevationGainMeters,
+    this.elevationLossMeters,
+    this.elevationMinMeters,
+    this.elevationMaxMeters,
+    this.paceSamples = const [],
+    this.elevationSamples = const [],
+    required this.quality,
+  });
+
+  final double distanceMeters;
+  final int elapsedTimeMs;
+  final int movingTimeMs;
+  final int pausedTimeMs;
+  final int stoppedTimeMs;
+  final int? averagePaceMsPerKm;
+  final double? averageSpeedMps;
+  final double? movingSpeedMps;
+  final double? maxSpeedMps;
+  final int? bestPaceMsPerKm;
+  final double? elevationGainMeters;
+  final double? elevationLossMeters;
+  final double? elevationMinMeters;
+  final double? elevationMaxMeters;
+  final List<({double distanceMeters, int paceMsPerKm})> paceSamples;
+  final List<({double distanceMeters, double elevationMeters})> elevationSamples;
+  final TrackAnalyticsQuality quality;
+}
+
+class TrackAnalyticsQuality {
+  const TrackAnalyticsQuality({
+    required this.acceptedSamples,
+    required this.rejectedSamples,
+    required this.coverageRatio,
+    required this.gpsGapCount,
+    required this.hasSufficientDistance,
+    required this.hasElevationData,
+  });
+
+  final int acceptedSamples;
+  final int rejectedSamples;
+  final double coverageRatio;
+  final int gpsGapCount;
+  final bool hasSufficientDistance;
+  final bool hasElevationData;
+}
+
 /// Total along-polyline distance of a list of positions, in meters.
 double polylineMeters(List<GeoPoint> points) {
   var total = 0.0;

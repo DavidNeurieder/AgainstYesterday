@@ -1373,3 +1373,26 @@ mod tests {
         assert_eq!(status, ST_ERROR);
     }
 }
+
+/// Analyzes a track and returns a JSON document describing its analytics.
+///
+/// # Safety
+/// Follows the same pointer contract as the other `gps_*` entry points.
+#[unsafe(no_mangle)]
+pub extern "C" fn gps_analyze_track(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    use crate::analytics::TrackAnalytics;
+
+    dispatch(input, input_len, output, output_len, |data| {
+        let mut rd = Rd::new(data);
+        let points = read_points(&mut rd)?;
+        rd.done("analyze_track")?;
+        let track = Track::new(points).map_err(|e| format!("{e}"))?;
+        let analytics = TrackAnalytics::from_track(&track, &MovingConfig::default());
+        Ok(analytics.to_json().into_bytes())
+    })
+}
