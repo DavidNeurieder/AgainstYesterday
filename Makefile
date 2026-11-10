@@ -45,7 +45,15 @@ run-linux: engine-build
 	cd app && flutter run -d linux
 
 run-cli: engine-build
-	cargo run -p gps-engine
+	cargo run --release -p gps-engine -- $(filter-out $@ gps-engine,$(MAKECMDGOALS))
+
+# Allow `make run-cli <command> [args...]` (a stray `gps-engine` token is
+# tolerated) without make treating the extra tokens as targets.
+%: FORCE
+	@:
+
+FORCE:
+.PHONY: FORCE
 
 # Builds the debug APK (with Android cdylibs bundled, so the app auto-selects
 # the native Rust engine) and sideloads it into the connected device/emulator.
