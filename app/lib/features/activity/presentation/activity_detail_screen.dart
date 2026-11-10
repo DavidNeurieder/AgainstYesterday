@@ -145,7 +145,7 @@ class ActivityDetailScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.sm),
-            ElevationProfile(track: track),
+            RepaintBoundary(child: ElevationProfile(track: track)),
           ],
           if (splits.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xl),
