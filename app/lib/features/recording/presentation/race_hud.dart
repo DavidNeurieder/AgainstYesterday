@@ -228,15 +228,7 @@ class RaceHeroRow extends StatelessWidget {
         children: [
           DistanceReadout(distance, units, secondary: true),
           const SizedBox(width: AppSpacing.md),
-          Expanded(
-            flex: 1,
-            child: LinearProgressIndicator(
-              value: routeProgress.clamp(0.0, 1.0),
-              minHeight: 4,
-              semanticsLabel: 'Route progress',
-              semanticsValue: '${(routeProgress * 100).round()}',
-            ),
-          ),
+          Expanded(flex: 1, child: _RouteProgress(progress: routeProgress)),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             flex: 2,
@@ -259,21 +251,47 @@ class RaceHeroRow extends StatelessWidget {
         children: [
           Expanded(child: DistanceReadout(distance, units)),
           const SizedBox(width: AppSpacing.md),
-          Expanded(
-            flex: 1,
-            child: LinearProgressIndicator(
-              value: routeProgress.clamp(0.0, 1.0),
-              minHeight: 4,
-              semanticsLabel: 'Route progress',
-              semanticsValue: '${(routeProgress * 100).round()}',
-            ),
-          ),
+          Expanded(flex: 1, child: _RouteProgress(progress: routeProgress)),
         ],
       );
     }
     return Row(
       children: [
         Expanded(child: DistanceReadout(distance, units)),
+      ],
+    );
+  }
+}
+
+/// The one route-progress readout: the percentage sits above the bar so it
+/// stays on the same line as the ahead/behind hero digits.
+class _RouteProgress extends StatelessWidget {
+  const _RouteProgress({required this.progress});
+
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final clamped = progress.clamp(0.0, 1.0);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '${(clamped * 100).round()}%',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppColors.textSecondary,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+        ),
+        const SizedBox(height: 2),
+        LinearProgressIndicator(
+          value: clamped,
+          minHeight: 4,
+          semanticsLabel: 'Route progress',
+          semanticsValue: '${(clamped * 100).round()}',
+        ),
       ],
     );
   }
