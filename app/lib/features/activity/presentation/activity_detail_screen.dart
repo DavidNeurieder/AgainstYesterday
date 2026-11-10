@@ -241,6 +241,18 @@ class _RawGpsSectionState extends State<_RawGpsSection> {
         ),
         childrenPadding: const EdgeInsets.only(bottom: AppSpacing.sm),
         children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            child: Text(
+              'GPS quality: ${points.length} fixes retained (raw fixes unchanged).',
+              style: textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
           SizedBox(
             height: 260,
             child: ListView.builder(
