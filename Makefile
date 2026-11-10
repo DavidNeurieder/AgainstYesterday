@@ -25,7 +25,7 @@ export JAVA_HOME := $(JAVA21)
 endif
 endif
 
-.PHONY: build build-release install run test test-rust-engine lint tz-test \
+.PHONY: build build-release install run run-linux run-cli test test-rust-engine lint tz-test \
         connected-test connected-test-engine connected-test-gps \
         engine-build engine-test engine-lint engine-fmt engine-doc \
         engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean
@@ -40,6 +40,12 @@ build-release: maplibre-fdroid-clean engine-android
 
 run: engine-build
 	cd app && flutter run
+
+run-linux: engine-build
+	cd app && flutter run -d linux
+
+run-cli: engine-build
+	cargo run -p gps-engine
 
 # Builds the debug APK (with Android cdylibs bundled, so the app auto-selects
 # the native Rust engine) and sideloads it into the connected device/emulator.
