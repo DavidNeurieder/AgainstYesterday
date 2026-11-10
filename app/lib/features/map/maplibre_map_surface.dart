@@ -6,12 +6,16 @@
 /// Draws the scene as GeoJSON line layers over a vector style — the full route
 /// faint, the travelled portion in a track green that contrasts with the light
 /// map style — plus circle markers for YOU and the PB ghost. The camera
-/// follows YOU on a live run until the user pans,
-/// when a recenter button re-attaches it; a static thumbnail fits the whole
-/// geometry instead. The style URL comes from `MAP_STYLE_URL` so a self-hosted
-/// tile server can replace the default without a code change.
+/// follows YOU on a live run until the user pans, when a recenter button
+/// re-attaches it; replay locks the follow so playback always stays centred.
+/// A static thumbnail fits the whole geometry instead. The style URL comes from
+/// `MAP_STYLE_URL` so a self-hosted tile server can replace the default without
+/// a code change.
 library;
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
@@ -105,10 +109,6 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
 
   static const double _followZoom = 16;
 
-  /// A scene-to-scene move larger than this is a jump (seek / resumed run) and
-  /// is animated; smaller steps track YOU immediately.
-  static const double _jumpMeters = 100;
-
   MapLibreMapController? _controller;
   bool _styleLoaded = false;
 
@@ -127,6 +127,40 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
 
   Circle? _youCircle;
   Circle? _ghostCircle;
+
+  /// A scene update is being applied. Playback can enqueue one per frame, and
+  /// the native calls are asynchronous — letting two updates overlap lets an
+  /// older camera move land after a newer one, which reads as jitter and a map
+  /// that never catches up. Newer scenes coalesce into one follow-up pass.
+  bool _syncing = false;
+  bool _syncPending = false;
+
+  /// What the native map currently holds, so unchanged sources are not
+  /// re-sent every frame.
+  List<GeoPoint>? _syncedGeometry;
+  List<GeoPoint>? _syncedTrack;
+  double? _syncedProgress;
+  GeoPoint? _syncedYou;
+  GeoPoint? _syncedGhost;
+
+  /// The geometry sources are heavy (a growing line serialised to GeoJSON on
+  /// the UI isolate). At 32× replay they change every frame, so they are
+  /// updated at most this often while the camera and the YOU marker keep
+  /// following every frame.
+  static const Duration _dataInterval = Duration(milliseconds: 100);
+
+  /// When the geometry sources were last sent.
+  DateTime _lastDataSync = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Trailing update so the last frame of a burst still reaches the sources
+  /// instead of leaving the line one step behind.
+  Timer? _dataTimer;
+
+  @override
+  void dispose() {
+    _dataTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -171,11 +205,43 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     if (!_styleLoaded) {
       return;
     }
-    // Playback sends a new scene every frame. Animating each tiny step would
-    // trail the replay, so small moves jump immediately and only a real jump
-    // (a seek or a resumed run) earns an animation.
-    final step = haversineMeters(oldWidget.scene.you, widget.scene.you);
-    _sync(animate: !widget.scene.staticView && step > _jumpMeters);
+    final scene = widget.scene;
+    final previous = oldWidget.scene;
+    if (scene.you == previous.you &&
+        scene.ghost == previous.ghost &&
+        scene.youProgress == previous.youProgress &&
+        scene.staticView == previous.staticView &&
+        listEquals(scene.geometry, previous.geometry) &&
+        listEquals(scene.track, previous.track)) {
+      return;
+    }
+    _scheduleSync();
+  }
+
+  /// Applies the latest scene, coalescing bursts (replay sends one per frame).
+  ///
+  /// Scene updates never animate: playback moves YOU a few metres each frame,
+  /// so an immediate camera move is both centred and smooth, while a 400 ms
+  /// animation restarted per frame can never catch up — at 32× it trails the
+  /// replay by hundreds of metres.
+  void _scheduleSync() {
+    if (_syncing) {
+      _syncPending = true;
+      return;
+    }
+    unawaited(_drainSync());
+  }
+
+  Future<void> _drainSync() async {
+    _syncing = true;
+    try {
+      do {
+        _syncPending = false;
+        await _sync(animate: false);
+      } while (_syncPending && mounted);
+    } finally {
+      _syncing = false;
+    }
   }
 
   void _onCameraMove(CameraPosition position) {
@@ -206,7 +272,6 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     if (controller == null) {
       return;
     }
-    _styleLoaded = true;
     _cameraSettled = false;
     await controller.addGeoJsonSource(
       _routeSourceId,
@@ -254,6 +319,10 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
         lineCap: 'round',
       ),
     );
+    // Scene updates may only start once the style is fully prepared: an
+    // `addGeoJsonSource`/`setGeoJsonSource` pair racing on the channel is a
+    // native error. Frames that arrived meanwhile are picked up by `_sync`.
+    _styleLoaded = true;
     await _sync(animate: false);
     await _settleFirstCamera();
     widget.onReady?.call();
@@ -322,23 +391,63 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       return;
     }
     final scene = widget.scene;
-    await controller.setGeoJsonSource(
-      _routeSourceId,
-      lineStringFeatureCollection(scene.geometry),
-    );
-    await controller.setGeoJsonSource(
-      _traveledSourceId,
-      lineStringFeatureCollection(
-        traveledGeometry(scene.geometry, scene.youProgress),
-      ),
-    );
-    await controller.setGeoJsonSource(
-      _trackSourceId,
-      lineStringFeatureCollection(scene.track),
-    );
-    await _syncMarker(controller, you: true, position: scene.you);
-    await _syncMarker(controller, you: false, position: scene.ghost);
+    // Camera first: it is what the eye tracks, and letting the heavier source
+    // updates land first would hand the camera a stale position each frame.
     await _applySceneCamera(animate: animate);
+
+    final geometryChanged = !listEquals(scene.geometry, _syncedGeometry);
+    final trackChanged = !listEquals(scene.track, _syncedTrack);
+    final traveledChanged =
+        geometryChanged || scene.youProgress != _syncedProgress;
+    final dataChanged = geometryChanged || trackChanged || traveledChanged;
+    final dataDue =
+        DateTime.now().difference(_lastDataSync) >= _dataInterval;
+
+    // Markers stay per-frame: they are a single point each, and the eye is on
+    // YOU. The line sources are throttled to [_dataInterval] so 32× playback
+    // does not serialise a growing route every frame.
+    if (dataChanged && !dataDue) {
+      _dataTimer ??= Timer(_dataInterval, () {
+        _dataTimer = null;
+        if (mounted && _styleLoaded) {
+          _scheduleSync();
+        }
+      });
+    }
+    if (dataDue) {
+      _lastDataSync = DateTime.now();
+      if (geometryChanged) {
+        _syncedGeometry = scene.geometry;
+        await controller.setGeoJsonSource(
+          _routeSourceId,
+          lineStringFeatureCollection(scene.geometry),
+        );
+      }
+      if (traveledChanged) {
+        _syncedProgress = scene.youProgress;
+        await controller.setGeoJsonSource(
+          _traveledSourceId,
+          lineStringFeatureCollection(
+            traveledGeometry(scene.geometry, scene.youProgress),
+          ),
+        );
+      }
+      if (trackChanged) {
+        _syncedTrack = scene.track;
+        await controller.setGeoJsonSource(
+          _trackSourceId,
+          lineStringFeatureCollection(scene.track),
+        );
+      }
+    }
+    if (scene.you != _syncedYou) {
+      _syncedYou = scene.you;
+      await _syncMarker(controller, you: true, position: scene.you);
+    }
+    if (scene.ghost != _syncedGhost) {
+      _syncedGhost = scene.ghost;
+      await _syncMarker(controller, you: false, position: scene.ghost);
+    }
   }
 
   /// Frames the scene: the whole geometry for a thumbnail, YOU for a live run.
