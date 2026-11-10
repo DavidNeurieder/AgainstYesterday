@@ -138,7 +138,7 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
         MapLibreMap(
           styleString: widget.styleUrl ?? kMapStyleUrlDefine,
           initialCameraPosition: CameraPosition(
-            target: _center(widget.scene.geometry),
+            target: _initialTarget(widget.scene),
             zoom: _followZoom,
           ),
           onMapCreated: (controller) {
@@ -285,7 +285,7 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
   Future<bool> _cameraInPlace() async {
     final controller = _controller;
     final scene = widget.scene;
-    if (controller == null || scene.geometry.isEmpty) {
+    if (controller == null) {
       return true;
     }
     if (!scene.staticView && !_follow) {
@@ -293,6 +293,12 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       return true;
     }
     final region = await controller.getVisibleRegion();
+    if (scene.geometry.isEmpty) {
+      if (scene.staticView) {
+        return true;
+      }
+      return _sameSpot(_centreOf(region), scene.you);
+    }
     if (scene.staticView) {
       // A fitted thumbnail shows the whole geometry.
       return scene.geometry.every((p) => _contains(region, p));
@@ -375,8 +381,7 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
 
   Future<void> _animateToYou({bool animate = true}) async {
     final controller = _controller;
-    final geometry = widget.scene.geometry;
-    if (controller == null || geometry.isEmpty) {
+    if (controller == null) {
       return;
     }
     final you = widget.scene.you;
@@ -421,6 +426,13 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     } finally {
       _programmatic = false;
     }
+  }
+
+  static LatLng _initialTarget(MapScene scene) {
+    if (scene.geometry.isNotEmpty) {
+      return _center(scene.geometry);
+    }
+    return LatLng(scene.you.latitude, scene.you.longitude);
   }
 
   static LatLng _center(List<GeoPoint> geometry) {
