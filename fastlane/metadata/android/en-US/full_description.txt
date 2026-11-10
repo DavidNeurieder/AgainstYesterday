@@ -1,0 +1,13 @@
+Against Yesterday is a GPS run/cycling app built around one idea: every route
+is a race with your own personal best. You run against a "ghost" of your PB,
+and the live gap — AHEAD or BEHIND — is the hero metric.
+
+Features:
+- Record runs with live distance, pace, elapsed time and PB gap.
+- Ghost racing on the map with YOU and PB-ghost markers.
+- Route library with PB/average/last stats and performance charts.
+- Offline maps (per-route downloads, OpenStreetMap).
+- GPX export to Downloads.
+- Background recording with persisted snapshots.
+
+Map data (c) OpenStreetMap contributors (ODbL). Map style by OpenFreeMap.

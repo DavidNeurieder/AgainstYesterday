@@ -1,5 +1,7 @@
 # Against Yesterday
 
+Version 0.1.0.
+
 A GPS run/cycling app built around one idea: **every route is a race with your
 own personal best.** You run against a "ghost" of your PB, and the live gap —
 AHEAD or BEHIND — is the hero metric of the whole experience.
