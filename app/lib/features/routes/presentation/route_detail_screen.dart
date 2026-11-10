@@ -63,7 +63,7 @@ class RouteDetailScreen extends ConsumerWidget {
             icon: const Icon(Icons.insights_outlined),
             onPressed: () {
               AppHaptics.selection(ref);
-              context.push('/routes/statistics');
+              context.push('/route/${route.id}/statistics');
             },
           ),
         ],

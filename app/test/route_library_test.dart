@@ -80,9 +80,9 @@ void main() {
     );
   });
 
-  testWidgets('the statistics button opens every route\'s statistics',
+  testWidgets('the statistics button opens only this route\'s statistics',
       (tester) async {
-    // Tall enough that every stats card is built without scrolling.
+    // Tall enough that the single stats card is built without scrolling.
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -92,21 +92,21 @@ void main() {
 
     await tester.tap(tab('Routes'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('River Loop'));
+    await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('routes-statistics')));
+    await tester.tap(find.byKey(const ValueKey('route-statistics')));
     await tester.pumpAndSettle();
 
     expect(find.text('Statistics'), findsOneWidget);
-    for (final name in ['River Loop', 'Park 5K', 'Hügelrunde']) {
-      expect(find.text(name), findsOneWidget);
-    }
-
-    // Every route contributes the numeric breakdown; routes with timed runs
-    // also get a performance chart.
-    expect(find.text('Personal Best'), findsNWidgets(3));
-    expect(find.text('Average'), findsNWidgets(3));
-    expect(find.text('Performance'), findsNWidgets(2));
-    expect(find.byType(PerformanceChart), findsNWidgets(2));
+    // Only the route we opened contributes numbers.
+    expect(find.text('River Loop'), findsOneWidget);
+    expect(find.text('Park 5K'), findsNothing);
+    expect(find.text('Hügelrunde'), findsNothing);
+    expect(find.text('Personal Best'), findsOneWidget);
+    expect(find.text('Average'), findsOneWidget);
+    expect(find.text('Performance'), findsOneWidget);
+    expect(find.byType(PerformanceChart), findsOneWidget);
   });
 
   testWidgets('runs sort by date and by performance time', (tester) async {

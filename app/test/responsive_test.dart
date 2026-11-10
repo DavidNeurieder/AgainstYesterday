@@ -166,19 +166,19 @@ void main() {
       // Home: hero + recent list.
       expect(find.text('READY TO RACE'), findsOneWidget);
 
-      // Routes tab, the all-routes statistics page, then the route detail —
-      // its run rows pair a date with a duration and delta, which is where a
-      // big scale bites.
+      // Routes tab, the route detail and its statistics page — the run rows
+      // pair a date with a duration and delta, which is where a big scale
+      // bites.
       await tester.tap(tab('Routes'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('routes-statistics')));
-      await tester.pumpAndSettle();
-      expect(find.text('Personal Best'), findsWidgets);
-      await tester.pageBack();
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(Card, 'River Loop'));
       await tester.pumpAndSettle();
       expect(find.text('RACE YOUR BEST'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('route-statistics')));
+      await tester.pumpAndSettle();
+      expect(find.text('Personal Best'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('runs-sort')),
         200,

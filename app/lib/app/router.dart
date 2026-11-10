@@ -133,11 +133,13 @@ GoRouter buildRouter() {
         builder: (context, state) =>
             ReplayScreen(activityId: state.pathParameters['id']!),
       ),
-      // Statistics for every route, pushed from the Routes tab's button.
-      // Declared before the detail route so the literal path always wins.
+      // Statistics for one route, pushed from its detail app bar. Declared
+      // before the detail route so the deeper path always wins.
       GoRoute(
-        path: '/routes/statistics',
-        builder: (context, state) => const RouteStatisticsScreen(),
+        path: '/route/:id/statistics',
+        builder: (context, state) => RouteStatisticsScreen(
+          routeId: state.pathParameters['id']!,
+        ),
       ),
       GoRoute(
         path: '/route/:id',
