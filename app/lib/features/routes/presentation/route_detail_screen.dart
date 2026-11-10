@@ -156,6 +156,14 @@ class RouteDetailScreen extends ConsumerWidget {
                 ],
               ),
             ),
+          if (stats.last != null && stats.pb != null) ...[
+            _StatRow(
+              label: 'Last vs PB',
+              value: Elapsed.seconds(
+                stats.last!.seconds - stats.pb!.seconds,
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           if (attempts.isNotEmpty) ...[
             Text(
