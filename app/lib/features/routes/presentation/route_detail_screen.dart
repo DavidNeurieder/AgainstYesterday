@@ -3,12 +3,12 @@
 
 /// Route detail screen (§23, M12).
 ///
-/// Route map, headline stats (PB / Average / Last), a performance chart of
-/// every attempt, and the attempt history. Read-only projection of the two
+/// Route map, headline summary, RACE YOUR BEST, and every run recorded on
+/// this course — sortable by date or performance time. The numeric
+/// breakdown and the performance chart live on the statistics page so this
+/// screen stays about choosing a run. Read-only projection of the two
 /// repositories.
 library;
-
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,7 +54,20 @@ class RouteDetailScreen extends ConsumerWidget {
     final stats = computeRouteStats(route: route, attempts: attempts);
 
     return Scaffold(
-      appBar: AppBar(title: Text(route.name)),
+      appBar: AppBar(
+        title: Text(route.name),
+        actions: [
+          IconButton(
+            key: const ValueKey('route-statistics'),
+            tooltip: 'Statistics',
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () {
+              AppHaptics.selection(ref);
+              context.push('/routes/statistics');
+            },
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
@@ -119,301 +132,182 @@ class RouteDetailScreen extends ConsumerWidget {
             },
           ),
           const SizedBox(height: AppSpacing.lg),
-          _StatRow(label: 'Personal Best', value: stats.pb),
-          _StatRow(label: 'Average', value: stats.average),
-          _StatRow(label: 'Median', value: stats.median),
-          _StatRow(label: 'Last', value: stats.last),
-          if (stats.fastest != null && stats.slowest != null) ...[
-            _StatRow(label: 'Fastest', value: stats.fastest),
-            _StatRow(label: 'Slowest', value: stats.slowest),
-            _StatRow(label: 'Range', value: stats.range),
-          ],
-          if (stats.stdDev != null)
-            _StatRow(label: 'Std. deviation', value: stats.stdDev),
-          if (stats.trendSecondsPerRun != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Trend (s/run)',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    '${stats.trendSecondsPerRun! >= 0 ? '+' : ''}'
-                    '${stats.trendSecondsPerRun!.toStringAsFixed(1)}'
-                    ' (${stats.trendSecondsPerRun! < 0 ? 'improving' : 'slowing'})',
-                    textAlign: TextAlign.right,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (stats.last != null && stats.pb != null) ...[
-            _StatRow(
-              label: 'Last vs PB',
-              value: Elapsed.seconds(
-                stats.last!.seconds - stats.pb!.seconds,
-              ),
-            ),
-          ],
-          const SizedBox(height: AppSpacing.lg),
+          // The run history replaces the old stats block: the start button
+          // leads straight into the runs you can inspect or replay.
+          RunsSection(attempts: attempts, pb: stats.pb),
           if (attempts.isNotEmpty) ...[
-            Text(
-              'Performance',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            _PerformanceChart(attempts: attempts, pb: stats.pb),
             const SizedBox(height: AppSpacing.lg),
-          ],
-          if (attempts.isNotEmpty) ...[
             SegmentComparisonSection(route: route, attempts: attempts),
-            const SizedBox(height: AppSpacing.lg),
           ],
-          Text(
-            'Attempts',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          if (attempts.isEmpty)
-            Text(
-              'No attempts on this route yet.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
-            )
-          else
-            for (final attempt in attempts)
-              _AttemptRow(attempt: attempt, pb: stats.pb),
         ],
       ),
     );
   }
 }
 
-class _StatRow extends StatelessWidget {
-  const _StatRow({required this.label, required this.value});
+/// How the run list is ordered.
+enum RunSort {
+  /// Most recent run first.
+  date,
 
-  final String label;
-  final Elapsed? value;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final value = this.value;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      // §7: a large system font scale must not clip either end of the row —
-      // the label takes the slack and wraps, the value keeps its own width.
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Text(
-            value?.format() ?? '—',
-            textAlign: TextAlign.right,
-            style: textTheme.titleSmall?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  /// Fastest run first.
+  time,
 }
 
-/// Bar chart of attempt times (lower is better) with the PB as a baseline.
-class _PerformanceChart extends StatelessWidget {
-  const _PerformanceChart({required this.attempts, required this.pb});
+/// Every timed run recorded on this route — the list that replaced the
+/// aggregate stats block under the start button.
+class RunsSection extends StatefulWidget {
+  const RunsSection({super.key, required this.attempts, this.pb});
 
   final List<Activity> attempts;
   final Elapsed? pb;
 
   @override
+  State<RunsSection> createState() => _RunsSectionState();
+}
+
+class _RunsSectionState extends State<RunsSection> {
+  RunSort _sort = RunSort.date;
+
+  List<Activity> get _sorted {
+    final runs = [...widget.attempts];
+    if (_sort == RunSort.time) {
+      runs.sort((a, b) {
+        final byTime = (a.duration?.seconds ?? double.infinity).compareTo(
+          b.duration?.seconds ?? double.infinity,
+        );
+        return byTime != 0 ? byTime : b.startedAt.compareTo(a.startedAt);
+      });
+    } else {
+      runs.sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    }
+    return runs;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final chronological = [...attempts]
-      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
-    final durations = <double>[
-      for (final a in chronological) a.duration!.seconds,
-    ];
-    final baseline = pb?.seconds ?? durations.reduce(math.max);
-    final maxV = math.max(durations.reduce(math.max), baseline);
-    final fastest = durations.isEmpty ? null : durations.reduce(math.min);
-
-    return SizedBox(
-      height: 120,
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: _ChartPainter(
-          durations: durations,
-          baseline: baseline,
-          maxV: maxV,
-          fastest: fastest,
-          barColor: AppColors.pb,
-          trackColor: AppColors.ghost,
-          baselineColor: AppColors.you,
+    final textTheme = Theme.of(context).textTheme;
+    final runs = _sorted;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // §7: at a large font scale the sort control wraps under the header
+        // instead of squeezing the two segments.
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            Text(
+              'Runs',
+              style: textTheme.titleMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            SegmentedButton<RunSort>(
+              key: const ValueKey('runs-sort'),
+              showSelectedIcon: false,
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              segments: const [
+                ButtonSegment(
+                  value: RunSort.date,
+                  label: Text('Date'),
+                  icon: Icon(Icons.calendar_today_outlined, size: 16),
+                ),
+                ButtonSegment(
+                  value: RunSort.time,
+                  label: Text('Time'),
+                  icon: Icon(Icons.timer_outlined, size: 16),
+                ),
+              ],
+              selected: {_sort},
+              onSelectionChanged: (selection) {
+                setState(() => _sort = selection.first);
+              },
+            ),
+          ],
         ),
-      ),
+        const SizedBox(height: AppSpacing.sm),
+        if (runs.isEmpty)
+          Text(
+            'No runs on this route yet.',
+            style: textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+          )
+        else
+          for (final run in runs)
+            _RunRow(
+              key: ValueKey('run-${run.id}'),
+              attempt: run,
+              pb: widget.pb,
+            ),
+      ],
     );
   }
 }
 
-class _ChartPainter extends CustomPainter {
-  _ChartPainter({
-    required this.durations,
-    required this.baseline,
-    required this.maxV,
-    required this.fastest,
-    required this.barColor,
-    required this.trackColor,
-    required this.baselineColor,
-  });
-
-  final List<double> durations;
-  final double baseline;
-  final double maxV;
-  final double? fastest;
-  final Color barColor;
-  final Color trackColor;
-  final Color baselineColor;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (durations.isEmpty || maxV <= 0) {
-      return;
-    }
-
-    const padBottom = 12.0;
-    final plotTop = 6.0;
-    final plotHeight = size.height - plotTop - padBottom;
-    final chartWidth = math.max(size.width, 1).toDouble();
-
-    final n = durations.length;
-    final slot = chartWidth / n;
-    final barWidth = math.min(slot * 0.56, 26.0);
-
-    // Bars, oldest → newest.
-    for (var i = 0; i < n; i++) {
-      final ratio = durations[i] / maxV;
-      final height = ratio * plotHeight;
-      final left = slot * i + (slot - barWidth) / 2;
-      final top = plotTop + plotHeight - height;
-
-      final color = durations[i] == fastest ? barColor : trackColor;
-      canvas.drawRRect(
-        RRect.fromRectAndCorners(
-          Rect.fromLTWH(left, top, barWidth, height),
-          topLeft: const Radius.circular(4),
-          topRight: const Radius.circular(4),
-        ),
-        Paint()..color = color,
-      );
-    }
-
-    // PB baseline.
-    final baselineY = plotTop + plotHeight - (baseline / maxV) * plotHeight;
-    final line = Paint()
-      ..color = baselineColor
-      ..strokeWidth = 1.4;
-    _drawDashedLine(
-      canvas,
-      Offset(0, baselineY),
-      Offset(chartWidth, baselineY),
-      line,
-    );
-  }
-
-  void _drawDashedLine(Canvas canvas, Offset a, Offset b, Paint paint) {
-    const dashLen = 4.0;
-    const gapLen = 3.0;
-    final total = (b - a).distance;
-    var dist = 0.0;
-    var draw = true;
-    while (dist < total) {
-      final end = math.min(total, dist + (draw ? dashLen : gapLen));
-      canvas.drawLine(
-        Offset.lerp(a, b, dist / total)!,
-        Offset.lerp(a, b, end / total)!,
-        paint,
-      );
-      draw = !draw;
-      dist = end;
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ChartPainter old) =>
-      old.durations != durations || old.baseline != baseline;
-}
-
-class _AttemptRow extends StatelessWidget {
-  const _AttemptRow({required this.attempt, this.pb});
+class _RunRow extends ConsumerWidget {
+  const _RunRow({super.key, required this.attempt, this.pb});
 
   final Activity attempt;
   final Elapsed? pb;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
     final duration = attempt.duration!;
     final delta = pb == null ? null : duration.seconds - pb!.seconds;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      // §7: the date wraps instead of pushing the duration off the row at a
-      // large system font scale.
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              dateLabelFor(attempt.startedAt.toLocal()),
-              style: textTheme.bodyMedium?.copyWith(
-                color: AppColors.textSecondary,
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        AppHaptics.light(ref);
+        context.push('/activity/${attempt.id}');
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        // §7: the date wraps instead of pushing the duration off the row at a
+        // large system font scale.
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                dateLabelFor(attempt.startedAt.toLocal()),
+                style: textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Text(
-            duration.format(),
-            textAlign: TextAlign.right,
-            style: textTheme.titleSmall?.copyWith(
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
-          if (delta != null) ...[
             const SizedBox(width: AppSpacing.sm),
             Text(
-              delta == 0
-                  ? 'PB'
-                  : (delta > 0
-                        ? '+${Elapsed.seconds(delta).format()}'
-                        : '-${Elapsed.seconds(-delta).format()}'),
+              duration.format(),
               textAlign: TextAlign.right,
-              style: textTheme.bodySmall?.copyWith(
-                color: delta <= 0 ? AppColors.ahead : AppColors.behind,
+              style: textTheme.titleSmall?.copyWith(
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
+            if (delta != null) ...[
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                delta == 0
+                    ? 'PB'
+                    : (delta > 0
+                          ? '+${Elapsed.seconds(delta).format()}'
+                          : '-${Elapsed.seconds(-delta).format()}'),
+                textAlign: TextAlign.right,
+                style: textTheme.bodySmall?.copyWith(
+                  color: delta <= 0 ? AppColors.ahead : AppColors.behind,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+            const SizedBox(width: AppSpacing.xs),
+            const Icon(
+              Icons.chevron_right,
+              size: 18,
+              color: AppColors.textMuted,
+            ),
           ],
-        ],
+        ),
       ),
     );
   }

@@ -19,6 +19,7 @@ import '../features/recording/presentation/record_flow_screen.dart';
 import '../features/recording/presentation/route_record_flow_screen.dart';
 import '../features/result/presentation/result_screen.dart';
 import '../features/routes/presentation/route_detail_screen.dart';
+import '../features/routes/presentation/route_statistics_screen.dart';
 import '../features/routes/presentation/routes_screen.dart';
 import '../features/settings/application/settings_controller.dart';
 import '../features/settings/presentation/settings_screen.dart';
@@ -131,6 +132,12 @@ GoRouter buildRouter() {
         path: '/activity/:id/replay',
         builder: (context, state) =>
             ReplayScreen(activityId: state.pathParameters['id']!),
+      ),
+      // Statistics for every route, pushed from the Routes tab's button.
+      // Declared before the detail route so the literal path always wins.
+      GoRoute(
+        path: '/routes/statistics',
+        builder: (context, state) => const RouteStatisticsScreen(),
       ),
       GoRoute(
         path: '/route/:id',

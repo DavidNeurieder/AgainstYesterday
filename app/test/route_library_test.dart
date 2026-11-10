@@ -6,6 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/core/date_labels.dart';
+import 'package:against_yesterday/core/theme/app_theme.dart';
+import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/routes/presentation/route_detail_screen.dart';
+import 'package:against_yesterday/features/routes/presentation/route_stats_view.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'test_catalog.dart';
@@ -39,7 +44,8 @@ void main() {
     expect(find.text('PB'), findsNWidgets(3));
   });
 
-  testWidgets('tapping a route card opens its detail', (tester) async {
+  testWidgets('tapping a route card opens its run list, not statistics',
+      (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
@@ -49,27 +55,21 @@ void main() {
     await tester.tap(find.text('River Loop'));
     await tester.pumpAndSettle();
 
-    // §23 blocks.
+    // The race affordance and the runs list — statistics moved away.
+    expect(find.text('RACE YOUR BEST'), findsOneWidget);
     await tester.dragUntilVisible(
-      find.text('Performance'),
+      find.byKey(const ValueKey('runs-sort')),
       find.byType(ListView),
-      const Offset(0, -100),
+      const Offset(0, -150),
     );
-    expect(find.text('Personal Best'), findsOneWidget);
-    expect(find.text('Average'), findsOneWidget);
-    expect(find.text('Last'), findsOneWidget);
-    expect(find.text('Performance'), findsOneWidget);
+    expect(find.text('Runs'), findsOneWidget);
+    expect(find.text('Date'), findsOneWidget);
+    expect(find.text('Time'), findsOneWidget);
+    expect(find.text('Personal Best'), findsNothing);
 
-    // The seeded PB clocks in at 24:30.
-    expect(find.text('24:30'), findsOneWidget);
+    // The seeded PB still shows in the headline row.
+    expect(find.textContaining('24:30'), findsWidgets);
 
-    // Scroll down to the Attempts section which may be below the fold.
-    await tester.dragUntilVisible(
-      find.text('Attempts'),
-      find.byType(ListView),
-      const Offset(0, -200),
-    );
-    expect(find.text('Attempts'), findsOneWidget);
     // The seeded attempt is a fixed 26 hours old, so its label is "Yesterday"
     // for part of the day and an absolute date for the rest. Assert the shape
     // here — dateLabelFor's branch behaviour is covered below with an injected
@@ -78,6 +78,82 @@ void main() {
       find.textContaining(RegExp(r'^(Today|Yesterday|\d{1,2} [A-Z][a-z]{2} \d{4})$')),
       findsWidgets,
     );
+  });
+
+  testWidgets('the statistics button opens every route\'s statistics',
+      (tester) async {
+    // Tall enough that every stats card is built without scrolling.
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(pumpedApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(tab('Routes'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('routes-statistics')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Statistics'), findsOneWidget);
+    for (final name in ['River Loop', 'Park 5K', 'Hügelrunde']) {
+      expect(find.text(name), findsOneWidget);
+    }
+
+    // Every route contributes the numeric breakdown; routes with timed runs
+    // also get a performance chart.
+    expect(find.text('Personal Best'), findsNWidgets(3));
+    expect(find.text('Average'), findsNWidgets(3));
+    expect(find.text('Performance'), findsNWidgets(2));
+    expect(find.byType(PerformanceChart), findsNWidgets(2));
+  });
+
+  testWidgets('runs sort by date and by performance time', (tester) async {
+    final runs = [
+      Activity(
+        id: 'older-fast',
+        routeId: 'river-loop',
+        startedAt: DateTime.utc(2026, 1, 1),
+        duration: const Elapsed.seconds(1400),
+        distance: const Distance.kilometers(4.76),
+      ),
+      Activity(
+        id: 'newer-slow',
+        routeId: 'river-loop',
+        startedAt: DateTime.utc(2026, 1, 5),
+        duration: const Elapsed.seconds(1600),
+        distance: const Distance.kilometers(4.76),
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: RunsSection(
+              attempts: runs,
+              pb: const Elapsed.seconds(1400),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    double top(String id) =>
+        tester.getTopLeft(find.byKey(ValueKey('run-$id'))).dy;
+
+    // Default: most recent first.
+    expect(top('newer-slow'), lessThan(top('older-fast')));
+
+    await tester.tap(find.text('Time'));
+    await tester.pumpAndSettle();
+
+    // Fastest first.
+    expect(top('older-fast'), lessThan(top('newer-slow')));
   });
 
   group('dateLabelFor', () {

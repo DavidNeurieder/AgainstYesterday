@@ -31,7 +31,22 @@ class RoutesScreen extends ConsumerWidget {
     final activities = ref.watch(activityRepositoryProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Routes')),
+      appBar: AppBar(
+        title: const Text('Routes'),
+        actions: [
+          // All per-route statistics live on their own page, so the library
+          // stays a list of courses.
+          IconButton(
+            key: const ValueKey('routes-statistics'),
+            tooltip: 'Statistics',
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () {
+              AppHaptics.selection(ref);
+              context.push('/routes/statistics');
+            },
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [

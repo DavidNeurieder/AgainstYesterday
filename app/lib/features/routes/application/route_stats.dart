@@ -3,8 +3,9 @@
 
 /// Route statistics derivation (M12, §23).
 ///
-/// Routed from the two repositories — the route's own PB plus the attempt
-/// history — into the compact set the route detail screen shows.
+/// Routed from the two repositories — the route's own PB plus the run
+/// history — into the breakdown the statistics page shows, and the PB and run
+/// count the route cards and detail headline reuse.
 library;
 
 import 'dart:math' as math;
