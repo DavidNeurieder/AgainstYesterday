@@ -125,6 +125,34 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
   /// Suppresses [_onCameraMove] while the camera moves on our behalf.
   bool _programmatic = false;
 
+  /// Whether a finger is on the map right now.
+  ///
+  /// The platform reports a camera move without saying whether a gesture caused
+  /// it, and the app's own follow moves plus the native view's camera restore
+  /// look identical to a drag once the call has returned. Only a real pointer
+  /// detaches the follow; everything else is re-asserted.
+  bool _touching = false;
+
+  /// When the map last received a pointer down/up.
+  ///
+  /// Native camera events arrive over the channel behind the touch that caused
+  /// them, so the detach decision also covers a short grace window after the
+  /// finger lifts (fling inertia lands there too).
+  DateTime _lastPointer = DateTime.fromMillisecondsSinceEpoch(0);
+
+  static const Duration _gestureGrace = Duration(milliseconds: 600);
+
+  /// Whether the camera is moving because the user is touching the map.
+  bool get _userGesture =>
+      _touching || DateTime.now().difference(_lastPointer) < _gestureGrace;
+
+  /// Bounds the re-asserts so a native camera that refuses to stay on YOU
+  /// cannot start a feedback loop of move events and corrections.
+  int _cameraReasserts = 0;
+  static const int _maxCameraReasserts = 8;
+
+  Timer? _cameraWatchdog;
+
   Circle? _youCircle;
   Circle? _ghostCircle;
 
@@ -159,6 +187,7 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
   @override
   void dispose() {
     _dataTimer?.cancel();
+    _cameraWatchdog?.cancel();
     super.dispose();
   }
 
@@ -173,21 +202,30 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        MapLibreMap(
-          styleString: widget.styleUrl ?? kMapStyleUrlDefine,
-          initialCameraPosition: CameraPosition(
-            target: _initialTarget(widget.scene),
-            zoom: _followZoom,
+        // Pointer tracking is the only reliable "the user did this" signal the
+        // platform gives us (camera events do not carry their cause), so the
+        // map itself is wrapped rather than trusting the camera target to tell
+        // a pan apart from a native restore.
+        Listener(
+          onPointerDown: (_) => _onPointer(down: true),
+          onPointerUp: (_) => _onPointer(down: false),
+          onPointerCancel: (_) => _onPointer(down: false),
+          child: MapLibreMap(
+            styleString: widget.styleUrl ?? kMapStyleUrlDefine,
+            initialCameraPosition: CameraPosition(
+              target: _initialTarget(widget.scene),
+              zoom: _followZoom,
+            ),
+            onMapCreated: (controller) {
+              _controller = controller;
+              widget.onMapCreated?.call(controller);
+            },
+            onStyleLoadedCallback: _onStyleLoaded,
+            onCameraMove: _onCameraMove,
+            trackCameraPosition: true,
+            attributionButtonPosition: AttributionButtonPosition.bottomLeft,
+            myLocationEnabled: false,
           ),
-          onMapCreated: (controller) {
-            _controller = controller;
-            widget.onMapCreated?.call(controller);
-          },
-          onStyleLoadedCallback: _onStyleLoaded,
-          onCameraMove: _onCameraMove,
-          trackCameraPosition: true,
-          attributionButtonPosition: AttributionButtonPosition.bottomLeft,
-          myLocationEnabled: false,
         ),
         if (!widget.scene.staticView && !_follow)
           Positioned(
@@ -244,27 +282,48 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     }
   }
 
+  /// Records a pointer on the map so [_onCameraMove] can tell a gesture from a
+  /// native/programmatic move.
+  void _onPointer({required bool down}) {
+    _touching = down;
+    _lastPointer = DateTime.now();
+  }
+
   void _onCameraMove(CameraPosition position) {
     if (_programmatic ||
         !_cameraSettled ||
         widget.scene.staticView ||
-        widget.scene.followLocked ||
         !_follow) {
       return;
     }
-    // The platform also reports the app's own camera moves as move events once
-    // the call has returned — [_programmatic] only covers the call itself. A
-    // move that lands on YOU is ours; only a camera looking somewhere else is
-    // the user panning away, which is what detaches the follow.
     if (_sameSpot(position.target, widget.scene.you)) {
       return;
     }
-    setState(() => _follow = false);
+    if (_userGesture && !widget.scene.followLocked) {
+      // A real drag: the user is looking somewhere else, so the follow stops
+      // and the recenter button appears (§16). A replay owns the camera, so
+      // even a gesture there must not stop the playback follow.
+      setState(() => _follow = false);
+      return;
+    }
+    // Not the user. The platform re-applies the camera the view was
+    // constructed with once the view finishes setting up, and that can land
+    // after [_settleFirstCamera] has stopped waiting. Verified on device: the
+    // map then sat on the scene's starting ground while YOU kept moving, which
+    // reads as "the map is stuck on the last run". Put the camera back instead
+    // of silently detaching the follow.
+    if (_cameraReasserts >= _maxCameraReasserts) {
+      return;
+    }
+    _cameraReasserts++;
+    _scheduleSync();
   }
 
   void _recenter() {
+    _cameraReasserts = 0;
     setState(() => _follow = true);
     _animateToYou();
+    _watchFirstCamera();
   }
 
   Future<void> _onStyleLoaded() async {
@@ -273,6 +332,7 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       return;
     }
     _cameraSettled = false;
+    _cameraReasserts = 0;
     await controller.addGeoJsonSource(
       _routeSourceId,
       lineStringFeatureCollection(widget.scene.geometry),
@@ -325,6 +385,7 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     _styleLoaded = true;
     await _sync(animate: false);
     await _settleFirstCamera();
+    _watchFirstCamera();
     widget.onReady?.call();
   }
 
@@ -347,16 +408,53 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
   Future<void> _settleFirstCamera() async {
     try {
       for (var attempt = 0; attempt < _cameraAttempts; attempt++) {
-        if (!mounted || await _cameraInPlace()) {
+        if (!mounted || await _cameraIsOnScene()) {
           return;
         }
         await _applySceneCamera(animate: false);
         await Future<void>.delayed(_cameraRetryDelay);
       }
     } finally {
-      // From here on a camera that is not looking at YOU is the user panning
-      // away, which detaches the follow (see [_onCameraMove]).
+      // From here on a camera that is not looking at YOU is either the user
+      // panning away or the platform's own setup; [_onCameraMove] sorts that
+      // out by whether a finger is on the map.
       _cameraSettled = true;
+    }
+  }
+
+  /// A native camera restore can land even later than [_settleFirstCamera]
+  /// waits, and standing still produces no scene update to sync the camera
+  /// back. Re-check a few times with growing gaps (a fresh camera event also
+  /// re-asserts). Best-effort: a map that refuses to report its camera is
+  /// left alone rather than throwing.
+  void _watchFirstCamera([int index = 0]) {
+    _cameraWatchdog?.cancel();
+    if (index >= _cameraChecks.length) return;
+    _cameraWatchdog = Timer(_cameraChecks[index], () async {
+      if (!mounted || widget.scene.staticView || !_follow || _userGesture) {
+        return;
+      }
+      if (!await _cameraIsOnScene()) {
+        await _applySceneCamera(animate: false);
+      }
+      _watchFirstCamera(index + 1);
+    });
+  }
+
+  /// When the first-camera checks run again after the style pass.
+  static const List<Duration> _cameraChecks = [
+    Duration(milliseconds: 600),
+    Duration(milliseconds: 1500),
+    Duration(milliseconds: 3000),
+  ];
+
+  /// [_cameraInPlace] for callers that must not throw on a map that is not
+  /// ready to answer yet.
+  Future<bool> _cameraIsOnScene() async {
+    try {
+      return await _cameraInPlace();
+    } catch (_) {
+      return false;
     }
   }
 
@@ -369,6 +467,10 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     }
     if (!scene.staticView && !_follow) {
       // The user panned away mid-setup: do not fight them.
+      return true;
+    }
+    if (_userGesture) {
+      // A finger is on the map (or just lifted): never fight a gesture.
       return true;
     }
     final region = await controller.getVisibleRegion();
@@ -547,6 +649,13 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
   }
 
   static LatLng _initialTarget(MapScene scene) {
+    // A following scene opens on YOU, not on the geometry's centre. At the
+    // follow zoom the centre framed nothing useful, and it is also the camera
+    // the platform view restores on setup — so starting on YOU means even a
+    // restore that never gets corrected shows the current position.
+    if (!scene.staticView) {
+      return LatLng(scene.you.latitude, scene.you.longitude);
+    }
     if (scene.geometry.isNotEmpty) {
       return _center(scene.geometry);
     }

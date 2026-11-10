@@ -234,6 +234,224 @@ void main() {
   );
 
   testWidgets(
+    'keeps the camera on YOU through a fast replay burst',
+    skip: _mapView != 'true',
+    (tester) async {
+      final geometry = FakeEngineService.riverLoop;
+      final total = polylineMeters(geometry);
+      const steps = 120;
+      final points = [
+        for (var i = 0; i <= steps; i++)
+          pointAlongPolyline(geometry, total * i / steps)!,
+      ];
+      final ready = Completer<void>();
+      MapLibreMapController? controller;
+
+      Widget map(MapScene scene) => MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(
+          body: MaplibreRouteMap(
+            scene: scene,
+            onMapCreated: (c) => controller = c,
+            onReady: () {
+              if (!ready.isCompleted) {
+                ready.complete();
+              }
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        map(
+          MapScene(
+            geometry: geometry,
+            you: points.first,
+            youProgress: 0,
+            followLocked: true,
+          ),
+        ),
+      );
+      await ready.future.timeout(_styleTimeout, onTimeout: () {
+        fail('MapLibre did not become ready within 60 s.');
+      });
+      await _settle(tester, const Duration(seconds: 1));
+
+      final native = controller;
+      if (native == null) {
+        fail('the native controller was never created');
+      }
+
+      // A 32x replay sends a new scene roughly every frame. The camera must
+      // keep up with the newest one instead of trailing the burst (which reads
+      // on a phone as the map sitting where the replay started).
+      var worst = 0.0;
+      for (var i = 1; i < points.length; i++) {
+        await tester.pumpWidget(
+          map(
+            MapScene(
+              geometry: geometry,
+              you: points[i],
+              youProgress: i / steps,
+              followLocked: true,
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        if (i % 8 == 0) {
+          final centre = _centreOf(await native.getVisibleRegion());
+          final lag = haversineMeters(
+            GeoPoint(latitude: centre.latitude, longitude: centre.longitude),
+            points[i],
+          );
+          if (lag > worst) worst = lag;
+        }
+      }
+
+      await _settle(tester, const Duration(seconds: 2));
+      final settled = _centreOf(await native.getVisibleRegion());
+      expect(settled.latitude, closeTo(points.last.latitude, 1e-3));
+      expect(settled.longitude, closeTo(points.last.longitude, 1e-3));
+      // One scene step is ~20 m on this loop; allow a few steps of native
+      // channel latency, not a camera left behind at the burst's start.
+      expect(
+        worst,
+        lessThan(100),
+        reason: 'the camera trailed the replay by up to ${worst.round()} m',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'holds the follow when the platform restores its start camera',
+    skip: _mapView != 'true',
+    (tester) async {
+      final geometry = FakeEngineService.riverLoop;
+      final you = geometry.first;
+      final ready = Completer<void>();
+      MapLibreMapController? controller;
+
+      Widget map(MapScene scene) => MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(
+          body: MaplibreRouteMap(
+            scene: scene,
+            onMapCreated: (c) => controller = c,
+            onReady: () {
+              if (!ready.isCompleted) {
+                ready.complete();
+              }
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        map(MapScene(geometry: geometry, you: you, youProgress: 0)),
+      );
+      await ready.future.timeout(_styleTimeout, onTimeout: () {
+        fail('MapLibre did not become ready within 60 s.');
+      });
+      await _settle(tester, const Duration(seconds: 1));
+
+      final native = controller;
+      if (native == null) {
+        fail('the native controller was never created');
+      }
+
+      // The native view re-applies the camera it was *constructed* with when
+      // it finishes setting up, which can land after the first-camera
+      // settlement. Reproduce that by pointing the camera at the loop's far
+      // side: it must not be mistaken for the user panning away, so the
+      // follow stays attached and pulls the camera back to YOU.
+      final centre = LatLng(
+        (geometry.map((p) => p.latitude).reduce(_max) +
+                geometry.map((p) => p.latitude).reduce(_min)) /
+            2,
+        (geometry.map((p) => p.longitude).reduce(_max) +
+                geometry.map((p) => p.longitude).reduce(_min)) /
+            2,
+      );
+      expect(
+        haversineMeters(
+          GeoPoint(latitude: centre.latitude, longitude: centre.longitude),
+          you,
+        ),
+        greaterThan(500),
+        reason: 'the restore stand-in must land well away from YOU',
+      );
+      await native.moveCamera(CameraUpdate.newLatLng(centre));
+      await _settle(tester, const Duration(seconds: 2));
+
+      final restored = _centreOf(await native.getVisibleRegion());
+      expect(restored.latitude, closeTo(you.latitude, 1e-3));
+      expect(restored.longitude, closeTo(you.longitude, 1e-3));
+      // Still following: the recenter affordance only appears after a real
+      // gesture, so its absence is the "the follow is still attached" check.
+      expect(find.byIcon(Icons.my_location), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'a real drag stops the follow and recenter brings it back',
+    skip: _mapView != 'true',
+    (tester) async {
+      final geometry = FakeEngineService.riverLoop;
+      final you = traveledGeometry(geometry, 0.5).last;
+      final ready = Completer<void>();
+      MapLibreMapController? controller;
+
+      Widget map(MapScene scene) => MaterialApp(
+        theme: buildAppTheme(),
+        home: Scaffold(
+          body: MaplibreRouteMap(
+            scene: scene,
+            onMapCreated: (c) => controller = c,
+            onReady: () {
+              if (!ready.isCompleted) {
+                ready.complete();
+              }
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(
+        map(MapScene(geometry: geometry, you: you, youProgress: 0.5)),
+      );
+      await ready.future.timeout(_styleTimeout, onTimeout: () {
+        fail('MapLibre did not become ready within 60 s.');
+      });
+      await _settle(tester, const Duration(seconds: 1));
+
+      final native = controller;
+      if (native == null) {
+        fail('the native controller was never created');
+      }
+
+      // A finger on the map is the one thing that detaches the follow (§16);
+      // the recenter button is the way back.
+      await tester.drag(find.byType(MapLibreMap), const Offset(-160, 60));
+      await _settle(tester, const Duration(seconds: 2));
+      expect(
+        find.byIcon(Icons.my_location),
+        findsOneWidget,
+        reason: 'dragging the map must detach the camera follow',
+      );
+
+      await tester.tap(find.byIcon(Icons.my_location));
+      await _settle(tester, const Duration(seconds: 2));
+      final recentred = _centreOf(await native.getVisibleRegion());
+      expect(recentred.latitude, closeTo(you.latitude, 1e-3));
+      expect(recentred.longitude, closeTo(you.longitude, 1e-3));
+      expect(find.byIcon(Icons.my_location), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'an unreachable style document fails quietly',
     skip: _mapView != 'true',
     (tester) async {
