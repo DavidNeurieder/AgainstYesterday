@@ -9,39 +9,64 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../engine/models.dart';
 import '../../persistence/persistence.dart';
 import '../settings/application/settings_controller.dart';
+import 'flutter_map_surface.dart';
 import 'map_surface.dart';
 import 'offline_region_downloader.dart';
 import 'offline_regions.dart';
+import 'raster_offline_region_downloader.dart';
 
 const String kOfflineRegionsKey = 'offline_regions';
 
-/// The downloader backend for this build: MapLibre on device, disabled on
-/// host/tests (which override it with a fake).
+/// The downloader backend for this build: MapLibre on device, a raster tile
+/// cache on Linux desktop, disabled elsewhere (tests override it with a fake).
 final offlineRegionDownloaderProvider = Provider<OfflineRegionDownloader>(
-  (ref) => selectedMapRenderer == MapRenderer.maplibre
-      ? MapLibreOfflineRegionDownloader(styleUrl: kMapStyleUrlDefine)
-      : const DisabledOfflineRegionDownloader(),
+  (ref) {
+    if (selectedMapRenderer == MapRenderer.maplibre) {
+      return MapLibreOfflineRegionDownloader(styleUrl: kMapStyleUrlDefine);
+    }
+    if (Platform.isLinux && !isFlutterTest) {
+      final cacheRoot = ref.watch(mapTileCacheDirectoryProvider);
+      if (cacheRoot != null) {
+        return RasterOfflineRegionDownloader(
+          cacheRoot: cacheRoot,
+          tileUrlTemplate: kMapTileUrlDefine,
+        );
+      }
+    }
+    return const DisabledOfflineRegionDownloader();
+  },
 );
 
-/// Whether this build and setting can save map tiles: MapLibre is the only
-/// offline backend, and the user's "Use maps" switch must be on.
+/// Whether this build and setting can save map tiles locally.
+///
+/// MapLibre provides offline regions on device builds; the Linux desktop saves
+/// raster tiles to disk. The user's "Use maps" switch must be on.
 bool offlineRegionsSupported({
   required bool mapsEnabled,
   required MapRenderer renderer,
-}) => mapsEnabled && renderer == MapRenderer.maplibre;
+  bool isDesktop = false,
+  bool isTest = false,
+  bool hasRasterCache = false,
+}) =>
+    mapsEnabled &&
+    (renderer == MapRenderer.maplibre ||
+        (isDesktop && !isTest && hasRasterCache));
 
-/// Whether this build can download offline regions (MapLibre renderer with
-/// maps enabled).
+/// Whether this build can download offline regions.
 final offlineMapsAvailableProvider = Provider<bool>(
   (ref) => offlineRegionsSupported(
     mapsEnabled: ref.watch(mapsEnabledProvider),
     renderer: selectedMapRenderer,
+    isDesktop: Platform.isLinux,
+    isTest: isFlutterTest,
+    hasRasterCache: ref.watch(mapTileCacheDirectoryProvider) != null,
   ),
 );
 
@@ -156,7 +181,15 @@ class OfflineRegionRepository extends Notifier<List<OfflineRegion>> {
       return;
     }
     if (region.nativeId case final nativeId?) {
-      await ref.read(offlineRegionDownloaderProvider).delete(nativeId);
+      await ref
+          .read(offlineRegionDownloaderProvider)
+          .delete(nativeId, routeId: routeId);
+    } else {
+      // A region recorded without a native id (e.g. raster backends keyed by
+      // route) still needs its on-disk tiles removed.
+      await ref
+          .read(offlineRegionDownloaderProvider)
+          .delete(0, routeId: routeId);
     }
     state = state.where((r) => r.routeId != routeId).toList();
     await _persist();

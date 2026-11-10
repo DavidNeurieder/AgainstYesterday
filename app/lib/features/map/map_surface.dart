@@ -33,6 +33,7 @@ import '../../engine/models.dart';
 import '../settings/application/settings_controller.dart';
 import 'flutter_map_surface.dart';
 import 'maplibre_map_surface.dart';
+import 'offline_region_downloader.dart';
 import 'painter_map_surface.dart';
 
 /// Which renderer the build asked for.
@@ -132,6 +133,7 @@ final mapSurfaceProvider = Provider<MapSurface>((ref) {
     isTest: isFlutterTest,
     renderer: selectedMapRenderer,
     mapsEnabled: ref.watch(mapsEnabledProvider),
+    rasterTileCacheRoot: ref.watch(mapTileCacheDirectoryProvider),
   );
 });
 
@@ -152,6 +154,7 @@ MapSurface resolveMapSurface({
   required bool isTest,
   required MapRenderer renderer,
   bool mapsEnabled = true,
+  Directory? rasterTileCacheRoot,
 }) {
   if (!mapsEnabled) {
     return const PainterMapSurface();
@@ -160,7 +163,7 @@ MapSurface resolveMapSurface({
     return const PainterMapSurface();
   }
   if (isDesktop) {
-    return const FlutterMapSurface();
+    return FlutterMapSurface(cacheRoot: rasterTileCacheRoot);
   }
   return switch (renderer) {
     MapRenderer.maplibre => const MaplibreMapSurface(),

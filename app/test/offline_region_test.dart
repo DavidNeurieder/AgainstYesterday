@@ -168,7 +168,7 @@ void main() {
   });
 
   group('availability', () {
-    test('needs both the MapLibre renderer and the Use maps switch', () {
+    test('needs a capable backend and the Use maps switch', () {
       expect(
         offlineRegionsSupported(
           mapsEnabled: true,
@@ -180,6 +180,36 @@ void main() {
         offlineRegionsSupported(
           mapsEnabled: false,
           renderer: MapRenderer.maplibre,
+        ),
+        isFalse,
+      );
+      expect(
+        offlineRegionsSupported(
+          mapsEnabled: true,
+          renderer: MapRenderer.painter,
+          isDesktop: true,
+          isTest: false,
+          hasRasterCache: true,
+        ),
+        isTrue,
+      );
+      expect(
+        offlineRegionsSupported(
+          mapsEnabled: true,
+          renderer: MapRenderer.painter,
+          isDesktop: true,
+          isTest: true,
+          hasRasterCache: true,
+        ),
+        isFalse,
+      );
+      expect(
+        offlineRegionsSupported(
+          mapsEnabled: false,
+          renderer: MapRenderer.painter,
+          isDesktop: true,
+          isTest: false,
+          hasRasterCache: true,
         ),
         isFalse,
       );
@@ -311,5 +341,6 @@ class _FakeDownloader implements OfflineRegionDownloader {
   }
 
   @override
-  Future<void> delete(int nativeId) async => deletions.add(nativeId);
+  Future<void> delete(int nativeId, {String? routeId}) async =>
+      deletions.add(nativeId);
 }

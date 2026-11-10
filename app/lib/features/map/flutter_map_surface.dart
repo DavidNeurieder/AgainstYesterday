@@ -14,12 +14,15 @@
 /// the public OSM tile servers are not a free CDN.
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../engine/models.dart';
+import 'cached_raster_tile_provider.dart';
 import 'map_surface.dart';
 
 /// The raster tile template. Overridable at build time (`MAP_TILE_URL`) so a
@@ -31,22 +34,34 @@ const String kMapTileUrlDefine = String.fromEnvironment(
 );
 
 class FlutterMapSurface implements MapSurface {
-  const FlutterMapSurface();
+  const FlutterMapSurface({this.cacheRoot});
+
+  /// When set, raster tiles are served from this on-disk cache before the
+  /// network, so saved route regions work offline.
+  final Directory? cacheRoot;
 
   @override
   Widget build(BuildContext context, MapScene scene) =>
-      FlutterMapRouteMap(scene: scene);
+      FlutterMapRouteMap(scene: scene, cacheRoot: cacheRoot);
 }
 
 /// The desktop map view. Kept public so a widget test can pump it directly;
 /// screens go through [MapSurface].
 class FlutterMapRouteMap extends StatefulWidget {
-  const FlutterMapRouteMap({super.key, required this.scene, this.tileUrl});
+  const FlutterMapRouteMap({
+    super.key,
+    required this.scene,
+    this.tileUrl,
+    this.cacheRoot,
+  });
 
   final MapScene scene;
 
   /// Tile template override, defaulting to [kMapTileUrlDefine].
   final String? tileUrl;
+
+  /// On-disk raster tile cache root; when set, cached tiles are preferred.
+  final Directory? cacheRoot;
 
   @override
   State<FlutterMapRouteMap> createState() => _FlutterMapRouteMapState();
@@ -161,6 +176,9 @@ class _FlutterMapRouteMapState extends State<FlutterMapRouteMap> {
               urlTemplate: widget.tileUrl ?? kMapTileUrlDefine,
               userAgentPackageName: 'dev.neurieder.against_yesterday',
               maxNativeZoom: 19,
+              tileProvider: widget.cacheRoot == null
+                  ? null
+                  : CachedRasterTileProvider(cacheRoot: widget.cacheRoot!),
             ),
             if (scene.track.length >= 2)
               PolylineLayer(

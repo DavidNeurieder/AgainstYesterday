@@ -146,5 +146,6 @@ class _RecordingDownloader implements OfflineRegionDownloader {
   }
 
   @override
-  Future<void> delete(int nativeId) async => deletions.add(nativeId);
+  Future<void> delete(int nativeId, {String? routeId}) async =>
+      deletions.add(nativeId);
 }

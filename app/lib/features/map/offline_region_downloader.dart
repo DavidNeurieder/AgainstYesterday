@@ -8,9 +8,16 @@
 /// repository depends only on this seam, so tests drive a recording fake.
 library;
 
+import 'dart:io';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as mlib;
 
 import 'offline_regions.dart';
+
+/// Directory for the on-disk raster tile cache (Linux desktop). `null` when
+/// no persistent cache is configured, so raster offline saving is unavailable.
+final mapTileCacheDirectoryProvider = Provider<Directory?>((ref) => null);
 
 /// Downloads and deletes one offline region.
 abstract interface class OfflineRegionDownloader {
@@ -23,7 +30,9 @@ abstract interface class OfflineRegionDownloader {
     void Function(double progress)? onProgress,
   });
 
-  Future<void> delete(int nativeId);
+  /// Deletes the native tiles for [nativeId]. [routeId] is provided for
+  /// backends that key storage by route rather than by a native id.
+  Future<void> delete(int nativeId, {String? routeId});
 }
 
 /// Talks to MapLibre Native's offline database.
@@ -71,7 +80,8 @@ class MapLibreOfflineRegionDownloader implements OfflineRegionDownloader {
   }
 
   @override
-  Future<void> delete(int nativeId) => mlib.deleteOfflineRegion(nativeId);
+  Future<void> delete(int nativeId, {String? routeId}) =>
+      mlib.deleteOfflineRegion(nativeId);
 }
 
 /// Host/tests default: offline regions are device-only (MapLibre renderer).
@@ -91,5 +101,5 @@ class DisabledOfflineRegionDownloader implements OfflineRegionDownloader {
   }
 
   @override
-  Future<void> delete(int nativeId) async {}
+  Future<void> delete(int nativeId, {String? routeId}) async {}
 }

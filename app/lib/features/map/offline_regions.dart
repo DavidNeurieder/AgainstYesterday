@@ -114,6 +114,79 @@ int regionZoomFor(
   return minZoom;
 }
 
+/// Web-Mercator tile X for [lon] at zoom [z].
+int lonToTileX(double lon, int z) {
+  final world = 1 << z;
+  final x = ((lon + 180.0) / 360.0 * world).floor();
+  return x.clamp(0, world - 1);
+}
+
+/// Web-Mercator tile Y for [lat] at zoom [z].
+int latToTileY(double lat, int z) {
+  final world = 1 << z;
+  // Clamp to the Mercator projection's valid latitude range.
+  final clamped = lat.clamp(-85.05112878, 85.05112878);
+  final rad = clamped * math.pi / 180.0;
+  final y = ((1.0 - math.log(math.tan(rad) + 1.0 / math.cos(rad)) / math.pi) /
+          2.0 *
+          world)
+      .floor();
+  return y.clamp(0, world - 1);
+}
+
+/// The inclusive X/Y tile range covering [bounds] at zoom [z].
+({int minX, int maxX, int minY, int maxY}) tileXYBounds(
+  RegionBounds bounds,
+  int z,
+) {
+  if (bounds.isEmpty) {
+    final x = lonToTileX(bounds.westLon, z);
+    final y = latToTileY(bounds.northLat, z);
+    return (minX: x, maxX: x, minY: y, maxY: y);
+  }
+  final minX = lonToTileX(bounds.westLon, z);
+  final maxX = lonToTileX(bounds.eastLon, z);
+  // Mercator Y grows southward, so the northern edge gives the smaller Y.
+  final minY = latToTileY(bounds.northLat, z);
+  final maxY = latToTileY(bounds.southLat, z);
+  return (
+    minX: math.min(minX, maxX),
+    maxX: math.max(minX, maxX),
+    minY: math.min(minY, maxY),
+    maxY: math.max(minY, maxY),
+  );
+}
+
+/// Exact Web-Mercator tile count for [bounds] across [minZoom]..[maxZoom].
+int tileCountForRegion(
+  RegionBounds bounds, {
+  int minZoom = kOfflineMinZoom,
+  required int maxZoom,
+}) {
+  var total = 0;
+  for (var z = minZoom; z <= maxZoom; z++) {
+    final b = tileXYBounds(bounds, z);
+    total += (b.maxX - b.minX + 1) * (b.maxY - b.minY + 1);
+  }
+  return total;
+}
+
+/// Every (z, x, y) tile covering [bounds] from [minZoom] through [maxZoom].
+Iterable<({int z, int x, int y})> tilesForRegion(
+  RegionBounds bounds, {
+  int minZoom = kOfflineMinZoom,
+  required int maxZoom,
+}) sync* {
+  for (var z = minZoom; z <= maxZoom; z++) {
+    final b = tileXYBounds(bounds, z);
+    for (var x = b.minX; x <= b.maxX; x++) {
+      for (var y = b.minY; y <= b.maxY; y++) {
+        yield (z: z, x: x, y: y);
+      }
+    }
+  }
+}
+
 /// Lifecycle of one region download.
 enum OfflineRegionStatus { downloading, ready, failed }
 
