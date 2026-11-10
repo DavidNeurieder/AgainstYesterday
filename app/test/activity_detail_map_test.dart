@@ -39,7 +39,7 @@ void main() {
   ];
 
   group('activity detail → MapSurface scene', () {
-    testWidgets('sends the recorded track geometry to the surface',
+    testWidgets('draws the route as the base and the run on top',
         (tester) async {
       final surface = _RecordingMapSurface();
       final activity = Activity(
@@ -70,14 +70,71 @@ void main() {
 
       expect(surface.scenes, hasLength(1));
       final scene = surface.scenes.single;
-      expect(scene.geometry, [for (final p in track) p.position]);
+      // The course is the map; the run's own fixes are the overlay.
+      expect(scene.geometry, riverLoopRoute.geometry);
+      expect(scene.track, [for (final p in track) p.position]);
       expect(scene.you, track.first.position);
       expect(scene.youProgress, 1);
       expect(scene.staticView, isTrue);
       expect(scene.ghost, isNull);
     });
 
-    testWidgets('leaves the map out for a run without a track', (tester) async {
+    testWidgets('every run of a route gets the same base map', (tester) async {
+      final reverseTrack = [
+        for (final p in track.reversed) p,
+      ];
+      final activities = [
+        Activity(
+          id: 'act-a',
+          routeId: 'river-loop',
+          startedAt: DateTime.utc(2026, 1, 2),
+          duration: const Elapsed.seconds(1502),
+          distance: const Distance.kilometers(4.75),
+          track: track,
+        ),
+        Activity(
+          id: 'act-b',
+          routeId: 'river-loop',
+          startedAt: DateTime.utc(2026, 1, 3),
+          duration: const Elapsed.seconds(1520),
+          distance: const Distance.kilometers(4.76),
+          track: reverseTrack,
+        ),
+      ];
+
+      Future<List<MapScene>> scenesFor(String id) async {
+        final local = _RecordingMapSurface();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              persistenceStoreProvider.overrideWithValue(
+                seededStore(
+                  activities: activities,
+                  routes: [riverLoopRoute],
+                ),
+              ),
+              mapSurfaceProvider.overrideWithValue(local),
+            ],
+            child: MaterialApp(
+              theme: buildAppTheme(),
+              home: ActivityDetailScreen(key: ValueKey(id), activityId: id),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        return local.scenes;
+      }
+
+      final first = (await scenesFor('act-a')).single;
+      final second = (await scenesFor('act-b')).single;
+
+      expect(first.geometry, riverLoopRoute.geometry);
+      expect(second.geometry, riverLoopRoute.geometry);
+      expect(first.track, isNot(second.track));
+    });
+
+    testWidgets('a run without a track still shows the shared route map',
+        (tester) async {
       final surface = _RecordingMapSurface();
       await tester.pumpWidget(
         ProviderScope(
@@ -98,7 +155,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(surface.scenes, isEmpty);
+      final scene = surface.scenes.single;
+      expect(scene.geometry, riverLoopRoute.geometry);
+      expect(scene.track, isEmpty);
+      expect(scene.you, riverLoopRoute.geometry.first);
+      expect(scene.staticView, isTrue);
     });
   });
 }

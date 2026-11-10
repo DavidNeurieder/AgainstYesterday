@@ -83,7 +83,7 @@ void main() {
   testWidgets('shows the empty state and the disclosure', (tester) async {
     await _pump(tester, MemoryPersistenceStore());
 
-    expect(find.textContaining('No offline regions downloaded yet'),
+    expect(find.textContaining('No offline regions saved yet'),
         findsOneWidget);
     expect(find.textContaining('personal use'), findsOneWidget);
   });

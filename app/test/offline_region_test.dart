@@ -165,17 +165,81 @@ void main() {
           isEmpty);
     });
   });
+
+  group('automatic save on open', () {
+    test('saves the route map once and reuses it on later opens', () async {
+      final downloader = _FakeDownloader();
+      final container = _container(downloader: downloader);
+      final repo = container.read(offlineRegionRepositoryProvider.notifier);
+
+      await repo.ensureRoute(riverLoopRoute);
+      expect(downloader.downloads, ['river-loop']);
+
+      // Another run of the same route opens: the saved map is already there.
+      await repo.ensureRoute(riverLoopRoute);
+      expect(downloader.downloads, ['river-loop']);
+      final region = container.read(offlineRegionRepositoryProvider).single;
+      expect(region.status, OfflineRegionStatus.ready);
+    });
+
+    test('leaves an in-flight download alone', () async {
+      final gate = Completer<int>();
+      final downloader = _FakeDownloader(gate: gate);
+      final container = _container(downloader: downloader);
+      final repo = container.read(offlineRegionRepositoryProvider.notifier);
+
+      final first = repo.ensureRoute(riverLoopRoute);
+      await repo.ensureRoute(riverLoopRoute);
+      expect(downloader.downloads, hasLength(1));
+
+      gate.complete(9);
+      await first;
+    });
+
+    test('retries a failed save on the next open', () async {
+      final downloader = _FakeDownloader(
+        failWith: const OfflineDownloadException('Offline'),
+      );
+      final container = _container(downloader: downloader);
+      final repo = container.read(offlineRegionRepositoryProvider.notifier);
+
+      await repo.ensureRoute(riverLoopRoute);
+      expect(
+        container.read(offlineRegionRepositoryProvider).single.status,
+        OfflineRegionStatus.failed,
+      );
+
+      // Next open: the failed region is retried instead of skipped.
+      await repo.ensureRoute(riverLoopRoute);
+      expect(downloader.downloads, ['river-loop', 'river-loop']);
+    });
+
+    test('does nothing in a build that cannot store tiles', () async {
+      final downloader = _FakeDownloader();
+      final container =
+          _container(downloader: downloader, offlineAvailable: false);
+
+      await container
+          .read(offlineRegionRepositoryProvider.notifier)
+          .ensureRoute(riverLoopRoute);
+
+      expect(downloader.downloads, isEmpty);
+      expect(container.read(offlineRegionRepositoryProvider), isEmpty);
+    });
+  });
 }
 
 ProviderContainer _container({
   PersistenceStore? store,
   OfflineRegionDownloader? downloader,
+  bool offlineAvailable = true,
 }) {
   final container = ProviderContainer(
     overrides: [
       persistenceStoreProvider.overrideWithValue(
         store ?? MemoryPersistenceStore(),
       ),
+      offlineMapsAvailableProvider.overrideWithValue(offlineAvailable),
       offlineRegionDownloaderProvider.overrideWithValue(
         downloader ?? _FakeDownloader(),
       ),

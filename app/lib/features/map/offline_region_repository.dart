@@ -65,6 +65,24 @@ class OfflineRegionRepository extends Notifier<List<OfflineRegion>> {
     return null;
   }
 
+  /// Saves [route]'s map region locally if it is not already saved.
+  ///
+  /// Called whenever a route or one of its runs is opened. The region is keyed
+  /// by route, so all runs of the same course share the one saved map. A ready
+  /// or in-flight region is left alone; a failed download is retried on the
+  /// next open. Builds without the MapLibre renderer cannot store tiles, so
+  /// this is a no-op there.
+  Future<void> ensureRoute(Route route) async {
+    if (!ref.read(offlineMapsAvailableProvider)) {
+      return;
+    }
+    final existing = regionFor(route.id);
+    if (existing != null && existing.status != OfflineRegionStatus.failed) {
+      return;
+    }
+    await downloadRoute(route);
+  }
+
   /// Downloads the region for [route]. One download per route at a time:
   /// overlapping requests are ignored so a double tap cannot start twice.
   Future<void> downloadRoute(Route route) async {

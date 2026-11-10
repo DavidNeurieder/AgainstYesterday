@@ -32,8 +32,9 @@ The default style document is OpenFreeMap's "Liberty" style
 - OpenFreeMap (FreeMap Initiative) serves tiles with the OpenMapTiles schema.
   The software is MIT; it is free, with no API key or account.
 - Its terms allow reasonable personal use but prohibit **automated bulk
-  collection**. The app honours that: every offline download is user-initiated,
-  per-route, size-capped, and one at a time (see below).
+  collection**. The app honours that: an offline download only happens when the
+  user opens a route or one of its runs, is per-route, size-capped, and one at
+  a time — never a background sweep of the whole library (see below).
 
 ## Attribution
 
@@ -70,8 +71,13 @@ same stack and carries the same obligations:
 
 Offline is **on-device, per-route downloads only**:
 
-- User-initiated from the route detail page ("Download offline map") and
-  managed in Settings → Map (progress, delete with confirmation).
+- Saved automatically the first time a route, one of its runs, a replay or a
+  race is opened. One region per route, so every run of the same course shares
+  the same local map; a ready region is never re-downloaded. The route detail
+  card and Settings → Map report progress and offer delete with confirmation,
+  and route detail keeps a retry control if a save failed.
+- Browsing is the trigger: nothing is downloaded at startup or for routes the
+  user has not opened, so the app never collects tiles in bulk.
 - Size-capped by a client-side budget: `regionZoomFor` picks the highest zoom
   (12–15) whose estimated Web-Mercator tile count fits `kOfflineMaxTiles`, so a
   download stays a neighbourhood, not a region pack.

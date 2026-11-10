@@ -18,6 +18,7 @@ import '../../../core/ui/split_row.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../map/map_surface.dart';
+import '../../map/route_map_autosave.dart';
 import 'elevation_profile.dart';
 import '../../result/application/splits.dart';
 import '../../settings/application/settings_controller.dart';
@@ -49,6 +50,18 @@ class ActivityDetailScreen extends ConsumerWidget {
     final distance = activity.distance;
     final duration = activity.duration;
     final trackMeters = distance?.meters ?? 0;
+    // The route, not this run's track, frames the activity map: all runs of
+    // the course share the same saved map. The recorded track is overlaid when
+    // there is one; a run without a track still shows the course.
+    final routeGeometry = route?.geometry ?? const <GeoPoint>[];
+    final runTrack = activity.track;
+    final trackPositions = runTrack != null && runTrack.length >= 2
+        ? [for (final p in runTrack) p.position]
+        : const <GeoPoint>[];
+    final useRouteBase = routeGeometry.length >= 2;
+    final mapGeometry = useRouteBase ? routeGeometry : trackPositions;
+    final overlayTrack =
+        useRouteBase && trackPositions.length >= 2 ? trackPositions : const <GeoPoint>[];
 
     final splits = (route != null && trackMeters > 0)
         ? computeSplits(
@@ -81,6 +94,7 @@ class ActivityDetailScreen extends ConsumerWidget {
           vertical: AppSpacing.lg,
         ),
         children: [
+          if (route != null) RouteMapAutosave(route: route),
           Text(
             routeName,
             textAlign: TextAlign.center,
@@ -115,10 +129,10 @@ class ActivityDetailScreen extends ConsumerWidget {
                 color: AppColors.textSecondary,
               ),
             ),
-          // The recorded track on the map: the whole run shown static, fitted
-          // to the viewport, through whichever renderer the build selected
-          // (painter fallback on host/tests, MapLibre on device).
-          if (activity.track case final track? when track.length >= 2) ...[
+          // The recorded track on the map. Every run of a route draws the same
+          // route geometry — the shared course map — with this run's track on
+          // top, so switching between runs keeps the same ground underfoot.
+          if (mapGeometry.length >= 2) ...[
             const SizedBox(height: AppSpacing.xl),
             SizedBox(
               height: 240,
@@ -127,9 +141,12 @@ class ActivityDetailScreen extends ConsumerWidget {
                 child: mapSurface.build(
                   context,
                   MapScene(
-                    geometry: [for (final p in track) p.position],
-                    you: track.first.position,
-                    youProgress: 1,
+                    geometry: mapGeometry,
+                    track: overlayTrack,
+                    you: trackPositions.isNotEmpty
+                        ? trackPositions.first
+                        : mapGeometry.first,
+                    youProgress: trackPositions.isEmpty ? 0 : 1,
                     staticView: true,
                   ),
                 ),

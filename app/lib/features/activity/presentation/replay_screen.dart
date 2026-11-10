@@ -21,6 +21,7 @@ import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../map/map_surface.dart';
+import '../../map/route_map_autosave.dart';
 import '../../recording/application/ghost_profile.dart';
 import '../../recording/presentation/race_hud.dart';
 import '../../settings/application/settings_controller.dart';
@@ -332,6 +333,9 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
               child: Stack(
                 fit: StackFit.expand,
                 children: [
+                  // Replay of a route also keeps that course's map saved, so
+                  // every run of it shares the same local map.
+                  if (_route case final route?) RouteMapAutosave(route: route),
                   (you != null && geometry.isNotEmpty)
                       ? mapSurface.build(
                           context,

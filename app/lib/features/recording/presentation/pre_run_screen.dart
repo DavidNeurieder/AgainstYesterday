@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
+import '../../map/route_map_autosave.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
@@ -59,6 +60,8 @@ class PreRunScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // Racing a route saves its map before the run starts.
+                        if (route != null) RouteMapAutosave(route: route),
                         const Spacer(),
                         Text(
                           ready ? 'READY TO RUN' : 'GETTING GPS…',

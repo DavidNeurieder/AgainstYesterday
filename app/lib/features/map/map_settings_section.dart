@@ -40,8 +40,9 @@ class MapSettingsSection extends ConsumerWidget {
                 padding: EdgeInsets.all(AppSpacing.md),
                 child: Text(
                   'Offline regions let you browse a route without a connection. '
-                  'Each download covers one route, is capped in size and is for '
-                  'personal use subject to the tile provider terms.',
+                  'Each route\'s map is saved automatically the first time you '
+                  'open the route or one of its runs, is capped in size, and is '
+                  'for personal use subject to the tile provider terms.',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 12,
@@ -56,8 +57,8 @@ class MapSettingsSection extends ConsumerWidget {
                     vertical: AppSpacing.sm,
                   ),
                   child: Text(
-                    'No offline regions downloaded yet. Open any route and '
-                    'choose Download offline map.',
+                    'No offline regions saved yet. A route\'s map is saved the '
+                    'first time you open the route or one of its runs.',
                     style: TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 12,

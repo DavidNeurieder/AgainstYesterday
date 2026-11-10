@@ -204,10 +204,12 @@ so the device targets pass it for you: `make build`, `make install` and
 Android builds with MapLibre need JDK 21 — the Makefile exports a detected
 JDK 21 as `JAVA_HOME`, and CI pins Temurin 21.
 
-Per-route offline regions ("Download offline map" on the route page, managed
-in Settings → Map) are user-initiated, size-capped by a client-side tile
-budget, and one at a time; metadata persists through the persistence store
-and the tiles live in MapLibre Native's offline database. See
+Per-route offline regions are saved automatically the first time the route or
+one of its runs is opened, share one map across every run of the course, and
+are managed in Settings → Map. They are size-capped by a client-side tile
+budget and one at a time; metadata persists through the persistence store and
+the tiles live in MapLibre Native's offline database. Route detail shows the
+save state and offers a retry if saving failed. See
 [`../docs/map_licensing.md`](../docs/map_licensing.md) for licenses,
 attribution and the no-bundled-region decision.
 

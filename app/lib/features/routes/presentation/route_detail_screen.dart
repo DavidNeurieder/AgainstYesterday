@@ -24,6 +24,7 @@ import '../../../persistence/persistence.dart';
 import '../../map/map_surface.dart';
 import '../../map/offline_region_repository.dart';
 import '../../map/offline_regions.dart';
+import '../../map/route_map_autosave.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/route_stats.dart';
@@ -70,6 +71,9 @@ class RouteDetailScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
+          // Opening the route saves its map locally; every run of the course
+          // then shares it. The offline card below reports/retries the state.
+          RouteMapAutosave(route: route),
           // The course on the map: through the same seam as the activity track
           // and the live run, so device builds (MAP_VIEW=true) render it with
           // MapLibre and host/test builds keep the hermetic painter.
@@ -404,7 +408,7 @@ class _DownloadButton extends ConsumerWidget {
                 .read(offlineRegionRepositoryProvider.notifier)
                 .downloadRoute(route),
       icon: const Icon(Icons.download_for_offline_outlined),
-      label: const Text('Download offline map'),
+      label: const Text('Save offline map'),
     );
   }
 }
@@ -421,6 +425,7 @@ class _RetryButton extends ConsumerWidget {
         .where((r) => r.id == routeId)
         .firstOrNull;
     return TextButton.icon(
+      key: ValueKey('retry-offline-$routeId'),
       onPressed: route == null
           ? null
           : () => ref

@@ -23,11 +23,12 @@ Flutter app  →  EngineService (facade)  →  Rust engine (FFI)
   and desktop; device builds opt into the MapLibre renderer (the engine behind
   Organic Maps) with `MAP_VIEW=true`: the route, the travelled portion, the YOU
   and PB-ghost markers and a follow camera with recenter.
-- **Offline maps** — per-route regions downloaded straight from the route page
-  ("Download offline map") and managed in Settings → Map: progress while a
-  region downloads, delete with confirmation, and the OSM attribution.
-  Downloads are user-initiated, size-capped and one at a time, so the app never
-  floods the tile provider.
+- **Offline maps** — each route's map is saved locally the first time you open
+  the route or any of its runs, so a course and every run of it share one map.
+  Regions are managed in Settings → Map (progress, delete with confirmation,
+  OSM attribution); route detail shows the state and retries a failed save.
+  Saving is triggered by browsing, size-capped and one at a time, so the app
+  never floods the tile provider.
 - **Route library** — course cards with PB/average/last stats, a performance
   chart of every attempt, and attempt history.
 - **Results & history** — run-complete interstitial with NEW PERSONAL BEST
@@ -160,19 +161,21 @@ activity track and the route-detail course map — renders through the
 `MapSurface` seam, so a device build shows the MapLibre map everywhere while
 host/test builds stay hermetic. `MAP_STYLE_URL` overrides the style document
 (default OpenFreeMap Liberty) — point it at a self-hosted tile server for
-anything beyond per-route downloads. **Without `MAP_VIEW=true` the download
-button and the offline region list never appear**, so the device targets pass
-the define for you: `make build`, `make install` and `make build-release` all
-build with `MAP_VIEW=true` (plus `USE_DEVICE_GPS=true`). Android builds with
+anything beyond per-route downloads. **Without `MAP_VIEW=true` the offline
+route card and the offline region list never appear**, so the device targets
+pass the define for you: `make build`, `make install` and `make build-release`
+all build with `MAP_VIEW=true` (plus `USE_DEVICE_GPS=true`). Android builds with
 MapLibre need JDK 21 (the plugin compiles with Java 21); the Makefile exports
 a detected JDK 21 as `JAVA_HOME` and CI pins Temurin 21, so `make
 build`/`install` just work.
 
-Offline regions are per-route, user-initiated and size-capped (zoom 12–15
-under a client-side tile budget), one download at a time, managed in Settings →
-Map. **No tiles are bundled** — see [docs/map_licensing.md](docs/map_licensing.md)
-for the engine (BSD-3-Clause), data (OSM, ODbL) and tile-service licenses, the
-attribution requirement, and the recorded no-bundled-region decision.
+Offline regions are per-route, saved automatically when the route or one of its
+runs is first opened, and size-capped (zoom 12–15 under a client-side tile
+budget), one download at a time, managed in Settings → Map. Every run of a
+route shares its one saved map. **No tiles are bundled** — see
+[docs/map_licensing.md](docs/map_licensing.md) for the engine (BSD-3-Clause),
+data (OSM, ODbL) and tile-service licenses, the attribution requirement, and
+the recorded no-bundled-region decision.
 
 ## Developer diagnostics
 
