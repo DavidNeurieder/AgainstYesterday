@@ -160,7 +160,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(DiagnosticsScreen),
-        matching: find.text('4:57 /km'),
+        matching: find.text('12.1 km/h'),
       ),
       findsOneWidget,
     );

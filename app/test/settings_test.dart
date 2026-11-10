@@ -227,11 +227,11 @@ void main() {
     expect(const Distance.meters(120).formatWith(Units.miles), '120 m');
 
     const sixMinKm = Speed.fromPaceSecondsPerKm(360);
-    expect(sixMinKm.formatPaceWith(Units.kilometers), '6:00 /km');
-    expect(sixMinKm.formatPaceWith(Units.miles), '9:39 /mi');
+    expect(sixMinKm.formatPaceWith(Units.kilometers), '10.0 km/h');
+    expect(sixMinKm.formatPaceWith(Units.miles), '6.2 mph');
     expect(
       const Speed.zero().formatPaceWith(Units.miles),
-      '— /mi',
+      '0.0 mph',
     );
     expect(sixMinKm.formatWith(Units.miles).endsWith('mph'), isTrue);
   });

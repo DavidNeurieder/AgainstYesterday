@@ -80,7 +80,7 @@ void main() {
       );
       expect(live.routeProgress, 0.59);
       expect(live.ghostGap!.ahead, isTrue);
-      expect(live.pace.formatPace(), '5:20 /km');
+      expect(live.pace.formatPace(), '11.3 km/h');
     });
   });
 }

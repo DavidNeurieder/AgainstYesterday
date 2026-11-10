@@ -761,6 +761,17 @@ class RecordingController extends Notifier<LiveRunState?> {
     _session?.handle = null;
   }
 
+  double _routeProgressFor(_RecSession session, LiveEngineSnapshot? snap) {
+    final reported = snap?.routeProgress ?? 0.0;
+    if (reported > 0) return reported.clamp(0.0, 1.0);
+    final route = session.route;
+    final distance = snap?.distanceMeters ?? 0.0;
+    if (route != null && route.distance.meters > 0 && distance > 0) {
+      return (distance / route.distance.meters).clamp(0.0, 1.0);
+    }
+    return 0.0;
+  }
+
   void _emit({
     required RunStatus status,
     bool keepPace = false,
@@ -793,7 +804,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       pace: pace,
       error: status == RunStatus.error ? (error ?? state?.error) : null,
       ghostGap: ghost?.toGhostState(),
-      routeProgress: snap?.routeProgress ?? 0,
+      routeProgress: _routeProgressFor(session, snap),
       gpsQuality: status == RunStatus.gpsAcquiring
           ? 'reduced'
           : qualityForGpsAccuracy(snap?.accuracyMeters),

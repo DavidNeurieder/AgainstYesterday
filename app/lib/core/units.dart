@@ -141,24 +141,12 @@ class Speed {
   double get paceSecondsPerKm =>
       metersPerSecond > 0 ? 1000.0 / metersPerSecond : 0;
 
-  /// "5:23 /km" pace format; "— /km" when stationary.
-  String formatPace() => formatPaceWith(Units.kilometers);
+  /// Pace displayed as speed in km/h (or mph), matching the requested
+  /// "km/h" readout.
+  String formatPace() => format();
 
-  /// Pace formatted for the chosen display unit (M21, §26): seconds per km or
-  /// per mile. "— /mi" when stationary.
-  String formatPaceWith(Units units) {
-    final perUnit = switch (units) {
-      Units.kilometers => paceSecondsPerKm,
-      Units.miles => metersPerSecond > 0 ? 1609.344 / metersPerSecond : 0,
-    };
-    if (perUnit <= 0) {
-      return '— ${units.paceSuffix}';
-    }
-    final whole = perUnit.round();
-    final m = whole ~/ 60;
-    final s = whole % 60;
-    return '$m:${s.toString().padLeft(2, '0')} ${units.paceSuffix}';
-  }
+  /// Pace displayed as speed in the chosen display unit.
+  String formatPaceWith(Units units) => formatWith(units);
 
   /// "9.4 km/h".
   String format() => formatWith(Units.kilometers);

@@ -62,13 +62,13 @@ void main() {
       final s = Speed.fromPaceSecondsPerKm(300);
       expect(s.metersPerSecond, closeTo(3.333, 0.001));
       expect(s.paceSecondsPerKm, closeTo(300, 0.001));
-      expect(s.formatPace(), '5:00 /km');
+      expect(s.formatPace(), '12.0 km/h');
       expect(s.format(), '12.0 km/h');
     });
 
     test('stationary', () {
       final parked = Speed.zero();
-      expect(parked.formatPace(), '— /km');
+      expect(parked.formatPace(), '0.0 km/h');
       expect(parked.format(), '0.0 km/h');
     });
   });

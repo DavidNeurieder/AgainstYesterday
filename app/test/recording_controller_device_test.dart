@@ -205,7 +205,7 @@ void main() {
         expect(live.clockElapsed.seconds, closeTo(3.6, 0.05));
         // The cached speed must not surface as a cruise pace.
         expect(live.pace.metersPerSecond, 0);
-        expect(live.pace.formatPace(), '— /km');
+        expect(live.pace.formatPace(), '0.0 km/h');
 
         // The still fixes still reach the raw buffer, so the persisted track
         // keeps the receiver's full output even while standing.
