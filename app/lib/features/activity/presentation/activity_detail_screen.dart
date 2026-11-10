@@ -166,6 +166,25 @@ class ActivityDetailScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.xl),
             _RawGpsSection(points: track),
           ],
+          const SizedBox(height: AppSpacing.lg),
+          OutlinedButton.icon(
+            key: const ValueKey('export-analysis'),
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              await Clipboard.setData(
+                ClipboardData(
+                  text: 'Distance: ${activity.distance?.formatWith(ref.read(displayUnitProvider)) ?? '—'}\n'
+                      'Duration: ${activity.duration?.formatClock() ?? '—'}\n'
+                      'Fixes: ${activity.track?.length ?? 0}',
+                ),
+              );
+              messenger.showSnackBar(
+                const SnackBar(content: Text('Analysis copied to clipboard.')),
+              );
+            },
+            icon: const Icon(Icons.download_rounded),
+            label: const Text('Export analysis'),
+          ),
           const SizedBox(height: AppSpacing.xl),
           Text(
             'Run on ${_formatDate(activity.startedAt)}',
