@@ -343,6 +343,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
                             name: _route?.name,
                             courseColor: AppColors.pb,
                             track: trackGeometry,
+                            followLocked: true,
                           ),
                         )
                       : const Center(child: Text('No map data.')),

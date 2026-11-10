@@ -105,6 +105,10 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
 
   static const double _followZoom = 16;
 
+  /// A scene-to-scene move larger than this is a jump (seek / resumed run) and
+  /// is animated; smaller steps track YOU immediately.
+  static const double _jumpMeters = 100;
+
   MapLibreMapController? _controller;
   bool _styleLoaded = false;
 
@@ -164,15 +168,21 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
   @override
   void didUpdateWidget(MaplibreRouteMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_styleLoaded) {
-      _sync(animate: true);
+    if (!_styleLoaded) {
+      return;
     }
+    // Playback sends a new scene every frame. Animating each tiny step would
+    // trail the replay, so small moves jump immediately and only a real jump
+    // (a seek or a resumed run) earns an animation.
+    final step = haversineMeters(oldWidget.scene.you, widget.scene.you);
+    _sync(animate: !widget.scene.staticView && step > _jumpMeters);
   }
 
   void _onCameraMove(CameraPosition position) {
     if (_programmatic ||
         !_cameraSettled ||
         widget.scene.staticView ||
+        widget.scene.followLocked ||
         !_follow) {
       return;
     }

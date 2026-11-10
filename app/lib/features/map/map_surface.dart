@@ -74,6 +74,7 @@ class MapScene {
     this.name,
     this.courseColor,
     this.staticView = false,
+    this.followLocked = false,
   });
 
   /// The route (or recorded track) to draw.
@@ -104,6 +105,14 @@ class MapScene {
   /// Fits the whole geometry with no follow or panning (route-detail
   /// thumbnail).
   final bool staticView;
+
+  /// Keeps the camera pinned to [you] even when a renderer would otherwise
+  /// treat a camera move as the user panning away.
+  ///
+  /// Replay owns the camera: playback must stay centred on the replayed
+  /// position, and the per-frame scene updates (plus seeks) must not detach
+  /// the follow the way a deliberate pan on the live run does.
+  final bool followLocked;
 }
 
 /// Renders a [MapScene]. Implemented by the painter fallback and by MapLibre.
