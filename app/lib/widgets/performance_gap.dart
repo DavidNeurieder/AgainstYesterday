@@ -41,6 +41,7 @@ class PerformanceGap extends ConsumerWidget {
     required this.difference,
     required this.distance,
     required this.state,
+    this.progress = 0,
   });
 
   /// Signed difference (`current - reference`); positive is behind.
@@ -50,6 +51,9 @@ class PerformanceGap extends ConsumerWidget {
   final Distance distance;
 
   final AheadBehind state;
+
+  /// Route progress (0..1) driving the decorative progress track.
+  final double progress;
 
   Color get _color => switch (state) {
         AheadBehind.ahead => AppColors.ahead,
@@ -114,7 +118,7 @@ class PerformanceGap extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            const _ProgressTrack(color: AppColors.ahead),
+            _ProgressTrack(color: AppColors.ahead, progress: progress),
           ],
         ),
       ),
@@ -124,9 +128,10 @@ class PerformanceGap extends ConsumerWidget {
 
 /// Decorative YOU vs GHOST progress track.
 class _ProgressTrack extends StatelessWidget {
-  const _ProgressTrack({required this.color});
+  const _ProgressTrack({required this.color, this.progress = 0});
 
   final Color color;
+  final double progress;
 
   @override
   Widget build(BuildContext context) {
@@ -142,7 +147,7 @@ class _ProgressTrack extends StatelessWidget {
           ),
           child: FractionallySizedBox(
             alignment: Alignment.centerLeft,
-            widthFactor: 0.12,
+            widthFactor: progress.clamp(0.0, 1.0),
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: color,

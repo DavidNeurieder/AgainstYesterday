@@ -211,11 +211,13 @@ class RaceHeroRow extends StatelessWidget {
     required this.distance,
     required this.units,
     this.ghostGap,
+    this.routeProgress = 0,
   });
 
   final Distance distance;
   final Units units;
   final GhostState? ghostGap;
+  final double routeProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -235,6 +237,7 @@ class RaceHeroRow extends StatelessWidget {
                 difference: gap.timeDifference,
                 distance: gap.distance,
                 state: gapState,
+                progress: routeProgress,
               ),
             ),
           ),
