@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/ui/app_sections.dart';
+import '../settings/application/settings_controller.dart';
 import 'offline_region_repository.dart';
 import 'offline_regions.dart';
 
@@ -24,6 +25,8 @@ class MapSettingsSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final regions = ref.watch(offlineRegionRepositoryProvider);
+    final settings = ref.watch(settingsRepositoryProvider);
+    final mapsEnabled = settings.mapsEnabled;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -36,29 +39,28 @@ class MapSettingsSection extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Padding(
-                padding: EdgeInsets.all(AppSpacing.md),
-                child: Text(
-                  'Offline regions let you browse a route without a connection. '
-                  'Each route\'s map is saved automatically the first time you '
-                  'open the route or one of its runs, is capped in size, and is '
-                  'for personal use subject to the tile provider terms.',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
+              SwitchListTile(
+                key: const ValueKey('maps-switch'),
+                secondary: const Icon(Icons.public),
+                title: const Text('Use maps'),
+                subtitle: const Text(
+                  'Download map tiles and styles. Off makes the app fully '
+                  'offline: no map server is contacted and routes are drawn '
+                  'with the built-in map.',
                 ),
+                value: mapsEnabled,
+                onChanged: (value) => ref
+                    .read(settingsRepositoryProvider.notifier)
+                    .save(settings.copyWith(mapsEnabled: value)),
               ),
-              if (regions.isEmpty)
+              const Divider(height: 1, color: AppColors.outline),
+              if (!mapsEnabled)
                 const Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.sm,
-                  ),
+                  padding: EdgeInsets.all(AppSpacing.md),
                   child: Text(
-                    'No offline regions saved yet. A route\'s map is saved the '
-                    'first time you open the route or one of its runs.',
+                    'Maps are off. The app makes no connection to map '
+                    'servers. Saved offline regions are kept and can be used '
+                    'again when you turn maps back on.',
                     style: TextStyle(
                       color: AppColors.textMuted,
                       fontSize: 12,
@@ -66,17 +68,53 @@ class MapSettingsSection extends ConsumerWidget {
                     ),
                   ),
                 )
-              else
-                for (final region in regions) _RegionRow(region: region),
-              const Divider(height: 1, color: AppColors.outline),
-              const Padding(
-                padding: EdgeInsets.all(AppSpacing.md),
-                child: Text(
-                  'Map data © OpenStreetMap contributors (ODbL) · '
-                  'Tiles © OpenFreeMap / OpenMapTiles',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+              else ...[
+                const Padding(
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  child: Text(
+                    'Offline regions let you browse a route without a '
+                    'connection. Each route\'s map is saved automatically the '
+                    'first time you open the route or one of its runs, is '
+                    'capped in size, and is for personal use subject to the '
+                    'tile provider terms.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
                 ),
-              ),
+                if (regions.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    child: Text(
+                      'No offline regions saved yet. A route\'s map is saved '
+                      'the first time you open the route or one of its runs.',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  )
+                else
+                  for (final region in regions) _RegionRow(region: region),
+                const Divider(height: 1, color: AppColors.outline),
+                const Padding(
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  child: Text(
+                    'Map data © OpenStreetMap contributors (ODbL) · '
+                    'Tiles © OpenFreeMap / OpenMapTiles',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

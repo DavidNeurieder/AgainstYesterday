@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../engine/models.dart';
 import '../../persistence/persistence.dart';
+import '../settings/application/settings_controller.dart';
 import 'map_surface.dart';
 import 'offline_region_downloader.dart';
 import 'offline_regions.dart';
@@ -28,9 +29,20 @@ final offlineRegionDownloaderProvider = Provider<OfflineRegionDownloader>(
       : const DisabledOfflineRegionDownloader(),
 );
 
-/// Whether this build can download offline regions (MapLibre renderer).
+/// Whether this build and setting can save map tiles: MapLibre is the only
+/// offline backend, and the user's "Use maps" switch must be on.
+bool offlineRegionsSupported({
+  required bool mapsEnabled,
+  required MapRenderer renderer,
+}) => mapsEnabled && renderer == MapRenderer.maplibre;
+
+/// Whether this build can download offline regions (MapLibre renderer with
+/// maps enabled).
 final offlineMapsAvailableProvider = Provider<bool>(
-  (ref) => selectedMapRenderer == MapRenderer.maplibre,
+  (ref) => offlineRegionsSupported(
+    mapsEnabled: ref.watch(mapsEnabledProvider),
+    renderer: selectedMapRenderer,
+  ),
 );
 
 /// Region list, newest download last — what Settings → Map and the route
@@ -70,8 +82,8 @@ class OfflineRegionRepository extends Notifier<List<OfflineRegion>> {
   /// Called whenever a route or one of its runs is opened. The region is keyed
   /// by route, so all runs of the same course share the one saved map. A ready
   /// or in-flight region is left alone; a failed download is retried on the
-  /// next open. Builds without the MapLibre renderer cannot store tiles, so
-  /// this is a no-op there.
+  /// next open. Builds without the MapLibre renderer, and the user's "Use
+  /// maps" switch being off, make this a no-op.
   Future<void> ensureRoute(Route route) async {
     if (!ref.read(offlineMapsAvailableProvider)) {
       return;

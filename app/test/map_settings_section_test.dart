@@ -12,6 +12,8 @@ import 'package:against_yesterday/core/theme/app_theme.dart';
 import 'package:against_yesterday/features/map/map_settings_section.dart';
 import 'package:against_yesterday/features/map/offline_region_repository.dart';
 import 'package:against_yesterday/features/map/offline_regions.dart';
+import 'package:against_yesterday/features/settings/application/settings_controller.dart';
+import 'package:against_yesterday/features/settings/domain/settings.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'test_catalog.dart';
@@ -86,6 +88,55 @@ void main() {
     expect(find.textContaining('No offline regions saved yet'),
         findsOneWidget);
     expect(find.textContaining('personal use'), findsOneWidget);
+  });
+
+  testWidgets('the Use maps switch defaults on', (tester) async {
+    await _pump(tester, MemoryPersistenceStore());
+
+    final toggle = tester.widget<Switch>(
+      find.descendant(
+        of: find.byKey(const ValueKey('maps-switch')),
+        matching: find.byType(Switch),
+      ),
+    );
+    expect(toggle.value, isTrue);
+  });
+
+  testWidgets('turning maps off hides map data and persists the choice',
+      (tester) async {
+    final store = MemoryPersistenceStore();
+    store.write(kOfflineRegionsKey, offlineRegionListToJson([_readyRegion()]));
+
+    await _pump(tester, store);
+
+    await tester.tap(find.byKey(const ValueKey('maps-switch')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('River Loop'), findsNothing);
+    expect(find.textContaining('Maps are off'), findsOneWidget);
+    expect(find.textContaining('OpenStreetMap'), findsNothing);
+    expect(store.read('settings'), contains('"maps":false'));
+  });
+
+  testWidgets('a stored off switch starts the app fully offline',
+      (tester) async {
+    final store = MemoryPersistenceStore();
+    store.write(
+      'settings',
+      appSettingsToJson(AppSettings.defaults.copyWith(mapsEnabled: false)),
+    );
+
+    await _pump(tester, store);
+
+    final toggle = tester.widget<Switch>(
+      find.descendant(
+        of: find.byKey(const ValueKey('maps-switch')),
+        matching: find.byType(Switch),
+      ),
+    );
+    expect(toggle.value, isFalse);
+    expect(find.textContaining('No offline regions saved yet'), findsNothing);
+    expect(find.textContaining('personal use'), findsNothing);
   });
 }
 

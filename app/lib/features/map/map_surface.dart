@@ -30,6 +30,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../engine/models.dart';
+import '../settings/application/settings_controller.dart';
 import 'flutter_map_surface.dart';
 import 'maplibre_map_surface.dart';
 import 'painter_map_surface.dart';
@@ -122,11 +123,15 @@ abstract interface class MapSurface {
 
 /// The renderer for this build. Tests override it with a recording fake to
 /// assert the scene a screen produced without touching a native map.
+///
+/// "Use maps" off wins over the build-time renderer: the painter needs no
+/// network, so the app stays fully offline.
 final mapSurfaceProvider = Provider<MapSurface>((ref) {
   return resolveMapSurface(
     isDesktop: Platform.isLinux,
     isTest: isFlutterTest,
     renderer: selectedMapRenderer,
+    mapsEnabled: ref.watch(mapsEnabledProvider),
   );
 });
 
@@ -138,11 +143,19 @@ bool get isFlutterTest => Platform.environment['FLUTTER_TEST'] == 'true';
 
 /// Picks the surface for a host. Pure so the mapping can be tested without
 /// depending on the host the test happens to run on.
+///
+/// [mapsEnabled] is the user's "Use maps" switch: off always returns the
+/// painter, regardless of host or build flag, so no tile or style request can
+/// leave the device.
 MapSurface resolveMapSurface({
   required bool isDesktop,
   required bool isTest,
   required MapRenderer renderer,
+  bool mapsEnabled = true,
 }) {
+  if (!mapsEnabled) {
+    return const PainterMapSurface();
+  }
   if (isTest) {
     return const PainterMapSurface();
   }

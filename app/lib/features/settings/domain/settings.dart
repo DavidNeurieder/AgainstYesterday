@@ -41,6 +41,7 @@ class AppSettings {
     required this.locationRationaleSeen,
     this.themeMode = AppThemeMode.dark,
     this.replaySpeed = 1.0,
+    this.mapsEnabled = true,
   });
 
   /// Vibrate on interactions (start, finish, phase changes, …).
@@ -77,6 +78,13 @@ class AppSettings {
   /// Last-used replay playback speed (§replay). Defaults to 1x.
   final double replaySpeed;
 
+  /// Whether the app may talk to map servers for tiles and styles.
+  ///
+  /// Defaults to on. Turning it off makes the app fully offline: every screen
+  /// draws with the self-contained painter, no tile/style request is made and
+  /// no offline region is downloaded. Saved regions are kept for later.
+  final bool mapsEnabled;
+
   static const AppSettings defaults = AppSettings(
     hapticsEnabled: true,
     countdownEnabled: true,
@@ -84,6 +92,7 @@ class AppSettings {
     onboardingSeen: true,
     locationRationaleSeen: true,
     themeMode: AppThemeMode.dark,
+    mapsEnabled: true,
   );
 
   AppSettings copyWith({
@@ -94,6 +103,7 @@ class AppSettings {
     bool? locationRationaleSeen,
     AppThemeMode? themeMode,
     double? replaySpeed,
+    bool? mapsEnabled,
   }) =>
       AppSettings(
         hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
@@ -103,6 +113,7 @@ class AppSettings {
         locationRationaleSeen: locationRationaleSeen ?? this.locationRationaleSeen,
         themeMode: themeMode ?? this.themeMode,
         replaySpeed: replaySpeed ?? this.replaySpeed,
+        mapsEnabled: mapsEnabled ?? this.mapsEnabled,
       );
 
   @override
@@ -114,7 +125,8 @@ class AppSettings {
       other.onboardingSeen == onboardingSeen &&
       other.locationRationaleSeen == locationRationaleSeen &&
       other.themeMode == themeMode &&
-      other.replaySpeed == replaySpeed;
+      other.replaySpeed == replaySpeed &&
+      other.mapsEnabled == mapsEnabled;
 
   @override
   int get hashCode => Object.hash(
@@ -125,5 +137,6 @@ class AppSettings {
         locationRationaleSeen,
         themeMode,
         replaySpeed,
+        mapsEnabled,
       );
 }

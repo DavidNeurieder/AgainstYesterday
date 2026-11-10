@@ -209,10 +209,16 @@ void main() {
       units: Units.miles,
       onboardingSeen: false,
       locationRationaleSeen: false,
+      mapsEnabled: false,
     );
     expect(parseAppSettings(appSettingsToJson(custom)), custom);
     expect(parseAppSettings(appSettingsToJson(AppSettings.defaults)),
         AppSettings.defaults);
+  });
+
+  test('maps default to on for documents written before the switch', () {
+    expect(parseAppSettings('{}').mapsEnabled, isTrue);
+    expect(parseAppSettings('{"maps":false}').mapsEnabled, isFalse);
   });
 
   test('corrupt settings fall back to the defaults', () {

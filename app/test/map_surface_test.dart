@@ -121,6 +121,27 @@ void main() {
     expect(container.read(mapSurfaceProvider), isA<PainterMapSurface>());
   });
 
+  test('maps switched off always keeps the painter, even on a map build', () {
+    expect(
+      resolveMapSurface(
+        isDesktop: true,
+        isTest: false,
+        renderer: MapRenderer.maplibre,
+        mapsEnabled: false,
+      ),
+      isA<PainterMapSurface>(),
+    );
+    expect(
+      resolveMapSurface(
+        isDesktop: false,
+        isTest: false,
+        renderer: MapRenderer.maplibre,
+        mapsEnabled: false,
+      ),
+      isA<PainterMapSurface>(),
+    );
+  });
+
   test('a desktop app build selects the flutter_map tiles', () {
     expect(
       resolveMapSurface(

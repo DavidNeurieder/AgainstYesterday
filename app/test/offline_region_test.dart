@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:against_yesterday/features/map/map_surface.dart';
 import 'package:against_yesterday/features/map/offline_region_downloader.dart';
 import 'package:against_yesterday/features/map/offline_region_repository.dart';
 import 'package:against_yesterday/features/map/offline_regions.dart';
@@ -163,6 +164,32 @@ void main() {
       store.write(kOfflineRegionsKey, '{"nope": true}');
       expect(_container(store: store).read(offlineRegionRepositoryProvider),
           isEmpty);
+    });
+  });
+
+  group('availability', () {
+    test('needs both the MapLibre renderer and the Use maps switch', () {
+      expect(
+        offlineRegionsSupported(
+          mapsEnabled: true,
+          renderer: MapRenderer.maplibre,
+        ),
+        isTrue,
+      );
+      expect(
+        offlineRegionsSupported(
+          mapsEnabled: false,
+          renderer: MapRenderer.maplibre,
+        ),
+        isFalse,
+      );
+      expect(
+        offlineRegionsSupported(
+          mapsEnabled: true,
+          renderer: MapRenderer.painter,
+        ),
+        isFalse,
+      );
     });
   });
 

@@ -27,6 +27,7 @@ String appSettingsToJson(AppSettings settings) => const JsonEncoder().convert({
   'locationRationale': settings.locationRationaleSeen,
   'theme': settings.themeMode.name,
   'replaySpeed': settings.replaySpeed,
+  'maps': settings.mapsEnabled,
 });
 
 AppSettings parseAppSettings(String json) {
@@ -49,6 +50,9 @@ AppSettings parseAppSettings(String json) {
       orElse: () => AppSettings.defaults.themeMode,
     ),
     replaySpeed: (map['replaySpeed'] as num?)?.toDouble() ?? AppSettings.defaults.replaySpeed,
+    // Documents written before the switch existed keep maps on, which is the
+    // shipped behavior.
+    mapsEnabled: map['maps'] as bool? ?? true,
   );
 }
 
@@ -77,6 +81,14 @@ final replaySpeedProvider = Provider<double>(
 /// Which theme the app follows (§6).
 final themeModeProvider = Provider<AppThemeMode>(
   (ref) => ref.watch(settingsRepositoryProvider).themeMode,
+);
+
+/// Whether map servers may be contacted for tiles and styles.
+///
+/// Read by the map seam and the offline-region repository: off means the
+/// painter draws every map and the app makes no map network request.
+final mapsEnabledProvider = Provider<bool>(
+  (ref) => ref.watch(settingsRepositoryProvider).mapsEnabled,
 );
 
 /// Whether the first-launch intro (§34) still has to be shown.
