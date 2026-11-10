@@ -1352,28 +1352,6 @@ pub unsafe extern "C" fn gps_replay_free(handle: u64) {
     }));
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Round-trips every handler against an empty input buffer: the engine
-    /// must never panic at the boundary and never dereference garbage.
-    #[test]
-    fn empty_input_is_reported_as_invalid() {
-        let mut out: *mut u8 = std::ptr::null_mut();
-        let mut out_len = 0usize;
-        let stub_data: [u8; 0] = [];
-        let status = dispatch(
-            stub_data.as_ptr(),
-            0,
-            &mut out as *mut *mut u8,
-            &mut out_len,
-            process_track,
-        );
-        assert_eq!(status, ST_ERROR);
-    }
-}
-
 /// Analyzes a track and returns a JSON document describing its analytics.
 ///
 /// # Safety
@@ -1395,4 +1373,26 @@ pub extern "C" fn gps_analyze_track(
         let analytics = TrackAnalytics::from_track(&track, &MovingConfig::default());
         Ok(analytics.to_json().into_bytes())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Round-trips every handler against an empty input buffer: the engine
+    /// must never panic at the boundary and never dereference garbage.
+    #[test]
+    fn empty_input_is_reported_as_invalid() {
+        let mut out: *mut u8 = std::ptr::null_mut();
+        let mut out_len = 0usize;
+        let stub_data: [u8; 0] = [];
+        let status = dispatch(
+            stub_data.as_ptr(),
+            0,
+            &mut out as *mut *mut u8,
+            &mut out_len,
+            process_track,
+        );
+        assert_eq!(status, ST_ERROR);
+    }
 }

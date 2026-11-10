@@ -7,46 +7,68 @@
 //! and ghost racing share one definition. Raw GPS data is never modified; this
 //! module only produces derived, annotated results.
 
-use crate::track::Track;
 use crate::track::MovingConfig;
-use crate::units::Duration;
+use crate::track::Track;
 
 /// Quality summary for a track's GPS observations.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AnalyticsQuality {
     /// Number of accepted track points.
+    /// Accepted samples.
     pub accepted_samples: u32,
     /// Number of rejected track points (always 0 for a validated track).
+    /// Rejected samples.
     pub rejected_samples: u32,
     /// Fraction of the track covered by valid samples (0..1).
+    /// Coverage ratio.
     pub coverage_ratio: f64,
     /// Number of gaps longer than the configured threshold.
+    /// GPS gap count.
     pub gps_gap_count: u32,
     /// Whether the track has enough distance for pace analysis.
+    /// Has sufficient distance.
     pub has_sufficient_distance: bool,
     /// Whether any point reports altitude.
+    /// Has elevation data.
     pub has_elevation_data: bool,
 }
 
 /// Derived analytics for a track.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrackAnalytics {
+    /// Total distance in meters.
     pub distance_m: f64,
+    /// Elapsed time in milliseconds.
     pub elapsed_time_ms: u64,
+    /// Moving time in milliseconds.
     pub moving_time_ms: u64,
+    /// Paused time in milliseconds.
     pub paused_time_ms: u64,
+    /// Stopped time in milliseconds.
     pub stopped_time_ms: u64,
+    /// Average pace in ms/km.
     pub average_pace_ms_per_km: Option<u64>,
+    /// Average speed in m/s.
     pub average_speed_mps: Option<f64>,
+    /// Moving speed in m/s.
     pub moving_speed_mps: Option<f64>,
+    /// Maximum speed in m/s.
     pub max_speed_mps: Option<f64>,
+    /// Best pace in ms/km.
     pub best_pace_ms_per_km: Option<u64>,
+    /// Elevation gain in meters.
     pub elevation_gain_m: Option<f64>,
+    /// Elevation loss in meters.
     pub elevation_loss_m: Option<f64>,
+    /// Minimum elevation in meters.
     pub elevation_min_m: Option<f64>,
+    /// Maximum elevation in meters.
     pub elevation_max_m: Option<f64>,
+    /// Pace samples (distance, pace).
     pub pace_samples: Vec<(f64, u64)>,
+    /// Elevation samples (distance, elevation).
     pub elevation_samples: Vec<(f64, f64)>,
+    /// GPS quality summary.
     pub quality: AnalyticsQuality,
 }
 
@@ -83,7 +105,9 @@ impl TrackAnalytics {
             .points()
             .iter()
             .filter_map(|p| p.speed())
-            .fold(None, |acc: Option<f64>, v| Some(acc.map_or(v, |a| a.max(v))));
+            .fold(None, |acc: Option<f64>, v| {
+                Some(acc.map_or(v, |a| a.max(v)))
+            });
 
         let elevation_gain = Some(track.elevation_gain());
         let elevation_loss = Some(track.elevation_loss());
@@ -94,7 +118,10 @@ impl TrackAnalytics {
 
         let mut gap_count = 0u32;
         for pair in track.points().windows(2) {
-            let dt = pair[1].timestamp().elapsed_since(pair[0].timestamp()).as_secs();
+            let dt = pair[1]
+                .timestamp()
+                .elapsed_since(pair[0].timestamp())
+                .as_secs();
             if dt > 10.0 {
                 gap_count += 1;
             }
@@ -197,7 +224,10 @@ fn best_pace_ms_per_km(track: &Track) -> Option<u64> {
     }
     let mut best: Option<f64> = None;
     for i in 1..pts.len() {
-        let dt = pts[i].timestamp().elapsed_since(pts[i - 1].timestamp()).as_secs();
+        let dt = pts[i]
+            .timestamp()
+            .elapsed_since(pts[i - 1].timestamp())
+            .as_secs();
         if dt <= 0.0 {
             continue;
         }
@@ -221,7 +251,10 @@ fn pace_samples(track: &Track, step: f64) -> Vec<(f64, u64)> {
         let seg = crate::geo::distance(pts[i - 1].coordinate(), pts[i].coordinate()).meters();
         cumulative += seg;
         if cumulative - last_sample >= step {
-            let dt = pts[i].timestamp().elapsed_since(pts[0].timestamp()).as_secs();
+            let dt = pts[i]
+                .timestamp()
+                .elapsed_since(pts[0].timestamp())
+                .as_secs();
             if cumulative > 0.0 {
                 let pace = (dt / (cumulative / 1000.0)) * 1000.0;
                 out.push((cumulative, pace as u64));
