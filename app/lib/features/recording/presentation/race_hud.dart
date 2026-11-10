@@ -229,6 +229,15 @@ class RaceHeroRow extends StatelessWidget {
           DistanceReadout(distance, units, secondary: true),
           const SizedBox(width: AppSpacing.md),
           Expanded(
+            flex: 1,
+            child: LinearProgressIndicator(
+              value: routeProgress.clamp(0.0, 1.0),
+              minHeight: 4,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            flex: 2,
             child: FittedBox(
               alignment: Alignment.centerRight,
               fit: BoxFit.scaleDown,
