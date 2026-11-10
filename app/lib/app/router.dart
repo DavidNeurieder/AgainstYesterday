@@ -133,8 +133,23 @@ GoRouter buildRouter() {
         builder: (context, state) =>
             ReplayScreen(activityId: state.pathParameters['id']!),
       ),
-      // Statistics for one route, pushed from its detail app bar. Declared
-      // before the detail route so the deeper path always wins.
+      // Statistics for one route, pushed from its detail app bar: a card hub
+      // plus one page per card. Declared before the detail route so the deeper
+      // paths always win.
+      GoRoute(
+        path: '/route/:id/statistics/:section',
+        builder: (context, state) {
+          final section =
+              RouteStatsSection.fromSlug(state.pathParameters['section']!);
+          if (section == null) {
+            return const _NotFound();
+          }
+          return RouteStatisticsSectionScreen(
+            routeId: state.pathParameters['id']!,
+            section: section,
+          );
+        },
+      ),
       GoRoute(
         path: '/route/:id/statistics',
         builder: (context, state) => RouteStatisticsScreen(

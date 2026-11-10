@@ -15,6 +15,7 @@ import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/features/routes/presentation/route_stats_view.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'test_catalog.dart';
@@ -72,10 +73,20 @@ void main() {
       expect(find.text('River Loop'), findsWidgets);
       expect(find.text('Park 5K'), findsOneWidget);
 
-      // Route detail from the catalog.
+      // Route detail from the catalog, then its statistics hub.
       await tester.tap(find.widgetWithText(Card, 'River Loop'));
       await tester.pumpAndSettle();
       expect(find.text('RACE YOUR BEST'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('route-statistics')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('stats-card-overview')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('stats-card-overview')));
+      await tester.pumpAndSettle();
+      expect(find.text('Personal Best'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
       await tester.pageBack();
       await tester.pumpAndSettle();
 
@@ -166,18 +177,52 @@ void main() {
       // Home: hero + recent list.
       expect(find.text('READY TO RACE'), findsOneWidget);
 
-      // Routes tab, the route detail and its statistics page — the run rows
-      // pair a date with a duration and delta, which is where a big scale
-      // bites.
+      // Routes tab, the route detail and its statistics hub — the run rows
+      // pair a date with a duration and delta, and every stats card leads to a
+      // page whose rows must hold too. These are where a big scale bites.
       await tester.tap(tab('Routes'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(Card, 'River Loop'));
       await tester.pumpAndSettle();
       expect(find.text('RACE YOUR BEST'), findsOneWidget);
+
       await tester.tap(find.byKey(const ValueKey('route-statistics')));
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('stats-card-overview')),
+        200,
+      );
+      await tester.tap(find.byKey(const ValueKey('stats-card-overview')));
+      await tester.pumpAndSettle();
       expect(find.text('Personal Best'), findsOneWidget);
-      await tester.pageBack();
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('stats-card-performance')),
+        200,
+      );
+      await tester.tap(find.byKey(const ValueKey('stats-card-performance')));
+      await tester.pumpAndSettle();
+      expect(find.byType(PerformanceChart), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      // Segment comparison moved off the route detail onto its own card page.
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('stats-card-segments')),
+        200,
+      );
+      await tester.tap(find.byKey(const ValueKey('stats-card-segments')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Need at least two activities with tracks to compare.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byIcon(Icons.arrow_back));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('runs-sort')),

@@ -66,6 +66,7 @@ void main() {
     expect(find.text('Date'), findsOneWidget);
     expect(find.text('Time'), findsOneWidget);
     expect(find.text('Personal Best'), findsNothing);
+    expect(find.text('Segment comparison'), findsNothing);
 
     // The seeded PB still shows in the headline row.
     expect(find.textContaining('24:30'), findsWidgets);
@@ -80,9 +81,9 @@ void main() {
     );
   });
 
-  testWidgets('the statistics button opens only this route\'s statistics',
+  testWidgets('the statistics button opens a hub scoped to this route',
       (tester) async {
-    // Tall enough that the single stats card is built without scrolling.
+    // Tall enough that the hub cards are built without scrolling.
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -103,10 +104,39 @@ void main() {
     expect(find.text('River Loop'), findsOneWidget);
     expect(find.text('Park 5K'), findsNothing);
     expect(find.text('Hügelrunde'), findsNothing);
+    // The hub is a set of cards, not the numbers themselves.
+    expect(find.byKey(const ValueKey('stats-card-overview')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('stats-card-performance')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('stats-card-segments')), findsOneWidget);
+    expect(find.text('Personal Best'), findsNothing);
+
+    // Overview → the numeric breakdown for this route only.
+    await tester.tap(find.byKey(const ValueKey('stats-card-overview')));
+    await tester.pumpAndSettle();
     expect(find.text('Personal Best'), findsOneWidget);
     expect(find.text('Average'), findsOneWidget);
-    expect(find.text('Performance'), findsOneWidget);
+    expect(find.text('Park 5K'), findsNothing);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Performance → the chart and its timed runs.
+    await tester.tap(find.byKey(const ValueKey('stats-card-performance')));
+    await tester.pumpAndSettle();
     expect(find.byType(PerformanceChart), findsOneWidget);
+    expect(find.text('Runs'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    // Segment comparison moved off the route detail onto its own card page.
+    await tester.tap(find.byKey(const ValueKey('stats-card-segments')));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Need at least two activities with tracks to compare.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('runs sort by date and by performance time', (tester) async {

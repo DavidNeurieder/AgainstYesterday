@@ -139,10 +139,18 @@ class _StatRow extends StatelessWidget {
 
 /// Bar chart of attempt times (lower is better) with the PB as a baseline.
 class PerformanceChart extends StatelessWidget {
-  const PerformanceChart({super.key, required this.attempts, required this.pb});
+  const PerformanceChart({
+    super.key,
+    required this.attempts,
+    required this.pb,
+    this.height = 120,
+  });
 
   final List<Activity> attempts;
   final Elapsed? pb;
+
+  /// Chart height in logical pixels — shorter for compact card previews.
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +169,7 @@ class PerformanceChart extends StatelessWidget {
     final fastest = durations.isEmpty ? null : durations.reduce(math.min);
 
     return SizedBox(
-      height: 120,
+      height: height,
       child: CustomPaint(
         size: Size.infinite,
         painter: _ChartPainter(
