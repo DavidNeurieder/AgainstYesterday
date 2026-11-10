@@ -326,6 +326,23 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
               units: units,
               ghostGap: snap.ghostGap,
             ),
+            if (snap.routeProgress > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(
+                  '${(snap.routeProgress * 100).toStringAsFixed(1)} % of route',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                ),
+              ),
+            const SizedBox(height: AppSpacing.md),
+            if (snap.routeProgress > 0)
+              LinearProgressIndicator(
+                value: snap.routeProgress.clamp(0.0, 1.0),
+                minHeight: 2,
+              ),
             const SizedBox(height: AppSpacing.md),
             Expanded(
               child: Stack(
