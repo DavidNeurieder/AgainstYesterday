@@ -504,10 +504,9 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
       return;
     }
     final you = widget.scene.you;
-    final update = CameraUpdate.newLatLngZoom(
-      LatLng(you.latitude, you.longitude),
-      _followZoom,
-    );
+    // Keep whatever zoom the user chose: re-applying the follow zoom every
+    // frame made a pinch feel like it was fighting the camera.
+    final update = CameraUpdate.newLatLng(LatLng(you.latitude, you.longitude));
     await _run(controller, update, animate: animate);
   }
 
