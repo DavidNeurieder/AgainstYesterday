@@ -325,6 +325,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
               distance: distance,
               units: units,
               ghostGap: snap.ghostGap,
+              routeProgress: snap.routeProgress,
             ),
             if (snap.routeProgress > 0)
               Padding(
@@ -336,12 +337,6 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
                         color: AppColors.textSecondary,
                       ),
                 ),
-              ),
-            const SizedBox(height: AppSpacing.md),
-            if (snap.routeProgress > 0)
-              LinearProgressIndicator(
-                value: snap.routeProgress.clamp(0.0, 1.0),
-                minHeight: 2,
               ),
             const SizedBox(height: AppSpacing.md),
             Expanded(

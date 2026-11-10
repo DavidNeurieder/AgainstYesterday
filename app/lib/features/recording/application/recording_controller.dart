@@ -764,10 +764,14 @@ class RecordingController extends Notifier<LiveRunState?> {
   double _routeProgressFor(_RecSession session, LiveEngineSnapshot? snap) {
     final reported = snap?.routeProgress ?? 0.0;
     if (reported > 0) return reported.clamp(0.0, 1.0);
-    final route = session.route;
     final distance = snap?.distanceMeters ?? 0.0;
-    if (route != null && route.distance.meters > 0 && distance > 0) {
-      return (distance / route.distance.meters).clamp(0.0, 1.0);
+    // Route-less scenario runs (the Linux demo timeline) have no engine route
+    // to report progress for, but they still circle the demo loop: measure
+    // against its length so the indicator advances instead of sitting at 0.
+    final routeMeters = session.route?.distance.meters ?? 0.0;
+    final total = routeMeters > 0 ? routeMeters : session.loopLength;
+    if (total > 0 && distance > 0) {
+      return (distance / total).clamp(0.0, 1.0);
     }
     return 0.0;
   }

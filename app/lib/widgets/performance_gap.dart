@@ -12,7 +12,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/theme/app_colors.dart';
-import '../core/theme/app_theme.dart';
 import '../core/units.dart';
 import '../engine/models.dart';
 import '../features/settings/application/settings_controller.dart';
@@ -41,7 +40,6 @@ class PerformanceGap extends ConsumerWidget {
     required this.difference,
     required this.distance,
     required this.state,
-    this.progress = 0,
   });
 
   /// Signed difference (`current - reference`); positive is behind.
@@ -51,9 +49,6 @@ class PerformanceGap extends ConsumerWidget {
   final Distance distance;
 
   final AheadBehind state;
-
-  /// Route progress (0..1) driving the decorative progress track.
-  final double progress;
 
   Color get _color => switch (state) {
         AheadBehind.ahead => AppColors.ahead,
@@ -117,44 +112,7 @@ class PerformanceGap extends ConsumerWidget {
                 color: AppColors.textSecondary,
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
-            _ProgressTrack(color: AppColors.ahead, progress: progress),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Decorative YOU vs GHOST progress track.
-class _ProgressTrack extends StatelessWidget {
-  const _ProgressTrack({required this.color, this.progress = 0});
-
-  final Color color;
-  final double progress;
-
-  @override
-  Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 240),
-      child: SizedBox(
-        width: double.infinity,
-        height: 8,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: AppColors.surfaceHigh,
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: progress.clamp(0.0, 1.0),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-          ),
         ),
       ),
     );

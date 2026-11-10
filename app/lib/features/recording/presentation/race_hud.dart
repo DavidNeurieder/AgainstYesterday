@@ -224,7 +224,7 @@ class RaceHeroRow extends StatelessWidget {
     if (ghostGap case final gap?) {
       final gapState = AheadBehind.fromGap(gap);
       return Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           DistanceReadout(distance, units, secondary: true),
           const SizedBox(width: AppSpacing.md),
@@ -233,6 +233,8 @@ class RaceHeroRow extends StatelessWidget {
             child: LinearProgressIndicator(
               value: routeProgress.clamp(0.0, 1.0),
               minHeight: 4,
+              semanticsLabel: 'Route progress',
+              semanticsValue: '${(routeProgress * 100).round()}',
             ),
           ),
           const SizedBox(width: AppSpacing.md),
@@ -246,8 +248,24 @@ class RaceHeroRow extends StatelessWidget {
                 difference: gap.timeDifference,
                 distance: gap.distance,
                 state: gapState,
-                progress: routeProgress,
               ),
+            ),
+          ),
+        ],
+      );
+    }
+    if (routeProgress > 0) {
+      return Row(
+        children: [
+          Expanded(child: DistanceReadout(distance, units)),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            flex: 1,
+            child: LinearProgressIndicator(
+              value: routeProgress.clamp(0.0, 1.0),
+              minHeight: 4,
+              semanticsLabel: 'Route progress',
+              semanticsValue: '${(routeProgress * 100).round()}',
             ),
           ),
         ],

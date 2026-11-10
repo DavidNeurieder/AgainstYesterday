@@ -95,21 +95,6 @@ class LiveRunScreen extends ConsumerWidget {
                 ghostGap: state.ghostGap,
                 routeProgress: state.routeProgress,
               ),
-              if (state.route != null && state.route!.distance.meters > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: AppSpacing.xs),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: FractionallySizedBox(
-                      widthFactor: 0.5,
-                      child: LinearProgressIndicator(
-                        value: (state.distance.meters / state.route!.distance.meters)
-                            .clamp(0.0, 1.0),
-                        minHeight: 2,
-                      ),
-                    ),
-                  ),
-                ),
               const SizedBox(height: AppSpacing.md),
               Expanded(
                 child: Stack(
