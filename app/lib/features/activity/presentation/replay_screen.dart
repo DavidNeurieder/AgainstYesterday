@@ -43,6 +43,7 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
   String? _error;
   bool _loading = true;
   bool _seeking = false;
+  bool _showAnalysis = false;
 
   Route? _route;
   List<GeoPoint> _geometry = const [];
@@ -401,7 +402,9 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
             ),
             _ReplayControls(
               snapshot: snap,
+              showAnalysis: _showAnalysis,
               onToggle: _togglePlay,
+              onToggleAnalysis: () => setState(() => _showAnalysis = !_showAnalysis),
               onSeekStart: () => _seeking = true,
               onSeekEnd: (v) {
                 _seeking = false;
@@ -409,6 +412,15 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
               },
               onSpeed: _setSpeed,
             ),
+            if (_showAnalysis)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                child: Text(
+                  'Analysis: ${snap.elapsedSeconds.toStringAsFixed(1)} s / '
+                  '${snap.distanceMeters.toStringAsFixed(1)} m',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
           ],
         ),
       ),
@@ -447,14 +459,18 @@ class _ReplayPill extends StatelessWidget {
 class _ReplayControls extends StatelessWidget {
   const _ReplayControls({
     required this.snapshot,
+    required this.showAnalysis,
     required this.onToggle,
+    required this.onToggleAnalysis,
     required this.onSeekStart,
     required this.onSeekEnd,
     required this.onSpeed,
   });
 
   final ReplaySnapshot snapshot;
+  final bool showAnalysis;
   final VoidCallback onToggle;
+  final VoidCallback onToggleAnalysis;
   final VoidCallback onSeekStart;
   final ValueChanged<double> onSeekEnd;
   final ValueChanged<double> onSpeed;
@@ -509,6 +525,15 @@ class _ReplayControls extends StatelessWidget {
               'Speed',
               style:
                   textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            IconButton.filledTonal(
+              key: const ValueKey('replay-analysis'),
+              onPressed: onToggleAnalysis,
+              tooltip: 'Analysis',
+              icon: Icon(
+                showAnalysis ? Icons.analytics : Icons.analytics_outlined,
+              ),
             ),
             const SizedBox(width: AppSpacing.xs),
             DropdownButton<double>(
