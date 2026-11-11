@@ -7,6 +7,7 @@
 library;
 
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/app/app_info.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/features/settings/application/link_launcher.dart';
 import 'package:against_yesterday/features/settings/application/settings_controller.dart';
@@ -210,6 +211,39 @@ void main() {
     await tapAboutRow(tester, 'github-link');
 
     expect(find.text('Could not open GitHub.'), findsOneWidget);
+  });
+
+  testWidgets('About shows the version the artifact was built with',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: demoRoutes, activities: demoActivities()),
+          ),
+          // The platform lookup cannot run under flutter_test; override it
+          // with what package_info_plus reports for a device build.
+          appVersionProvider.overrideWith((ref) async => '0.1.0 (1)'),
+        ],
+        child: const AgainstYesterdayApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(tab('Settings'));
+    await tester.pumpAndSettle();
+
+    final row = find.byKey(const ValueKey('app-version'));
+    await tester.scrollUntilVisible(
+      row,
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: row, matching: find.text('0.1.0 (1)')),
+      findsOneWidget,
+    );
   });
 
   test('settings round-trip through the store codec', () {

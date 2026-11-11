@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
+import '../../../app/app_info.dart';
 import '../../../app/dependencies.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
@@ -30,9 +31,6 @@ import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import '../application/track_export.dart';
 
-/// Shown in About and kept in step with `pubspec.yaml`.
-const String kAppVersion = '1.0.0';
-
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -40,6 +38,8 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsRepositoryProvider);
     final notifier = ref.read(settingsRepositoryProvider.notifier);
+    // The installed artifact's own version (§26), not a hand-kept constant.
+    final appVersion = ref.watch(appVersionProvider).value ?? '';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -159,10 +159,11 @@ class SettingsScreen extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sm),
           _Card(
             children: [
-              const ListTile(
-                leading: Icon(Icons.info_outline),
-                title: Text('Version'),
-                trailing: Text(kAppVersion),
+              ListTile(
+                key: const ValueKey('app-version'),
+                leading: const Icon(Icons.info_outline),
+                title: const Text('Version'),
+                trailing: Text(appVersion),
               ),
               const Divider(height: 1, color: AppColors.outline),
               ListTile(
@@ -196,7 +197,7 @@ class SettingsScreen extends ConsumerWidget {
                 onTap: () => showLicensePage(
                   context: context,
                   applicationName: 'Against Yesterday',
-                  applicationVersion: kAppVersion,
+                  applicationVersion: appVersion,
                 ),
               ),
             ],
