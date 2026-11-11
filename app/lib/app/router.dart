@@ -73,6 +73,14 @@ GoRouter buildRouter() {
         builder: (context, state) =>
             RecordFlowScreen(routeId: state.pathParameters['id']),
       ),
+      // Race a specific run's ghost on its route.
+      GoRoute(
+        path: '/race/:id/ghost/:ghostId',
+        builder: (context, state) => RecordFlowScreen(
+          routeId: state.pathParameters['id'],
+          ghostActivityId: state.pathParameters['ghostId'],
+        ),
+      ),
       // Record-a-route (M18): prep → recording → name-and-save → saved.
       GoRoute(
         path: '/record-route',

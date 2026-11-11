@@ -90,10 +90,11 @@ class RecordingController extends Notifier<LiveRunState?> {
     return null;
   }
 
-  void ensureSession(List<Route> preferredRoutes) {
+  void ensureSession(List<Route> preferredRoutes, {Activity? ghostActivity}) {
     if (_session != null) return;
     _session = _RecSession(
       preferredRoutes.isNotEmpty ? preferredRoutes.first : null,
+      ghostActivity: ghostActivity,
     );
     _gpsSource = ref.read(deviceGpsProvider);
     _scenarioDistanceM = 0;
@@ -705,8 +706,15 @@ class RecordingController extends Notifier<LiveRunState?> {
     session.geometry = route.geometry;
     session.loopLength = polylineMeters(session.geometry);
 
-    if (route.personalBest case final pb?) {
-      session.ghostSamples = await _buildGhostSamples(engine, route, pb);
+    final ghostActivity = session.ghostActivity;
+    final pb = ghostActivity?.duration ?? route.personalBest;
+    if (pb case final ghostPb?) {
+      session.ghostSamples = await _buildGhostSamples(
+        engine,
+        route,
+        ghostPb,
+        fastestActivity: ghostActivity ?? _fastestActivityFor(route.id),
+      );
     } else {
       session.ghostSamples = null;
     }
@@ -719,13 +727,14 @@ class RecordingController extends Notifier<LiveRunState?> {
   Future<List<AttemptSample>> _buildGhostSamples(
     EngineService engine,
     Route route,
-    Elapsed pb,
-  ) {
+    Elapsed pb, {
+    Activity? fastestActivity,
+  }) {
     return buildGhostSamples(
       engine: engine,
       route: route,
       pb: pb,
-      fastestActivity: _fastestActivityFor(route.id),
+      fastestActivity: fastestActivity ?? _fastestActivityFor(route.id),
       baseSpeedMps: _baseSpeedMps,
     );
   }
@@ -850,6 +859,7 @@ class RecordingController extends Notifier<LiveRunState?> {
 class _RecSession {
   _RecSession(
     this.route, {
+    this.ghostActivity,
     DateTime? startedAt,
     this.clockSeconds = 0,
     this.loopLength = 0,
@@ -857,6 +867,7 @@ class _RecSession {
 
   final DateTime startedAt;
   Route? route;
+  Activity? ghostActivity;
   List<GeoPoint> geometry = const [];
   double loopLength = 0;
   List<AttemptSample>? ghostSamples;

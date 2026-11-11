@@ -325,42 +325,64 @@ class _RunRow extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Text(
-                duration.format(),
-                textAlign: TextAlign.right,
-                style: textTheme.titleSmall?.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              Flexible(
+                child: Wrap(
+                  spacing: AppSpacing.xs,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      duration.format(),
+                      textAlign: TextAlign.right,
+                      style: textTheme.titleSmall?.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    if (delta != null)
+                      Text(
+                        delta == 0
+                            ? 'PB'
+                            : (delta > 0
+                                  ? '+${Elapsed.seconds(delta).format()}'
+                                  : '-${Elapsed.seconds(-delta).format()}'),
+                        textAlign: TextAlign.right,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: delta <= 0 ? AppColors.ahead : AppColors.behind,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    IconButton(
+                      key: ValueKey('replay-${attempt.id}'),
+                      tooltip: 'Replay',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                      iconSize: 14,
+                      icon: const Icon(Icons.replay_rounded),
+                      color: AppColors.textSecondary,
+                      onPressed: () {
+                        AppHaptics.light(ref);
+                        context.push('/activity/${attempt.id}/replay');
+                      },
+                    ),
+                    if (attempt.routeId != null)
+                      IconButton(
+                        key: ValueKey('race-ghost-${attempt.id}'),
+                        tooltip: 'Race this run',
+                        visualDensity: VisualDensity.compact,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                        iconSize: 14,
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        color: AppColors.you,
+                        onPressed: () {
+                          AppHaptics.medium(ref);
+                          context.push(
+                            '/race/${attempt.routeId}/ghost/${attempt.id}',
+                          );
+                        },
+                      ),
+                  ],
                 ),
-              ),
-              if (delta != null) ...[
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  delta == 0
-                      ? 'PB'
-                      : (delta > 0
-                            ? '+${Elapsed.seconds(delta).format()}'
-                            : '-${Elapsed.seconds(-delta).format()}'),
-                  textAlign: TextAlign.right,
-                  style: textTheme.bodySmall?.copyWith(
-                    color: delta <= 0 ? AppColors.ahead : AppColors.behind,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-              const SizedBox(width: AppSpacing.xs),
-              IconButton(
-                key: ValueKey('replay-${attempt.id}'),
-                tooltip: 'Replay',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                iconSize: 18,
-                icon: const Icon(Icons.replay_rounded),
-                color: AppColors.textSecondary,
-                onPressed: () {
-                  AppHaptics.light(ref);
-                  context.push('/activity/${attempt.id}/replay');
-                },
               ),
             ],
           ),

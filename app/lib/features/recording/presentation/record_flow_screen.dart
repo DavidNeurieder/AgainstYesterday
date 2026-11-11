@@ -31,11 +31,15 @@ import 'run_complete_screen.dart';
 import 'run_error_screen.dart';
 
 class RecordFlowScreen extends ConsumerStatefulWidget {
-  const RecordFlowScreen({super.key, this.routeId});
+  const RecordFlowScreen({super.key, this.routeId, this.ghostActivityId});
 
   /// When set, the session races exactly this route (empty fallback if the
   /// catalog no longer has it); `/race/:id` supplies it, `/record` does not.
   final String? routeId;
+
+  /// When set (together with [routeId]), the ghost is this specific run rather
+  /// than the route's personal best — used by "Race this ghost" on a run row.
+  final String? ghostActivityId;
 
   @override
   ConsumerState<RecordFlowScreen> createState() => _RecordFlowScreenState();
@@ -117,7 +121,13 @@ class _RecordFlowScreenState extends ConsumerState<RecordFlowScreen> {
           for (final route in routes) if (route.id == id) route,
         ];
         _routeMissing = match.isEmpty;
-        controller.ensureSession(match);
+        final ghostActivity = widget.ghostActivityId == null
+            ? null
+            : ref
+                .read(activityRepositoryProvider)
+                .where((a) => a.id == widget.ghostActivityId)
+                .firstOrNull;
+        controller.ensureSession(match, ghostActivity: ghostActivity);
       } else {
         controller.ensureSession(ref.read(routeRepositoryProvider));
       }
