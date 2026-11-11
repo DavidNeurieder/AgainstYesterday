@@ -1,7 +1,7 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-package dev.neurieder.against_yesterday
+package app.against_yesterday
 
 import android.Manifest
 import android.content.ContentValues
@@ -438,10 +438,10 @@ class MainActivity : FlutterActivity() {
     }
 
     private companion object {
-        const val CHANNEL = "dev.neurieder.against_yesterday/files"
-        const val RECORDING_CHANNEL = "dev.neurieder.against_yesterday/recording"
-        const val LOCATION_CHANNEL = "dev.neurieder.against_yesterday/location"
-        const val LOCATION_UPDATES_CHANNEL = "dev.neurieder.against_yesterday/location_updates"
+        const val CHANNEL = "app.against_yesterday/files"
+        const val RECORDING_CHANNEL = "app.against_yesterday/recording"
+        const val LOCATION_CHANNEL = "app.against_yesterday/location"
+        const val LOCATION_UPDATES_CHANNEL = "app.against_yesterday/location_updates"
         const val LOCATION_PERMISSION_REQUEST = 7312
         const val STORAGE_REQUEST = 5416
         const val MIME_TYPE_GPX = "application/gpx+xml"

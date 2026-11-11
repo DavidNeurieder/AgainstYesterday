@@ -49,7 +49,7 @@
 #                  (default build/integration-artifacts, relative to app/)
 set -euo pipefail
 
-PKG="dev.neurieder.against_yesterday"
+PKG="app.against_yesterday"
 
 # --device-gps selects the device-GPS suite, --map-smoke the real MapLibre map
 # smoke, and --smoke narrows the demo suite to its record-and-save journey;

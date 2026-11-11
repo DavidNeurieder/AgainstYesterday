@@ -25,7 +25,7 @@ import '../../../engine/models.dart';
 
 /// The channel `MainActivity` registers to write files into Downloads.
 const MethodChannel trackFilesChannel =
-    MethodChannel('dev.neurieder.against_yesterday/files');
+    MethodChannel('app.against_yesterday/files');
 
 /// A failed export, carrying a message safe to show the user.
 class TrackExportException implements Exception {

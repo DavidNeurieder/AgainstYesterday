@@ -3,7 +3,7 @@
 Against Yesterday — a Flutter GPS running/cycling app (`app/`) whose route/ghost
 pipeline is a Rust engine (`rust/gps-engine`) in a Cargo workspace at the repo
 root. App name/IDs: package `against_yesterday`, Android applicationId
-`dev.neurieder.against_yesterday`, display name "Against Yesterday".
+`app.against_yesterday`, display name "Against Yesterday".
 
 ## Working conventions
 
@@ -44,7 +44,7 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   real GPS and render with the MapLibre map. While the receiver streams, the
   controller keeps an Android foreground `location` service
   (`RecordingForegroundService`, started/stopped over the
-  `dev.neurieder.against_yesterday/recording` platform channel) so fixes keep
+  `app.against_yesterday/recording` platform channel) so fixes keep
   arriving with the screen off — Android 12+ delivers no location to a
   backgrounded app without one. Startup is observable: a typed failure
   (`RunForegroundLifespan`, `ForegroundStartFailure`) becomes a

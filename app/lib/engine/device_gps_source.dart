@@ -97,9 +97,9 @@ class DeviceGpsSource implements GpsSource {
   const DeviceGpsSource();
 
   static const MethodChannel _method =
-      MethodChannel('dev.neurieder.against_yesterday/location');
+      MethodChannel('app.against_yesterday/location');
   static const EventChannel _events =
-      EventChannel('dev.neurieder.against_yesterday/location_updates');
+      EventChannel('app.against_yesterday/location_updates');
 
   @override
   String get description => 'device GPS';

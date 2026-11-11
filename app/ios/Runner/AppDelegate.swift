@@ -32,10 +32,10 @@ final class LocationChannelHandler: NSObject, CLLocationManagerDelegate, Flutter
 
   init(messenger: FlutterBinaryMessenger) {
     methodChannel = FlutterMethodChannel(
-      name: "dev.neurieder.against_yesterday/location",
+      name: "app.against_yesterday/location",
       binaryMessenger: messenger)
     eventChannel = FlutterEventChannel(
-      name: "dev.neurieder.against_yesterday/location_updates",
+      name: "app.against_yesterday/location_updates",
       binaryMessenger: messenger)
     super.init()
     locationManager.delegate = self

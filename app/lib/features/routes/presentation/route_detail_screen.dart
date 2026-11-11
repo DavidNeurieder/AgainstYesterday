@@ -601,7 +601,7 @@ Future<void> _showExpandedMap(
                           urlTemplate:
                               'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                           userAgentPackageName:
-                              'dev.neurieder.against_yesterday',
+                              'app.against_yesterday',
                         ),
                         PolylineLayer(
                           polylines: [

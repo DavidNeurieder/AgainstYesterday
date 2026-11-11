@@ -30,7 +30,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// The platform channel the recording service is driven over.
 const String recordingMethodChannelName =
-    'dev.neurieder.against_yesterday/recording';
+    'app.against_yesterday/recording';
 
 /// Why a foreground-service start attempt failed. Each value carries a
 /// human-readable [message] for logs and diagnostics.

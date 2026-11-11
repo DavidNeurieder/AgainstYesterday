@@ -174,7 +174,7 @@ class _FlutterMapRouteMapState extends State<FlutterMapRouteMap> {
           children: [
             TileLayer(
               urlTemplate: widget.tileUrl ?? kMapTileUrlDefine,
-              userAgentPackageName: 'dev.neurieder.against_yesterday',
+              userAgentPackageName: 'app.against_yesterday',
               maxNativeZoom: 19,
               tileProvider: widget.cacheRoot == null
                   ? null

@@ -72,7 +72,7 @@ class RasterOfflineRegionDownloader implements OfflineRegionDownloader {
         final url = _tileUrl(z: tile.z, x: tile.x, y: tile.y);
         final request = await _client.getUrl(Uri.parse(url));
         request.headers.set(HttpHeaders.userAgentHeader,
-            'dev.neurieder.against_yesterday');
+            'app.against_yesterday');
         final response = await request.close();
         if (response.statusCode < 200 || response.statusCode >= 300) {
           // Drain to allow connection reuse, then report failure.
