@@ -3,7 +3,7 @@
 
 /// Persistence for routes and activities (M10, §27).
 ///
-/// Repositories own the data and expose it to the UI as [Notifier]s, so Home
+/// Repositories own the data and expose it to the UI as [Notifier]s, so screens
 /// and Record stay reactive without routing data through the recording
 /// controller. By default a [`NoopPersistenceStore`] keeps state in memory
 /// (empty catalog, hermetic widget tests); swap in a [`JsonFileStore`] to make
@@ -133,7 +133,7 @@ final persistenceStoreProvider = Provider<PersistenceStore>(
   (_) => const NoopPersistenceStore(),
 );
 
-/// Routed catalog — what Home and Record see.
+/// Routed catalog — what the route library and the recorder see.
 final routeRepositoryProvider =
     NotifierProvider<RouteRepository, List<Route>>(RouteRepository.new);
 

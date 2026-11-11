@@ -1,7 +1,7 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// App shell: bottom navigation across Home / Routes / History (§42).
+/// App shell: bottom navigation across Routes / History / Settings (§42).
 library;
 
 import 'package:flutter/material.dart';
@@ -48,11 +48,6 @@ class AppShell extends ConsumerWidget {
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          NavigationDestination(
             icon: Icon(Icons.route_outlined),
             selectedIcon: Icon(Icons.route),
             label: 'Routes',
@@ -61,6 +56,11 @@ class AppShell extends ConsumerWidget {
             icon: Icon(Icons.history_outlined),
             selectedIcon: Icon(Icons.history),
             label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),

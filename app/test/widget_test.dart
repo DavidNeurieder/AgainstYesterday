@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
@@ -21,55 +22,62 @@ void main() {
         child: const AgainstYesterdayApp(),
       );
 
-  testWidgets('home leads into the race loop', (tester) async {
+  Finder tab(String label) =>
+      find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
+
+  testWidgets('the route library is the landing screen', (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    // Primary action per §4: race the featured route.
-    expect(find.widgetWithText(FilledButton, 'RACE YOUR BEST'), findsOneWidget);
+    // The app opens on the full route catalog, with recording as the primary
+    // action (§4).
+    expect(
+      find.widgetWithText(FilledButton, 'RECORD ROUTE'),
+      findsOneWidget,
+    );
+    expect(find.text('River Loop'), findsOneWidget);
+    expect(find.text('Park 5K'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Hügelrunde'), 200);
+    expect(find.text('Hügelrunde'), findsOneWidget);
 
-    // Hero content from the seeded home directory.
-    expect(find.text('READY TO RACE'), findsOneWidget);
-    expect(find.text('River Loop'), findsOneWidget); // featured route
-    expect(find.text('PB'), findsOneWidget);
-
-    // Recent activity stays on Home; the full route catalog lives on Routes.
-    expect(find.byIcon(Icons.directions_run), findsWidgets);
+    // Home is gone from the shell.
+    expect(tab('Home'), findsNothing);
+    expect(tab('Routes'), findsOneWidget);
+    expect(tab('Settings'), findsOneWidget);
+    expect(tab('History'), findsOneWidget);
   });
 
   testWidgets('shell navigates between tabs', (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    Finder tab(String label) =>
-        find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
-
-    await tester.tap(tab('Routes'));
-    await tester.pumpAndSettle();
-    // The full catalog lives on the Routes tab (§4 Home features one route).
-    expect(find.text('River Loop'), findsWidgets);
+    // The full catalog lives on the landing tab.
+    expect(find.text('River Loop'), findsOneWidget);
     expect(find.text('Park 5K'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Hügelrunde'), 200);
-    expect(find.text('Hügelrunde'), findsOneWidget);
+
+    await tester.tap(tab('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Haptics'), findsOneWidget);
+    expect(find.text('Units'), findsOneWidget);
 
     await tester.tap(tab('History'));
     await tester.pumpAndSettle();
     // The seeded catalog has finished activities → History rows.
     expect(find.byIcon(Icons.directions_run), findsWidgets);
 
-    await tester.tap(tab('Home'));
+    await tester.tap(tab('Routes'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'RACE YOUR BEST'), findsOneWidget);
+    expect(find.text('River Loop'), findsOneWidget);
   });
 
-  testWidgets('home gear opens the settings screen', (tester) async {
+  testWidgets('the Settings tab opens the settings table', (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.tap(tab('Settings'));
     await tester.pumpAndSettle();
-    // M21: the gear lands on the real settings table (§26), not a stub.
-    expect(find.text('Settings'), findsOneWidget);
+    // M21: the tab lands on the real settings table (§26), not a stub.
+    expect(find.text('Settings'), findsWidgets);
     expect(find.text('Haptics'), findsOneWidget);
     expect(find.text('Countdown'), findsOneWidget);
     expect(find.text('Units'), findsOneWidget);
@@ -101,11 +109,22 @@ void main() {
     expect(find.text('Version'), findsOneWidget);
   });
 
-  testWidgets('race your best opens the pre-run flow', (tester) async {
+  testWidgets('the old /routes link lands on the library', (tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    GoRouter.of(tester.element(find.byType(NavigationBar))).go('/routes');
+    await tester.pumpAndSettle();
+
+    expect(find.text('RECORD ROUTE'), findsOneWidget);
+    expect(find.text('River Loop'), findsOneWidget);
+  });
+
+  testWidgets('a library RACE opens the pre-run flow', (tester) async {
+    await tester.pumpWidget(pumpedApp());
+    await tester.pumpAndSettle();
+
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));

@@ -132,7 +132,7 @@ void main() {
   });
 
   group('screen reader labels (§32)', () {
-    testWidgets('the home settings button is labelled for screen readers',
+    testWidgets('the Settings tab is labelled for screen readers',
         semanticsEnabled: true, (tester) async {
       await tester.pumpWidget(ProviderScope(
         overrides: [
@@ -142,7 +142,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(_spoken(tester, 'Settings'), isTrue);
+      expect(find.bySemanticsLabel(RegExp('Settings')), findsWidgets);
     });
 
     testWidgets('the activity detail back button is labelled',
@@ -164,13 +164,17 @@ void main() {
   });
 
   group('touch targets (§32)', () {
-    testWidgets('icon buttons keep the 48 px minimum on home', (tester) async {
+    testWidgets('icon buttons keep the 48 px minimum', (tester) async {
       await tester.pumpWidget(ProviderScope(
         overrides: [
-          persistenceStoreProvider.overrideWithValue(seededStore()),
+          persistenceStoreProvider.overrideWithValue(
+            seededStore(routes: [riverLoopRoute]),
+          ),
         ],
         child: const AgainstYesterdayApp(),
       ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(Card, 'River Loop'));
       await tester.pumpAndSettle();
 
       final icons = find.byType(IconButton);

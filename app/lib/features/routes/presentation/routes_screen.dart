@@ -39,7 +39,7 @@ class RoutesScreen extends ConsumerWidget {
           // whenever, catalog or not.
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.md),
-            child: OutlinedButton.icon(
+            child: FilledButton.icon(
               onPressed: () {
                 AppHaptics.selection(ref);
                 // Pushed, not replaced: the record-a-route flow is a
@@ -49,9 +49,10 @@ class RoutesScreen extends ConsumerWidget {
                 context.push('/record-route');
               },
               icon: const Icon(Icons.add_road),
-              label: const Text('Record Route'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.you,
+              label: const Text('RECORD ROUTE'),
+              style: FilledButton.styleFrom(
+                foregroundColor: AppColors.background,
+                backgroundColor: AppColors.you,
                 minimumSize: const Size.fromHeight(56),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),

@@ -13,6 +13,8 @@ import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:against_yesterday/persistence/serialization.dart';
+import 'package:flutter/material.dart' hide Route;
+import 'package:flutter_test/flutter_test.dart';
 
 /// The River Loop fixture most route-dependent tests start from.
 const Route riverLoopRoute = Route(
@@ -80,6 +82,23 @@ List<Activity> demoActivities() => [
       seedActivity(id: 'act-003'),
       seedActivity(id: 'act-002', routeId: 'park-5k'),
     ];
+
+/// Taps the RACE action on the route library card named [routeName].
+///
+/// The route library is the app's landing screen; a race starts from the
+/// card's own RACE button.
+Future<void> raceFromLibrary(
+  WidgetTester tester, {
+  String routeName = 'River Loop',
+}) async {
+  final action = find.descendant(
+    of: find.widgetWithText(Card, routeName),
+    matching: find.text('RACE'),
+  );
+  await tester.ensureVisible(action);
+  await tester.pumpAndSettle();
+  await tester.tap(action);
+}
 
 /// A store pre-populated with [routes] and [activities], so a widget or a
 /// [ProviderContainer] can be built against a non-empty catalog without disk.

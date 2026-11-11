@@ -137,7 +137,7 @@ Future<void> finishAndConfirm(WidgetTester tester) async {
 /// Dismisses the first-launch intro (§34) when it is showing.
 ///
 /// A fresh install (the harness uninstalls before each suite) lands on the
-/// three-screen intro before Home, so a suite that pumps the app directly must
+/// three-screen intro before the app, so a suite that pumps it directly must
 /// walk it. A no-op when the intro is not present — a warm install or a
 /// pre-seeded settings document never trips the gate.
 Future<void> dismissOnboardingIfPresent(WidgetTester tester) async {

@@ -42,7 +42,7 @@ void main() {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
@@ -57,7 +57,7 @@ void main() {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
@@ -128,17 +128,24 @@ void main() {
     await tester.scrollUntilVisible(find.text('Splits'), 200);
     expect(find.text('Splits'), findsOneWidget);
 
-    // M10: the finished run lands in Home's recent history (empty start →
-    // just this one). RACE AGAIN pushes DONE down the result list, so bring
-    // it on-screen before tapping.
+    // M10: the finished run lands in History (empty start → just this one).
+    // RACE AGAIN pushes DONE down the result list, so bring it on-screen
+    // before tapping.
     await tester.scrollUntilVisible(find.text('DONE'), 200);
     await tester.pump();
     await tester.tap(find.text('DONE'));
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.directions_run), findsNWidgets(1));
+    expect(find.text('River Loop'), findsWidgets);
+
+    await tester.tap(find.descendant(
+      of: find.byType(NavigationBar),
+      matching: find.text('History'),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byType(Card), findsOneWidget);
 
     // M11: tapping the most recent activity opens its detail screen.
-    await tester.tap(find.byIcon(Icons.directions_run).first);
+    await tester.tap(find.byType(Card).first);
     await tester.pumpAndSettle();
     expect(find.text('River Loop'), findsWidgets);
     // The recorded-track map (M-offline Phase 2) pushes the footer below the

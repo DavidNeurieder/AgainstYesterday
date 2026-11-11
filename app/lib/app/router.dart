@@ -1,8 +1,8 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// Route table for the app (§42): HOME / ROUTES / HISTORY shell plus pushed
-/// full-screen flows: /record, /settings and the detail screens.
+/// Route table for the app (§42): ROUTES / SETTINGS / HISTORY shell plus
+/// pushed full-screen flows: /record and the detail screens.
 library;
 
 import 'package:flutter/material.dart';
@@ -13,7 +13,6 @@ import '../features/activity/presentation/activity_detail_screen.dart';
 import '../features/activity/presentation/replay_screen.dart';
 import '../features/dev/presentation/diagnostics_screen.dart';
 import '../features/history/presentation/history_screen.dart';
-import '../features/home/presentation/home_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/recording/presentation/record_flow_screen.dart';
 import '../features/recording/presentation/route_record_flow_screen.dart';
@@ -53,6 +52,8 @@ GoRouter buildRouter() {
         path: '/intro',
         builder: (context, state) => const OnboardingScreen(),
       ),
+      // The old Routes tab is now the landing tab; keep deep links working.
+      GoRoute(path: '/routes', redirect: (context, state) => '/'),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return AppShell(navigationShell: navigationShell);
@@ -62,14 +63,6 @@ GoRouter buildRouter() {
             routes: [
               GoRoute(
                 path: '/',
-                builder: (context, state) => const HomeScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/routes',
                 builder: (context, state) => const RoutesScreen(),
               ),
             ],
@@ -79,6 +72,14 @@ GoRouter buildRouter() {
               GoRoute(
                 path: '/history',
                 builder: (context, state) => const HistoryScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                builder: (context, state) => const SettingsScreen(),
               ),
             ],
           ),
@@ -105,13 +106,9 @@ GoRouter buildRouter() {
         path: '/record/result',
         builder: (context, state) => const ResultScreen(),
       ),
-      GoRoute(
-        path: '/settings',
-        builder: (context, state) => const SettingsScreen(),
-      ),
       // Developer diagnostics (M15 Phase 10). Gated in the router as well as
       // in the shell: with dev tools off, a deep link or manual push lands
-      // back on Home instead of exposing the readout.
+      // back on the landing tab instead of exposing the readout.
       GoRoute(
         path: '/dev/diagnostics',
         redirect: (context, state) {

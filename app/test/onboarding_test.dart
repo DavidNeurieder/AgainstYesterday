@@ -100,7 +100,7 @@ void main() {
     expect(find.text('Against Yesterday'), findsNothing);
     expect(find.text('GET STARTED'), findsNothing);
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Your first race awaits.'), findsOneWidget);
+    expect(find.text('No routes yet. Record your first route.'), findsOneWidget);
   });
 
   testWidgets('an already-seen install never enters the intro',
@@ -112,7 +112,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Against Yesterday'), findsNothing);
     expect(find.byType(NavigationBar), findsOneWidget);
-    expect(find.text('Your first race awaits.'), findsOneWidget);
+    expect(find.text('No routes yet. Record your first route.'), findsOneWidget);
   });
 
   group('the gate', () {

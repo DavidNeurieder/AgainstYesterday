@@ -22,7 +22,7 @@ void main() {
   /// Drives the fake-GPS acquisition tone by tone so each phase is observed.
   /// Seeds a route so the record flow has a ghost to race (the app starts
   /// empty, so the ghost only exists when a route is picked). The flow is a
-  /// pushed screen on top of the shell (M16), reached from Home's primary
+  /// pushed screen on top of the shell (M16), reached from the route library's
   /// action.
   Future<void> openRecordFlow(WidgetTester tester) async {
     await tester.pumpWidget(ProviderScope(
@@ -34,7 +34,7 @@ void main() {
       child: const AgainstYesterdayApp(),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     // Let the pushed `/record` page transition finish without crossing the
     // first 500 ms acquisition tone, so the phase assertions stay aligned.

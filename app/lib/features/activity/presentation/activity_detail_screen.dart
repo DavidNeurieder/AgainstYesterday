@@ -3,7 +3,7 @@
 
 /// Activity detail screen (§24, M11).
 ///
-/// Reached by tapping an activity in Home's recent list. Shows the same
+/// Reached by tapping an activity in History. Shows the same
 /// layout as [ResultScreen] but reads persisted data from the repositories.
 library;
 
@@ -400,7 +400,7 @@ class _NotFoundScreen extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
             TextButton(
               onPressed: () => context.go('/'),
-              child: const Text('Back to Home'),
+              child: const Text('Back to Routes'),
             ),
           ],
         ),

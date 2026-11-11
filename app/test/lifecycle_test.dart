@@ -279,8 +279,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    // Start from Home's primary action and reach READY TO RUN.
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    // Start from the route library's RACE action and reach READY TO RUN.
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
@@ -331,7 +331,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));

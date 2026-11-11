@@ -267,7 +267,7 @@ class _EmptyResult extends StatelessWidget {
       body: Center(
         child: TextButton(
           onPressed: () => context.go('/'),
-          child: const Text('Back to Home'),
+          child: const Text('Back to Routes'),
         ),
       ),
     );

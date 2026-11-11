@@ -284,7 +284,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('RACE YOUR BEST'));
+      await raceFromLibrary(tester);
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();

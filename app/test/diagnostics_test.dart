@@ -13,7 +13,7 @@ import 'package:against_yesterday/app/router.dart';
 import 'package:against_yesterday/core/theme/app_theme.dart';
 import 'package:against_yesterday/features/dev/application/fixture_export.dart';
 import 'package:against_yesterday/features/dev/presentation/diagnostics_screen.dart';
-import 'package:against_yesterday/features/home/presentation/home_screen.dart';
+import 'package:against_yesterday/features/routes/presentation/routes_screen.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/features/recording/presentation/live_run_screen.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
@@ -63,9 +63,9 @@ void main() {
   Future<void> goToDiagnostics(WidgetTester tester) async {
     // The record flow is a pushed full-screen route (M16) with no shell
     // chrome, so reach diagnostics through the router instead of the floating
-    // dev-tools button — whether the caller is on Home or in a live run.
+    // dev-tools button — whether the caller is on the route library or in a live run.
     final where = find.byType(LiveRunScreen).evaluate().isEmpty
-        ? find.byType(HomeScreen)
+        ? find.byType(RoutesScreen)
         : find.byType(LiveRunScreen);
     GoRouter.of(tester.element(where)).go('/dev/diagnostics');
     await tester.pump();
@@ -73,7 +73,7 @@ void main() {
   }
 
   Future<void> startLiveRun(WidgetTester tester) async {
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
@@ -106,11 +106,11 @@ void main() {
     await tester.pumpWidget(ProviderScope(child: app()));
     await tester.pumpAndSettle();
 
-    GoRouter.of(tester.element(find.byType(HomeScreen))).go('/dev/diagnostics');
+    GoRouter.of(tester.element(find.byType(RoutesScreen))).go('/dev/diagnostics');
     await tester.pumpAndSettle();
 
     expect(find.byType(DiagnosticsScreen), findsNothing);
-    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.byType(RoutesScreen), findsOneWidget);
   });
 
   testWidgets('dev gate exposes diagnostics and the engine identity', (

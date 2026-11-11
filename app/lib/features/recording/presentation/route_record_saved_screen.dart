@@ -3,7 +3,7 @@
 
 /// Route saved (§8 "After saving"): the new course is in the catalog and the
 /// recorded time stands as its first personal best. Two exits — into the route
-/// detail (VIEW ROUTE) or back to Home (DONE).
+/// detail (VIEW ROUTE) or back to the route library (DONE).
 library;
 
 import 'package:flutter/material.dart' hide Route;

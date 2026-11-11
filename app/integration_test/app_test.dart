@@ -42,12 +42,12 @@ void main() {
         .saveRoute(riverLoopRoute);
     await tester.pumpAndSettle();
 
-    // Home is the default tab.
-    expect(find.text('Run against yesterday'), findsOneWidget);
+    // The route library is the default tab.
+    expect(find.text('RECORD ROUTE'), findsOneWidget);
     expect(find.text('River Loop'), findsWidgets);
 
-    // Home → Record via the hero's race action.
-    await tester.tap(find.text('RACE YOUR BEST'));
+    // The library card races its route.
+    await raceFromLibrary(tester);
     await tester.pumpAndSettle();
     await waitForText(tester, 'READY TO RUN');
     expect(find.text('GPS READY'), findsOneWidget);
@@ -94,32 +94,39 @@ void main() {
     expect(find.text('PERFORMANCE'), findsOneWidget);
     expect(find.textContaining('fastest run'), findsOneWidget);
 
-    // DONE → Home now shows the finished run (empty start + this one = one
-    // tile). The save runs in the background on purpose, so poll for the tile
-    // rather than assuming it landed while the screens changed underneath.
+    // DONE → the route library. History now shows the finished run (empty
+    // start + this one = one row). The save runs in the background on purpose,
+    // so poll for the row rather than assuming it landed while the screens
+    // changed underneath.
     await tester.tap(find.text('DONE'));
+    await waitForText(tester, 'RECORD ROUTE');
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('History'),
+      ),
+    );
+    await tester.pumpAndSettle();
     await waitForCondition(
       tester,
-      () => tester.widgetList(find.byIcon(Icons.directions_run)).isNotEmpty,
-      'the finished run to appear on Home as a tile',
+      () => tester.any(find.widgetWithText(Card, 'River Loop')),
+      'the finished run to appear in History',
       // On timeout, separate "the save never ran" (activities still 0) from
-      // "the save ran but Home never rebuilt" (activities 1, tiles 0), report
-      // the live run's status (still recording = the finish tap never landed),
-      // and say how far the background save got / where it broke.
+      // "the save ran but History never rebuilt" (activities 1, no row),
+      // report the live run's status (still recording = the finish tap never
+      // landed), and say how far the background save got / where it broke.
       diagnostics: () {
         final activities = container.read(activityRepositoryProvider).length;
         final snapshot = container.read(runSnapshotProvider);
         final status = container.read(recordingControllerProvider)?.status.name;
         final save = container.read(saveProgressProvider);
-        return 'tiles='
-            '${tester.widgetList(find.byIcon(Icons.directions_run)).length}, '
+        return 'rows=${tester.widgetList(find.byType(Card)).length}, '
             'activities=$activities, '
             'run_snapshot=${snapshot == null ? 'null' : 'present'}, '
             'run_status=$status, save=$save';
       },
     );
-    expect(find.byIcon(Icons.directions_run), findsNWidgets(1));
-    expect(find.text('Run against yesterday'), findsOneWidget);
+    expect(find.widgetWithText(Card, 'River Loop'), findsOneWidget);
   });
 
   testWidgets('browses the route library', (tester) async {
@@ -207,7 +214,7 @@ void main() {
         .read(routeRepositoryProvider.notifier)
         .saveRoute(riverLoopRoute);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pumpAndSettle();
     await waitForText(tester, 'READY TO RUN');
     await tester.tap(find.text('START'));
@@ -237,9 +244,9 @@ void main() {
     await tester.pumpAndSettle();
 
     // The snapshot is still there (and the seeded route still carries a PB ghost),
-    // so Home's hero resumes it — the live screen (not the pre-run/READY
+    // so the library race resumes it — the live screen (not the pre-run/READY
     // screen) must appear, at distance greater-or-equal to where the app died.
-    await tester.tap(find.text('RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pumpAndSettle();
     await waitForText(tester, 'PACE');
     expect(find.text('TIME'), findsOneWidget);

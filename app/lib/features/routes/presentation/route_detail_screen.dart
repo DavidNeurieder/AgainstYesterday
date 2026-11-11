@@ -459,7 +459,7 @@ class _NotFoundScreen extends StatelessWidget {
             const SizedBox(height: 8),
             TextButton(
               onPressed: () => context.go('/'),
-              child: const Text('Back to Home'),
+              child: const Text('Back to Routes'),
             ),
           ],
         ),

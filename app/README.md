@@ -33,10 +33,10 @@ mode (`test/recording_controller_device_test.dart`) and the M15 diagnostics
 plus fixture export (`test/diagnostics_test.dart`,
 `test/fixture_export_test.dart`). The M16 design system
 (`test/ui_kit_test.dart`) pins the shared `core/ui` building blocks and the
-shell restructure (Home / Routes / History tabs, pushed record flow) is
-covered in `test/widget_test.dart`, and the M17 Home rework — the
-"READY TO RACE" featured-route hero plus the first-launch "Your first race
-awaits." empty state — in `test/widget_test.dart` and `test/ui_state_test.dart`,
+shell restructure (Routes / History / Settings tabs, pushed record flow) is
+covered in `test/widget_test.dart`, and the route-library landing — the
+record-route action plus its first-launch empty state — in
+`test/widget_test.dart` and `test/polish_test.dart`,
 the M18 record-a-route flow (prep → recording → name-and-save → saved) in
 `test/record_route_test.dart`, the M19 route-bound pre-race with its
 3-2-1-GO countdown (plus the M20 RACE AGAIN loop) in
@@ -73,9 +73,9 @@ flutter test --dart-define=REQUIRE_RUST_ENGINE=true
 ## On-device integration tests
 
 `integration_test/app_test.dart` drives the real app end to end on an
-emulator/device (real clock, real timers): record a run (Home → READY → START
-→ pause/resume → FINISH → result → DONE → history) and browse the route
-library.
+emulator/device (real clock, real timers): record a run (route library → READY
+→ START → pause/resume → FINISH → result → DONE → history) and browse the
+route library.
 
 ```bash
 flutter test integration_test -d <device>

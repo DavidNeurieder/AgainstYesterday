@@ -12,7 +12,7 @@ import '../theme/app_theme.dart';
 
 /// An icon-led calm message where a section has nothing to show yet.
 ///
-/// [compact] renders the inline row used inside lists (Home section hints);
+/// [compact] renders the inline row used inside lists (section hints);
 /// the default is the centered, larger treatment for whole screens.
 class EmptyState extends StatelessWidget {
   const EmptyState({

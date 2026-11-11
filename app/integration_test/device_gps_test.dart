@@ -127,11 +127,11 @@ void main() {
       'the saved route to land in the catalog',
     );
 
-    // DONE → Home lists it alongside the (empty) activity history. The saved
-    // screen shows the route name too, so wait for the home-only title before
-    // asserting the tile.
+    // DONE → the route library lists it alongside the (empty) activity
+    // history. The saved screen shows the route name too, so wait for the
+    // library-only action before asserting the tile.
     await tester.tap(find.text('DONE'));
-    await waitForText(tester, 'Run against yesterday');
+    await waitForText(tester, 'RECORD ROUTE');
     // DONE sends the shell back to the top, but the saved screen carries the
     // same name until its removal transition drains — wait for the settled
     // count before asserting the tile (the host journey settles first in
@@ -157,7 +157,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Same pre-run gate as the demo suite, but fed by the real receiver.
-    await tester.tap(find.text('RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pumpAndSettle();
     // §33: the explanation is shown once per install; the record leg above
     // takes it, so this is normally a no-op — but keep the race leg robust.
@@ -213,7 +213,7 @@ void main() {
       diagnostics: () => 'DONE rect=${tester.getRect(done)}',
     );
     await tester.tap(done);
-    await waitForText(tester, 'Run against yesterday');
+    await waitForText(tester, 'RECORD ROUTE');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();

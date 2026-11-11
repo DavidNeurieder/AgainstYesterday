@@ -60,16 +60,9 @@ void main() {
       await tester.pumpWidget(seededApp());
       await tester.pumpAndSettle();
 
-      // Home: hero + recent list (M23 entrance settles).
-      expect(find.text('READY TO RACE'), findsOneWidget);
-      expect(
-        find.widgetWithText(FilledButton, 'RACE YOUR BEST'),
-        findsOneWidget,
-      );
-
-      // Routes tab: the full catalog.
-      await tester.tap(tab('Routes'));
-      await tester.pumpAndSettle();
+      // Landing: the route library (M23 entrance settles).
+      expect(find.text('Routes'), findsWidgets);
+      expect(find.widgetWithText(FilledButton, 'RECORD ROUTE'), findsOneWidget);
       expect(find.text('River Loop'), findsWidgets);
       expect(find.text('Park 5K'), findsOneWidget);
 
@@ -102,10 +95,8 @@ void main() {
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
 
-      // Settings from Home's gear, scrolled to About.
-      await tester.tap(tab('Home'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.settings_outlined));
+      // Settings tab, scrolled to About.
+      await tester.tap(tab('Settings'));
       await tester.pumpAndSettle();
       expect(find.text('Haptics'), findsOneWidget);
       expect(find.text('Units'), findsOneWidget);
@@ -119,7 +110,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Pre-race.
-      await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+      await raceFromLibrary(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump(const Duration(milliseconds: 600));
@@ -174,14 +165,12 @@ void main() {
       await tester.pumpWidget(seededApp());
       await tester.pumpAndSettle();
 
-      // Home: hero + recent list.
-      expect(find.text('READY TO RACE'), findsOneWidget);
+      // Landing: the route library.
+      expect(find.text('River Loop'), findsWidgets);
 
-      // Routes tab, the route detail and its statistics hub — the run rows
-      // pair a date with a duration and delta, and every stats card leads to a
-      // page whose rows must hold too. These are where a big scale bites.
-      await tester.tap(tab('Routes'));
-      await tester.pumpAndSettle();
+      // The route detail and its statistics hub — the run rows pair a date
+      // with a duration and delta, and every stats card leads to a page whose
+      // rows must hold too. These are where a big scale bites.
       await tester.tap(find.widgetWithText(Card, 'River Loop'));
       await tester.pumpAndSettle();
       expect(find.text('RACE YOUR BEST'), findsOneWidget);
@@ -239,10 +228,8 @@ void main() {
       await tester.tap(find.byIcon(Icons.arrow_back));
       await tester.pumpAndSettle();
 
-      // Settings from Home's gear, through to About.
-      await tester.tap(tab('Home'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byIcon(Icons.settings_outlined));
+      // Settings tab, through to About.
+      await tester.tap(tab('Settings'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.text('Version'), 200);
       expect(find.text('Version'), findsOneWidget);
@@ -254,13 +241,9 @@ void main() {
       await tester.pumpWidget(seededApp());
       await tester.pumpAndSettle();
 
-      // Pre-race. The primary action sits below the fold once the text is
+      // Pre-race. The RACE action sits below the fold once the text is
       // taller, so the runner scrolls to it — reachability is the point here.
-      await tester.ensureVisible(
-        find.widgetWithText(FilledButton, 'RACE YOUR BEST'),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+      await raceFromLibrary(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
       await tester.pump(const Duration(milliseconds: 600));
@@ -310,11 +293,7 @@ void main() {
     await tester.pumpWidget(seededApp());
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(
-      find.widgetWithText(FilledButton, 'RACE YOUR BEST'),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));

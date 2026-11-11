@@ -3,10 +3,10 @@
 
 /// M19: racing a specific route (§9–§11).
 ///
-/// Every race entry — Home's hero, a courses-tab RACE button, a route
-/// detail's RACE YOUR BEST — lands on that route's pre-race screen, and
-/// START plays the 3-2-1-GO countdown before the live run begins. The app
-/// ships with an empty catalog, so routes are seeded explicitly.
+/// Every race entry — a route library RACE button, a route detail's
+/// RACE YOUR BEST — lands on that route's pre-race screen, and START plays
+/// the 3-2-1-GO countdown before the live run begins. The app ships with an
+/// empty catalog, so routes are seeded explicitly.
 library;
 
 import 'package:flutter/material.dart' hide Route;
@@ -33,13 +33,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   }
 
-  testWidgets('the hero race counts down 3-2-1-GO into a live run',
+  testWidgets('a library race counts down 3-2-1-GO into a live run',
       (tester) async {
     await tester.pumpWidget(app(routes: demoRoutes));
     await tester.pumpAndSettle();
 
-    // The hero races the featured route — its pre-race names it.
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    // The library card races its own route — its pre-race names it.
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
@@ -73,29 +73,29 @@ void main() {
     expect(find.text('GO!'), findsNothing);
   });
 
-  testWidgets('the race pre-race can go back to the main screen',
+  testWidgets('the race pre-race can go back to the route library',
       (tester) async {
     await tester.pumpWidget(app(routes: demoRoutes));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
     expect(find.text('READY TO RUN'), findsOneWidget);
 
     // The race is a pushed full-screen route over the shell, so its AppBar
-    // carries a back button and the system back gesture pops back to Home
-    // instead of exiting the app.
+    // carries a back button and the system back gesture pops back to the
+    // route library instead of exiting the app.
     expect(find.byType(BackButton), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(FilledButton, 'RACE YOUR BEST'), findsOneWidget);
+    expect(find.widgetWithText(Card, 'River Loop'), findsOneWidget);
     expect(find.text('READY TO RUN'), findsNothing);
   });
 
-  testWidgets('a courses-tab race can go back to the courses tab',
+  testWidgets('a library race can go back to the route library',
       (tester) async {
     await tester.pumpWidget(app(routes: demoRoutes));
     await tester.pumpAndSettle();
@@ -184,7 +184,7 @@ void main() {
     await tester.pumpWidget(app(routes: demoRoutes));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);
@@ -221,7 +221,7 @@ void main() {
     await tester.pumpWidget(app(routes: demoRoutes));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await waitReady(tester);

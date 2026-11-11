@@ -46,7 +46,22 @@ void main() {
       pumpedApp(exporter: exporter, linkLauncher: linkLauncher),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Settings'),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  Finder tab(String label) => find.descendant(
+    of: find.byType(NavigationBar),
+    matching: find.text(label),
+  );
+
+  Future<void> openRoutes(WidgetTester tester) async {
+    await tester.tap(tab('Routes'));
     await tester.pumpAndSettle();
   }
 
@@ -69,9 +84,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('countdown-switch')));
     await tester.pumpAndSettle();
 
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await openRoutes(tester);
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
@@ -94,10 +108,9 @@ void main() {
     await tester.tap(find.text('Miles'));
     await tester.pumpAndSettle();
 
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    // River Loop is 4.76 km → 2.96 mi on the hero card.
-    expect(find.text('2.96 mi · 12 attempts'), findsOneWidget);
+    await openRoutes(tester);
+    // River Loop is 4.76 km → 2.96 mi on its library card.
+    expect(find.text('2.96 mi · 12 runs'), findsOneWidget);
     expect(find.textContaining('4.76 km'), findsNothing);
     expect(find.textContaining('4.75 km'), findsNothing);
   });
@@ -116,9 +129,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('haptics-switch')));
     await tester.pumpAndSettle();
 
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await openRoutes(tester);
+    await tester.tap(tab('Settings'));
     await tester.pumpAndSettle();
     expect(switchValue(tester).value, isFalse);
   });
@@ -126,6 +138,8 @@ void main() {
   testWidgets('export GPX saves the catalog to Downloads', (tester) async {
     final exporter = _RecordingTrackExporter();
     await openSettings(tester, exporter: exporter);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('export-gpx')), 200);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('export-gpx')));
     await tester.pumpAndSettle();
 
@@ -144,6 +158,8 @@ void main() {
   testWidgets('export GPX reports a failed write', (tester) async {
     final exporter = _RecordingTrackExporter(fail: true);
     await openSettings(tester, exporter: exporter);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('export-gpx')), 200);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('export-gpx')));
     await tester.pumpAndSettle();
 
@@ -162,19 +178,13 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('confirm-delete-all')));
     await tester.pumpAndSettle();
 
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    // Home is back to the first-launch empty state.
-    expect(find.text('Your first race awaits.'), findsOneWidget);
-    expect(find.text('READY TO RACE'), findsNothing);
+    await openRoutes(tester);
+    // The route library is back to its first-launch empty state.
+    expect(find.text('No routes yet. Record your first route.'), findsOneWidget);
+    expect(find.text('River Loop'), findsNothing);
 
     // And History is empty too.
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationBar),
-        matching: find.text('History'),
-      ),
-    );
+    await tester.tap(tab('History'));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.directions_run), findsNothing);
   });

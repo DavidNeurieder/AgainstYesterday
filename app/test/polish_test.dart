@@ -11,7 +11,7 @@ import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/device_gps_source.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
-import 'package:against_yesterday/features/home/presentation/home_screen.dart';
+import 'package:against_yesterday/features/routes/presentation/routes_screen.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 import 'package:against_yesterday/widgets/performance_gap.dart';
@@ -158,7 +158,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'RACE YOUR BEST'));
+    await raceFromLibrary(tester);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pump(const Duration(milliseconds: 600));
@@ -207,9 +207,9 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // M14: empty states on Home
+  // M14: the landing empty state
   // ---------------------------------------------------------------------------
-  testWidgets('home shows the empty state when the catalog is empty', (
+  testWidgets('the route library shows its empty state when the catalog is empty', (
     tester,
   ) async {
     final store = MemoryPersistenceStore();
@@ -218,14 +218,13 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [persistenceStoreProvider.overrideWithValue(store)],
-        child: const MaterialApp(home: HomeScreen()),
+        child: const MaterialApp(home: RoutesScreen()),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Your first race awaits.'), findsOneWidget);
     expect(
-      find.text('Record a route and start competing against yourself.'),
+      find.text('No routes yet. Record your first route.'),
       findsOneWidget,
     );
     expect(find.widgetWithText(FilledButton, 'RECORD ROUTE'), findsOneWidget);

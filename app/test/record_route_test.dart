@@ -40,7 +40,7 @@ void main() {
         child: const AgainstYesterdayApp(),
       );
 
-  /// Home (empty) → the /record-route flow, GPS acquired.
+  /// Route library (empty) → the /record-route flow, GPS acquired.
   Future<void> openRecording(WidgetTester tester) async {
     await tester.pumpWidget(pumpedApp());
     await tester.pumpAndSettle();
@@ -65,8 +65,8 @@ void main() {
     await openRecording(tester);
 
     // The flow is a pushed full-screen route over the shell, so its AppBar
-    // carries a back button and the system back gesture pops back to Home
-    // instead of exiting the app.
+    // carries a back button and the system back gesture pops back to the
+    // route library instead of exiting the app.
     expect(find.byType(BackButton), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -139,11 +139,11 @@ void main() {
     expect(acts, hasLength(1));
     expect(acts.single.routeId, route.id);
 
-    // DONE returns Home, which now features the new route.
+    // DONE returns to the route library, which now lists the new route.
     await tester.tap(find.text('DONE'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'RACE YOUR BEST'), findsOneWidget);
-    expect(find.text('Riverside Loop'), findsOneWidget);
+    expect(find.widgetWithText(Card, 'Riverside Loop'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'RECORD ROUTE'), findsOneWidget);
   });
 
   testWidgets('pause holds the recording and resume continues it',
@@ -222,9 +222,9 @@ void main() {
     await tester.tap(tab('Routes'));
     await tester.pumpAndSettle();
     expect(find.text('No routes yet. Record your first route.'), findsOneWidget);
-    expect(find.text('Record Route'), findsOneWidget);
+    expect(find.text('RECORD ROUTE'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Record Route'));
+    await tester.tap(find.widgetWithText(FilledButton, 'RECORD ROUTE'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.text('START RECORDING'), findsOneWidget);
