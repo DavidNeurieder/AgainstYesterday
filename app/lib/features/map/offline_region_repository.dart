@@ -46,8 +46,9 @@ final offlineRegionDownloaderProvider = Provider<OfflineRegionDownloader>(
 
 /// Whether this build and setting can save map tiles locally.
 ///
-/// MapLibre provides offline regions on device builds; the Linux desktop saves
-/// raster tiles to disk. The user's "Use maps" switch must be on.
+/// MapLibre provides offline regions on device builds. The Linux desktop used
+/// to cache raster tiles to disk, but that is disabled now: the desktop app
+/// only renders maps on demand and never persists them.
 bool offlineRegionsSupported({
   required bool mapsEnabled,
   required MapRenderer renderer,
@@ -55,9 +56,7 @@ bool offlineRegionsSupported({
   bool isTest = false,
   bool hasRasterCache = false,
 }) =>
-    mapsEnabled &&
-    (renderer == MapRenderer.maplibre ||
-        (isDesktop && !isTest && hasRasterCache));
+    mapsEnabled && renderer == MapRenderer.maplibre;
 
 /// Whether this build can download offline regions.
 final offlineMapsAvailableProvider = Provider<bool>(

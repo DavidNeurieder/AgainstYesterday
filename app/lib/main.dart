@@ -17,12 +17,17 @@ Future<void> main() async {
   // store); widget tests and the demo keep their hermetic in-memory stores
   // by overriding the provider in their own scope.
   final directory = await getApplicationDocumentsDirectory();
-  final mapCacheDirectory = Directory('${directory.path}/map_cache');
+  // Linux desktop no longer persists map tiles to disk (no offline regions,
+  // no raster tile cache): maps render on demand only.
+  final mapCacheDirectory = Platform.isLinux
+      ? null
+      : Directory('${directory.path}/map_cache');
   runApp(
     ProviderScope(
       overrides: [
         persistenceStoreProvider.overrideWithValue(JsonFileStore(directory)),
-        mapTileCacheDirectoryProvider.overrideWithValue(mapCacheDirectory),
+        if (mapCacheDirectory != null)
+          mapTileCacheDirectoryProvider.overrideWithValue(mapCacheDirectory),
       ],
       child: const AgainstYesterdayApp(),
     ),
