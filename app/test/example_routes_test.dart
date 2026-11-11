@@ -37,7 +37,7 @@ void main() {
       container.read(routeRepositoryProvider).every((r) => r.isExample),
       isTrue,
     );
-    expect(container.read(activityRepositoryProvider).length, 6);
+    expect(container.read(activityRepositoryProvider).length, 4);
     expect(find.text('Welcome to Against Yesterday'), findsNothing);
     expect(find.text('Cycling Helsinki'), findsWidgets);
     expect(find.text('Example'), findsWidgets);
@@ -62,7 +62,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(container.read(routeRepositoryProvider).length, 1);
-    expect(container.read(activityRepositoryProvider).length, 6);
+    expect(container.read(activityRepositoryProvider).length, 4);
 
     await tester.runAsync(() => removeExampleRoutes(container));
     await tester.pump();
@@ -74,6 +74,6 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(container.read(routeRepositoryProvider).length, 1);
-    expect(container.read(activityRepositoryProvider).length, 6);
+    expect(container.read(activityRepositoryProvider).length, 4);
   });
 }

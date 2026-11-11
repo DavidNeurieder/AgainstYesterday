@@ -105,12 +105,23 @@ class _WelcomeCard extends ConsumerStatefulWidget {
 
 class _WelcomeCardState extends ConsumerState<_WelcomeCard> {
   bool _installing = false;
+  bool _failed = false;
 
   Future<void> _install() async {
     if (_installing) return;
-    setState(() => _installing = true);
+    setState(() {
+      _installing = true;
+      _failed = false;
+    });
     try {
       await installExampleRoutes(ref.container);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _failed = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not install example routes: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _installing = false);
     }
@@ -120,6 +131,7 @@ class _WelcomeCardState extends ConsumerState<_WelcomeCard> {
     (Icons.route, 'Record a route once — the run saves the course.'),
     (Icons.timer_outlined, 'Your fastest run on it becomes the ghost you race.'),
     (Icons.compare_arrows, 'The live gap shows ahead in green, behind in amber.'),
+    (Icons.replay_rounded, 'Replay any run to see where you gained or lost time.'),
     (
       Icons.file_download_outlined,
       'Already have a GPX track? Import it in Settings → Data.',
@@ -162,18 +174,26 @@ class _WelcomeCardState extends ConsumerState<_WelcomeCard> {
               style: textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
             ),
             const SizedBox(height: AppSpacing.md),
-            OutlinedButton.icon(
-              key: const ValueKey('explore-examples'),
-              onPressed: _installing ? null : _install,
-              icon: _installing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.explore_outlined),
-              label: Text(_installing ? 'Loading…' : 'EXPLORE EXAMPLE ROUTES'),
-            ),
+            if (_failed)
+              OutlinedButton.icon(
+                key: const ValueKey('retry-examples'),
+                onPressed: _installing ? null : _install,
+                icon: const Icon(Icons.refresh),
+                label: const Text('RETRY EXAMPLE ROUTES'),
+              )
+            else
+              OutlinedButton.icon(
+                key: const ValueKey('explore-examples'),
+                onPressed: _installing ? null : _install,
+                icon: _installing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.explore_outlined),
+                label: Text(_installing ? 'Loading…' : 'EXPLORE EXAMPLE ROUTES'),
+              ),
           ],
         ),
       ),
@@ -264,7 +284,7 @@ class _RouteCourseCard extends ConsumerWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text('PB', style: textTheme.labelSmall),
+                        Text(route.isExample ? 'Demo' : 'PB', style: textTheme.labelSmall),
                         Text(
                           pb.format(),
                           style: textTheme.titleSmall

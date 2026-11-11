@@ -9,6 +9,7 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,7 +22,8 @@ import '../../settings/application/gpx_import.dart';
 const String _manifestAsset = 'assets/examples/manifest.json';
 
 /// Attribution shown for the bundled example route.
-const String kExampleAttribution = 'GPS data: GeoPrivacy (2023) | CC BY 4.0';
+const String kExampleAttribution =
+    'GPS data: GeoPrivacy (2023) | CC BY 4.0 (adapted)';
 
 /// Loads the bundled example route (and its runs) from assets. Returns an
 /// empty list when the manifest or GPX is missing, so a build without the
@@ -47,8 +49,9 @@ final exampleRoutesProvider = FutureProvider<List<Route>>((ref) async {
         isExample: true,
       ),
     ];
-  } catch (_) {
-    return const [];
+  } catch (e) {
+    debugPrint('exampleRoutesProvider failed: $e');
+    rethrow;
   }
 });
 
@@ -90,20 +93,69 @@ final exampleActivitiesProvider = FutureProvider<List<Activity>>((ref) async {
         isExample: true,
       ));
     }
-    // Seed the route's personal best from the fastest run.
     return runs;
-  } catch (_) {
-    return const [];
+  } catch (e) {
+    debugPrint('exampleActivitiesProvider failed: $e');
+    rethrow;
   }
 });
 
-List<TrackPoint> _toTrackPoints(GpxTrack details) => [
-      for (var i = 0; i < details.points.length; i++)
-        TrackPoint(
-          position: details.points[i],
-          timestamp: details.timestamps[i] ?? DateTime.now().toUtc(),
-        ),
-    ];
+List<TrackPoint> _toTrackPoints(GpxTrack details) {
+  final n = details.points.length;
+  final timestamps = details.timestamps;
+  // Preserve real timestamps; interpolate gaps only between two known
+  // samples. When no timestamp is available at all, fall back to a fixed,
+  // monotonic base so the run is still timed consistently — but never mix
+  // DateTime.now() into a track, which would distort ghost comparisons.
+  final known = <int, DateTime>{};
+  for (var i = 0; i < n; i++) {
+    final t = timestamps[i];
+    if (t != null) known[i] = t.toUtc();
+  }
+  final result = <TrackPoint>[];
+  for (var i = 0; i < n; i++) {
+    DateTime ts;
+    final direct = timestamps[i];
+    if (direct != null) {
+      ts = direct.toUtc();
+    } else if (known.isNotEmpty) {
+      // Find surrounding known samples.
+      int? prev, next;
+      for (var j = i - 1; j >= 0; j--) {
+        if (known.containsKey(j)) {
+          prev = j;
+          break;
+        }
+      }
+      for (var j = i + 1; j < n; j++) {
+        if (known.containsKey(j)) {
+          next = j;
+          break;
+        }
+      }
+      if (prev != null && next != null) {
+        final span = next - prev;
+        final frac = (i - prev) / span;
+        final ms = known[prev]!.millisecondsSinceEpoch +
+            ((known[next]!.millisecondsSinceEpoch -
+                    known[prev]!.millisecondsSinceEpoch) *
+                frac)
+                .round();
+        ts = DateTime.fromMillisecondsSinceEpoch(ms, isUtc: true);
+      } else if (prev != null) {
+        ts = known[prev]!.add(Duration(seconds: i - prev));
+      } else if (next != null) {
+        ts = known[next]!.subtract(Duration(seconds: next - i));
+      } else {
+        ts = DateTime.utc(2023, 1, 1).add(Duration(seconds: i));
+      }
+    } else {
+      ts = DateTime.utc(2023, 1, 1).add(Duration(seconds: i));
+    }
+    result.add(TrackPoint(position: details.points[i], timestamp: ts));
+  }
+  return result;
+}
 
 /// Whether any example route is currently installed in the library.
 final hasExampleRoutesProvider = Provider<bool>((ref) {

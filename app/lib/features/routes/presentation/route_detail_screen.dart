@@ -13,6 +13,7 @@ library;
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/date_labels.dart';
 import '../../../core/theme/app_colors.dart';
@@ -140,7 +141,7 @@ class RouteDetailScreen extends ConsumerWidget {
           Text(
             '${route.distance.formatWith(units)} · '
             '${stats.runs} ${stats.runs == 1 ? 'run' : 'runs'} · '
-            '${stats.pb?.format() ?? 'no PB'} PB',
+            '${stats.pb?.format() ?? 'no PB'} ${route.isExample ? 'demo best' : 'PB'}',
             textAlign: TextAlign.center,
             style: Theme.of(
               context,
@@ -149,11 +150,18 @@ class RouteDetailScreen extends ConsumerWidget {
           if (route.isExample)
             Padding(
               padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: Text(
-                kExampleAttribution,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textMuted,
+              child: InkWell(
+                onTap: () => launchUrl(
+                  Uri.parse('https://geoprivacy.fi'),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: Text(
+                  '$kExampleAttribution\nTap for source & license details.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textMuted,
+                    decoration: TextDecoration.underline,
+                  ),
                 ),
               ),
             ),
@@ -340,10 +348,19 @@ class _RunRow extends ConsumerWidget {
                 ),
               ],
               const SizedBox(width: AppSpacing.xs),
-              const Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: AppColors.textMuted,
+              IconButton(
+                key: ValueKey('replay-${attempt.id}'),
+                tooltip: 'Replay',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                iconSize: 18,
+                icon: const Icon(Icons.replay_rounded),
+                color: AppColors.textSecondary,
+                onPressed: () {
+                  AppHaptics.light(ref);
+                  context.push('/activity/${attempt.id}/replay');
+                },
               ),
             ],
           ),
