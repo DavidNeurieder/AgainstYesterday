@@ -234,12 +234,14 @@ class _RunsSectionState extends State<RunsSection> {
             style: textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
           )
         else
-          for (final run in runs)
+          for (final run in runs) ...[
             _RunRow(
               key: ValueKey('run-${run.id}'),
               attempt: run,
               pb: widget.pb,
             ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
       ],
     );
   }
@@ -256,56 +258,61 @@ class _RunRow extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final duration = attempt.duration!;
     final delta = pb == null ? null : duration.seconds - pb!.seconds;
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        AppHaptics.light(ref);
-        context.push('/activity/${attempt.id}');
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-        // §7: the date wraps instead of pushing the duration off the row at a
-        // large system font scale.
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                dateLabelFor(attempt.startedAt.toLocal()),
-                style: textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () {
+          AppHaptics.light(ref);
+          context.push('/activity/${attempt.id}');
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.sm,
+            horizontal: AppSpacing.md,
+          ),
+          // §7: the date wraps instead of pushing the duration off the row at
+          // a large system font scale.
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  dateLabelFor(attempt.startedAt.toLocal()),
+                  style: textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Text(
-              duration.format(),
-              textAlign: TextAlign.right,
-              style: textTheme.titleSmall?.copyWith(
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            if (delta != null) ...[
               const SizedBox(width: AppSpacing.sm),
               Text(
-                delta == 0
-                    ? 'PB'
-                    : (delta > 0
-                          ? '+${Elapsed.seconds(delta).format()}'
-                          : '-${Elapsed.seconds(-delta).format()}'),
+                duration.format(),
                 textAlign: TextAlign.right,
-                style: textTheme.bodySmall?.copyWith(
-                  color: delta <= 0 ? AppColors.ahead : AppColors.behind,
+                style: textTheme.titleSmall?.copyWith(
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
+              if (delta != null) ...[
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  delta == 0
+                      ? 'PB'
+                      : (delta > 0
+                            ? '+${Elapsed.seconds(delta).format()}'
+                            : '-${Elapsed.seconds(-delta).format()}'),
+                  textAlign: TextAlign.right,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: delta <= 0 ? AppColors.ahead : AppColors.behind,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+              const SizedBox(width: AppSpacing.xs),
+              const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: AppColors.textMuted,
+              ),
             ],
-            const SizedBox(width: AppSpacing.xs),
-            const Icon(
-              Icons.chevron_right,
-              size: 18,
-              color: AppColors.textMuted,
-            ),
-          ],
+          ),
         ),
       ),
     );
