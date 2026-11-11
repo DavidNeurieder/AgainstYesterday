@@ -183,6 +183,8 @@ void main() {
         ),
         isFalse,
       );
+      // Linux desktop no longer persists map tiles/offline regions; the painter
+      // backend is never considered offline-capable.
       expect(
         offlineRegionsSupported(
           mapsEnabled: true,
@@ -191,7 +193,7 @@ void main() {
           isTest: false,
           hasRasterCache: true,
         ),
-        isTrue,
+        isFalse,
       );
       expect(
         offlineRegionsSupported(
