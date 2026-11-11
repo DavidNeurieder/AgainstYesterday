@@ -172,14 +172,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Personal Best'), findsOneWidget);
+    // The detail page is the course itself: its distance/run-count/PB summary,
+    // the race action, and one card per run (statistics moved behind the
+    // AppBar icon when the hub landed).
+    expect(find.text('RACE YOUR BEST'), findsOneWidget);
+    expect(find.textContaining('PB'), findsWidgets);
     await tester.scrollUntilVisible(
-      find.text('Attempts'),
+      find.byKey(const ValueKey('run-act-003')),
       200,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Attempts'), findsOneWidget);
+    expect(find.text('Runs'), findsOneWidget);
+    expect(find.byKey(const ValueKey('run-act-003')), findsOneWidget);
 
     // Back returns to the library.
     await tester.pageBack();

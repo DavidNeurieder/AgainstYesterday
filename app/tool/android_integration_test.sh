@@ -204,7 +204,7 @@ boot_device() {
     GPU_ARGS+=(-gpu "${EMULATOR_GPU:-swiftshader_indirect}")
   fi
   "$EMULATOR" -avd "$AVD" \
-    ${GPU_ARGS[@]+"${GPU_ARGS[@]}"} -no-snapshot \
+    ${GPU_ARGS[@]+"${GPU_ARGS[@]}"} -no-snapshot-save \
     ${BOOT_ARGS[@]+"${BOOT_ARGS[@]}"} &
   EMULATOR_PID=$!
   BOOTS_EMULATOR=1
@@ -237,15 +237,75 @@ boot_device
 # device is gone from adb, and every file the failure dump writes is empty. So
 # a vanished device is retried once on a fresh boot; a second loss is reported
 # as infrastructure, and anything else is left to the caller as a real failure.
+# Runs one `flutter test` invocation, keeping its output and telling a product
+# failure apart from an emulator that died under it.
+#
+# The emulator occasionally loses its GL context (gfxstream logs "error null
+# ctx"), drops off adb, and the tool then fails for reasons that have nothing
+# to do with the code under test — that includes a suite whose tests all passed
+# and then could not uninstall the package. The signature is unambiguous: the
+# device is gone from adb. Two problems follow from that:
+#
+#   1. `flutter test` does not notice the device vanished: its teardown keeps
+#      calling `adb uninstall` on a serial that no longer answers, and a bare
+#      adb call blocks instead of failing (see device_alive). The suite then
+#      hangs until TEST_TIMEOUT even though every test already passed.
+#   2. Even when it does return, nothing said whether the device died.
+#
+# So this runs flutter in its own process group and polls device_alive in
+# parallel: the moment the device drops off adb, the whole flutter tree is
+# killed (setsid makes it a process-group leader we can signal at once), the
+# run is recorded as infrastructure, and the caller retries on a fresh boot.
+# The poll also enforces TEST_TIMEOUT without relying on GNU timeout alone.
 flutter_test_retry() {
   local log_file="$ARTIFACTS_DIR/flutter-test.log"
   mkdir -p "$ARTIFACTS_DIR"
   local attempt
   for attempt in 1 2; do
-    if ${TEST_TIMEOUT_CMD[@]+"${TEST_TIMEOUT_CMD[@]}"} flutter test "$@" 2>&1 \
-      | tee "$log_file"; then
+    : > "$log_file"
+    # setsid: flutter + the timeout wrapper become a process-group leader, so
+    # a stuck adb teardown can be killed wholesale with a negative pid.
+    setsid timeout "$TEST_TIMEOUT" flutter test "$@" >"$log_file" 2>&1 &
+    local ft_pid=$!
+    # Stream the log to stdout so progress is visible, like the old `tee`.
+    tail -n +1 -f "$log_file" --pid="$ft_pid" &
+    local tail_pid=$!
+    local rc=0
+    local start now
+    start=$(date +%s)
+    while kill -0 "$ft_pid" 2>/dev/null; do
+      if ! device_alive; then
+        echo ">> INFRA: $SERIAL dropped off adb during the run" >&2
+        kill -TERM -- "-$ft_pid" 2>/dev/null || kill -TERM "$ft_pid" 2>/dev/null || true
+        sleep 1
+        kill -KILL -- "-$ft_pid" 2>/dev/null || kill -KILL "$ft_pid" 2>/dev/null || true
+        wait "$ft_pid" 2>/dev/null
+        rc=1
+        break
+      fi
+      now=$(date +%s)
+      if [ $((now - start)) -ge "$TEST_TIMEOUT" ]; then
+        echo ">> INFRA: flutter test exceeded ${TEST_TIMEOUT}s" >&2
+        kill -TERM -- "-$ft_pid" 2>/dev/null || kill -TERM "$ft_pid" 2>/dev/null || true
+        sleep 1
+        kill -KILL -- "-$ft_pid" 2>/dev/null || kill -KILL "$ft_pid" 2>/dev/null || true
+        wait "$ft_pid" 2>/dev/null
+        rc=124
+        break
+      fi
+      sleep 2
+    done
+    if [ "$rc" = "0" ]; then
+      wait "$ft_pid"; rc=$?
+    fi
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
+
+    # Success.
+    if [ "$rc" = "0" ]; then
       return 0
     fi
+    # Device still answering: a real test failure, not infrastructure.
     if device_alive; then
       return 1
     fi
