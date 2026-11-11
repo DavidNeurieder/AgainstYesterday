@@ -7,7 +7,8 @@
 /// runs, PB — each with a tiny silhouette. Tapping a card opens the route
 /// detail screen (§23). While the library is still empty the screen opens with
 /// a welcome card instead of a bare empty state: it explains what a route, a
-/// ghost and the live gap are before the first run exists.
+/// ghost and the live gap are before the first run exists, and points at the
+/// second way to fill the library — importing GPX tracks under Settings → Data.
 library;
 
 import 'package:flutter/material.dart' hide Route;
@@ -101,6 +102,10 @@ class _WelcomeCard extends StatelessWidget {
     (Icons.route, 'Record a route once — the run saves the course.'),
     (Icons.timer_outlined, 'Your fastest run on it becomes the ghost you race.'),
     (Icons.compare_arrows, 'The live gap shows ahead in green, behind in amber.'),
+    (
+      Icons.file_download_outlined,
+      'Already have a GPX track? Import it in Settings → Data.',
+    ),
   ];
 
   @override

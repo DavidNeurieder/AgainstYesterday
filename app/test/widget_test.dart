@@ -78,6 +78,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('No routes yet. Record your first route.'), findsOneWidget);
+    // …and it names the other way in: GPX import under Settings → Data.
+    expect(
+      find.text('Already have a GPX track? Import it in Settings → Data.'),
+      findsOneWidget,
+    );
     expect(
       find.widgetWithText(FilledButton, 'RECORD ROUTE'),
       findsOneWidget,

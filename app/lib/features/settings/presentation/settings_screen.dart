@@ -139,7 +139,7 @@ class SettingsScreen extends ConsumerWidget {
                 key: const ValueKey('import-gpx'),
                 leading: const Icon(Icons.file_download_outlined),
                 title: const Text('Import GPX'),
-                subtitle: const Text('Load tracks from GPX files'),
+                subtitle: const Text('Create routes from GPX tracks'),
                 onTap: () => _importGpx(context, ref),
               ),
               const Divider(height: 1, color: AppColors.outline),
