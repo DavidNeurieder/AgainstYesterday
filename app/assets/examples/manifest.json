@@ -1,14 +1,14 @@
 {
-  "id": "example-cycling-helsinki",
-  "name": "Cycling Helsinki",
+  "id": "example-cycling-finland",
+  "name": "Cycling Finland",
   "difficulty": "moderate",
   "terrain": "mixed",
-  "routeGpx": "cycling_helsinki_1.gpx",
+  "routeGpx": "cycling_finland_1.gpx",
   "runGpx": [
-    "cycling_helsinki_1.gpx",
-    "cycling_helsinki_2.gpx",
-    "cycling_helsinki_3.gpx",
-    "cycling_helsinki_4.gpx"
+    "cycling_finland_1.gpx",
+    "cycling_finland_2.gpx",
+    "cycling_finland_3.gpx",
+    "cycling_finland_4.gpx"
   ],
   "license": {
     "name": "CC BY 4.0",

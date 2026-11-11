@@ -39,7 +39,7 @@ void main() {
     );
     expect(container.read(activityRepositoryProvider).length, 4);
     expect(find.text('Welcome to Against Yesterday'), findsNothing);
-    expect(find.text('Cycling Helsinki'), findsWidgets);
+    expect(find.text('Cycling Finland'), findsWidgets);
     expect(find.text('Example'), findsWidgets);
   });
 

@@ -1,6 +1,6 @@
 # Third-party licenses for bundled example routes
 
-## Cycling Helsinki
+## Cycling Finland
 
 - Source: GeoPrivacy Open Data (2023)
 - Citation: Mäkinen, V., Brauer, A. and Oksanen, J. 2023. GeoPrivacy platform,
@@ -17,4 +17,4 @@ donate GPS/GNSS tracking data for science; the open data repository provides
 privacy-protected versions of those tracks. Tracks are truncated/shifted for
 privacy and only cover Finland in densely populated areas.
 
-Files: cycling_helsinki_1.gpx ... cycling_helsinki_6.gpx
+Files: cycling_finland_1.gpx ... cycling_finland_4.gpx
