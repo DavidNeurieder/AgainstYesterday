@@ -82,12 +82,8 @@ String _diagnostics(WidgetTester tester, ProviderContainer container) {
 Future<void> _openRecordFlow(WidgetTester tester, {bool seenRationale = false}) async {
   final directory = await getApplicationDocumentsDirectory();
   final store = JsonFileStore(directory);
-  // A clean store per case; presetting `onboarding` skips the first-launch
-  // intro, which is not what this suite is about.
-  await store.write(
-    'settings',
-    '{"onboarding":true,"locationRationale":$seenRationale}',
-  );
+  // A clean store per case; only the §33 explanation flag matters here.
+  await store.write('settings', '{"locationRationale":$seenRationale}');
 
   await tester.pumpWidget(
     ProviderScope(
@@ -96,7 +92,6 @@ Future<void> _openRecordFlow(WidgetTester tester, {bool seenRationale = false}) 
     ),
   );
   await tester.pumpAndSettle();
-  await dismissOnboardingIfPresent(tester);
   await tester.tap(find.text('RECORD ROUTE'));
   await tester.pumpAndSettle();
 

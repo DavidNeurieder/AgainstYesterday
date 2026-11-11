@@ -56,9 +56,9 @@ M27 §33 error screens (`test/error_screens_test.dart`) pin the route-load
 failure and the finish screen's save-error block, and the M28
 accessibility suite (`test/accessibility_test.dart`) pins the WCAG
 palette, the colour alternatives, the spoken names and the 48 px touch
-targets, and the M29 onboarding suite (`test/onboarding_test.dart`) walks
-the three first-launch screens, the GET STARTED hand-off into
-record-a-route and the gate that keeps hermetic stores off the intro.
+targets. There is no intro to walk: `test/widget_test.dart` pins that a fresh
+install (a real store with no settings document) opens straight on the route
+library.
 
 The two Rust FFI suites skip themselves, with an explanation, when the cdylib
 has not been built — normal on a fresh checkout. CI passes

@@ -68,16 +68,12 @@ void main() {
     child: const AgainstYesterdayApp(),
   );
 
-  /// Walks the first-launch intro and lands in record-a-route, the shortest
-  /// path from a fresh install to a run flow.
+  /// Walks a fresh install (landing on the route library) into the
+  /// record-a-route flow, the shortest path from a first launch to a run.
   Future<void> startRecording(WidgetTester tester, Widget app) async {
     await tester.pumpWidget(app);
     await tester.pumpAndSettle();
-    await tester.fling(find.byType(PageView), const Offset(-400, 0), 800);
-    await tester.pumpAndSettle();
-    await tester.fling(find.byType(PageView), const Offset(-400, 0), 800);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('GET STARTED'));
+    await tester.tap(find.text('RECORD ROUTE'));
     // Explicit pumps, not pumpAndSettle: the prep screen keeps an acquiring
     // animation running, which would never settle.
     await tester.pump();

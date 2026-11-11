@@ -1,7 +1,7 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// Route table for the app (§42): ROUTES / SETTINGS / HISTORY shell plus
+/// Route table for the app (§42): ROUTES / HISTORY / SETTINGS shell plus
 /// pushed full-screen flows: /record and the detail screens.
 library;
 
@@ -13,14 +13,12 @@ import '../features/activity/presentation/activity_detail_screen.dart';
 import '../features/activity/presentation/replay_screen.dart';
 import '../features/dev/presentation/diagnostics_screen.dart';
 import '../features/history/presentation/history_screen.dart';
-import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/recording/presentation/record_flow_screen.dart';
 import '../features/recording/presentation/route_record_flow_screen.dart';
 import '../features/result/presentation/result_screen.dart';
 import '../features/routes/presentation/route_detail_screen.dart';
 import '../features/routes/presentation/route_statistics_screen.dart';
 import '../features/routes/presentation/routes_screen.dart';
-import '../features/settings/application/settings_controller.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import 'app_shell.dart';
 import 'dependencies.dart';
@@ -29,29 +27,7 @@ import 'dependencies.dart';
 GoRouter buildRouter() {
   return GoRouter(
     initialLocation: '/',
-    // First launch (§34): until GET STARTED marks the intro as seen, every
-    // location lands on /intro; afterwards the intro itself redirects home.
-    redirect: (context, state) {
-      final seen = ProviderScope.containerOf(
-        context,
-        listen: false,
-      ).read(onboardingSeenProvider);
-      final onIntro = state.matchedLocation == '/intro';
-      if (!seen && !onIntro) {
-        return '/intro';
-      }
-      if (seen && onIntro) {
-        return '/';
-      }
-      return null;
-    },
     routes: [
-      // First-launch onboarding (§34): three screens, then straight into
-      // record-a-route.
-      GoRoute(
-        path: '/intro',
-        builder: (context, state) => const OnboardingScreen(),
-      ),
       // The old Routes tab is now the landing tab; keep deep links working.
       GoRoute(path: '/routes', redirect: (context, state) => '/'),
       StatefulShellRoute.indexedStack(

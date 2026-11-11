@@ -7,8 +7,8 @@
 /// and activities (key `settings`), so the toggles survive restarts. Downstream
 /// reads go through the small convenience providers — [`hapticsEnabledProvider`],
 /// [`countdownEnabledProvider`], [`displayUnitProvider`],
-/// [`onboardingSeenProvider`] — keeping call sites dependent on just the one
-/// flag they need.
+/// [`locationRationaleSeenProvider`] — keeping call sites dependent on just the
+/// one flag they need.
 library;
 
 import 'dart:convert';
@@ -23,7 +23,6 @@ String appSettingsToJson(AppSettings settings) => const JsonEncoder().convert({
   'haptics': settings.hapticsEnabled,
   'countdown': settings.countdownEnabled,
   'units': settings.units.name,
-  'onboarding': settings.onboardingSeen,
   'locationRationale': settings.locationRationaleSeen,
   'theme': settings.themeMode.name,
   'replaySpeed': settings.replaySpeed,
@@ -39,11 +38,9 @@ AppSettings parseAppSettings(String json) {
       (u) => u.name == map['units'],
       orElse: () => AppSettings.defaults.units,
     ),
-    // Documents written before M29 lack the key; their installs predate
-    // the intro, so they count as already seen.
-    onboardingSeen: map['onboarding'] as bool? ?? true,
-    // Likewise the §33 location explanation: an install old enough to have a
-    // settings document has already met Android's permission dialog.
+    // An install old enough to have a settings document has already met
+    // Android's permission dialog (and the retired `onboarding` key, if it is
+    // still in the document, is simply ignored).
     locationRationaleSeen: map['locationRationale'] as bool? ?? true,
     themeMode: AppThemeMode.values.firstWhere(
       (m) => m.name == map['theme'],
@@ -91,26 +88,11 @@ final mapsEnabledProvider = Provider<bool>(
   (ref) => ref.watch(settingsRepositoryProvider).mapsEnabled,
 );
 
-/// Whether the first-launch intro (§34) still has to be shown.
-///
-/// Hermetic stores (widget tests, demo mode) never onboard. On a real
-/// [JsonFileStore] the settings repository reports `false` while no
-/// settings document exists — a fresh install — and afterwards decides
-/// through [`AppSettings.onboardingSeen`].
-final onboardingSeenProvider = Provider<bool>((ref) {
-  final store = ref.watch(persistenceStoreProvider);
-  if (store is! JsonFileStore) {
-    return true;
-  }
-  return ref.watch(settingsRepositoryProvider).onboardingSeen;
-});
-
 /// Whether the one-time explanation of *why* the app needs location (§33)
 /// still has to be given before Android's permission dialog.
 ///
-/// Same gate as [onboardingSeenProvider]: hermetic stores (widget tests, demo
-/// mode) never explain, so only a real install — the one place a system
-/// permission dialog can appear — trips it.
+/// Hermetic stores (widget tests, demo mode) never explain, so only a real
+/// install — the one place a system permission dialog can appear — trips it.
 final locationRationaleSeenProvider = Provider<bool>((ref) {
   final store = ref.watch(persistenceStoreProvider);
   if (store is! JsonFileStore) {
@@ -125,12 +107,9 @@ class SettingsRepository extends Notifier<AppSettings> {
     ref.watch(persistenceStoreProvider);
     final raw = readBestEffort(ref.read(persistenceStoreProvider), _key);
     if (raw == null) {
-      // No document at all: a fresh install has not met the intro yet (§34),
-      // nor the §33 location explanation.
-      return AppSettings.defaults.copyWith(
-        onboardingSeen: false,
-        locationRationaleSeen: false,
-      );
+      // No document at all: a fresh install has not yet met the §33 location
+      // explanation. It opens on the route library like every later launch.
+      return AppSettings.defaults.copyWith(locationRationaleSeen: false);
     }
     try {
       return parseAppSettings(raw);
@@ -150,7 +129,7 @@ class SettingsRepository extends Notifier<AppSettings> {
 
   /// Records that the §33 location explanation has been given, so it is never
   /// repeated on this install. The state flips synchronously; the disk write
-  /// catches up on its own (best effort), like the intro's dismissal.
+  /// catches up on its own (best effort).
   Future<void> markLocationRationaleSeen() =>
       save(state.copyWith(locationRationaleSeen: true));
 

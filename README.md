@@ -269,7 +269,8 @@ through the recording lifecycle (exported, never fabricated) and gates the
 diagnostics route, not just its entry button.
 M16–M29 closed the loop the plan asks for: record, race, result, PB alerts,
 entrance motion, responsive layouts, settings, history, consistent error
-screens, a WCAG-checked palette and the three-screen first-launch intro —
+screens, a WCAG-checked palette and a first launch that opens straight on the
+route library —
 with `main()` now persisting settings, routes, activities and snapshots to
 the device's application documents directory across restarts.
 The offline-map roadmap added a renderer seam (`MapSurface`, painter default,

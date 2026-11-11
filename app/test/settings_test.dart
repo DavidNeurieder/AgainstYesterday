@@ -217,7 +217,6 @@ void main() {
       hapticsEnabled: false,
       countdownEnabled: false,
       units: Units.miles,
-      onboardingSeen: false,
       locationRationaleSeen: false,
       mapsEnabled: false,
     );

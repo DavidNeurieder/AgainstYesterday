@@ -227,6 +227,12 @@ void main() {
       find.text('No routes yet. Record your first route.'),
       findsOneWidget,
     );
+    // The empty library explains the ghost before the first run (§22).
+    expect(find.text('Welcome to Against Yesterday'), findsOneWidget);
+    expect(
+      find.text('Your fastest run on it becomes the ghost you race.'),
+      findsOneWidget,
+    );
     expect(find.widgetWithText(FilledButton, 'RECORD ROUTE'), findsOneWidget);
   });
 

@@ -1,6 +1,8 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +47,41 @@ void main() {
     expect(tab('Routes'), findsOneWidget);
     expect(tab('Settings'), findsOneWidget);
     expect(tab('History'), findsOneWidget);
+  });
+
+  testWidgets('a first install opens the route library', (tester) async {
+    // A real store with no settings document at all — a fresh install. There
+    // is no intro to walk: the app opens straight on the route library.
+    final dir = Directory.systemTemp.createTempSync('first-install');
+    addTearDown(() => dir.deleteSync(recursive: true));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          persistenceStoreProvider.overrideWithValue(JsonFileStore(dir)),
+        ],
+        child: const AgainstYesterdayApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Against Yesterday'), findsNothing);
+    expect(find.text('Race your best.'), findsNothing);
+    expect(find.text('GET STARTED'), findsNothing);
+    // The empty library explains itself before the first run exists.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('routes-welcome')),
+        matching: find.text('Welcome to Against Yesterday'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('No routes yet. Record your first route.'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'RECORD ROUTE'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shell navigates between tabs', (tester) async {

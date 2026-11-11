@@ -5,7 +5,9 @@
 ///
 /// The Routes tab is a collection of course cards — name, distance, number of
 /// runs, PB — each with a tiny silhouette. Tapping a card opens the route
-/// detail screen (§23).
+/// detail screen (§23). While the library is still empty the screen opens with
+/// a welcome card instead of a bare empty state: it explains what a route, a
+/// ghost and the live gap are before the first run exists.
 library;
 
 import 'package:flutter/material.dart' hide Route;
@@ -14,7 +16,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/ui/app_states.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../../widgets/route_silhouette.dart';
@@ -61,10 +62,7 @@ class RoutesScreen extends ConsumerWidget {
             ),
           ),
           if (routes.isEmpty)
-            const EmptyState(
-              icon: Icons.route,
-              message: 'No routes yet. Record your first route.',
-            ),
+            const _WelcomeCard(),
           for (final route in routes) ...[
             _RouteCourseCard(
               route: route,
@@ -91,6 +89,60 @@ class RoutesScreen extends ConsumerWidget {
 
   List<Activity> _attemptsFor(Route route, List<Activity> activities) =>
       [for (final a in activities) if (a.routeId == route.id) a];
+}
+
+/// The first-run read of the library: what a route is, what the ghost is and
+/// what the live gap means — shown only while no route has been recorded yet,
+/// so a fresh install is never just an empty list under a button.
+class _WelcomeCard extends StatelessWidget {
+  const _WelcomeCard();
+
+  static const List<(IconData, String)> _lines = [
+    (Icons.route, 'Record a route once — the run saves the course.'),
+    (Icons.timer_outlined, 'Your fastest run on it becomes the ghost you race.'),
+    (Icons.compare_arrows, 'The live gap shows ahead in green, behind in amber.'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      key: const ValueKey('routes-welcome'),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Welcome to Against Yesterday', style: textTheme.titleMedium),
+            for (final (icon, line) in _lines)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(icon, size: 20, color: AppColors.textSecondary),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        line,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'No routes yet. Record your first route.',
+              style: textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _RouteCourseCard extends ConsumerWidget {
