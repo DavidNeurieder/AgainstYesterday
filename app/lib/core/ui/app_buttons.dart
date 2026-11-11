@@ -36,7 +36,12 @@ class PrimaryButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
     );
-    final child = Text(label, style: Theme.of(context).textTheme.titleMedium);
+    final child = Text(
+      label,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            color: AppColors.background,
+          ),
+    );
     return SizedBox(
       width: double.infinity,
       height: height,
