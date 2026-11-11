@@ -24,6 +24,7 @@ import '../../../core/ui/app_sections.dart';
 import '../../../engine/models.dart' as engine;
 import '../../../persistence/persistence.dart';
 import '../../map/map_settings_section.dart';
+import '../../routes/application/example_routes.dart';
 import '../application/gpx_export.dart';
 import '../application/gpx_import.dart';
 import '../application/link_launcher.dart';
@@ -40,6 +41,7 @@ class SettingsScreen extends ConsumerWidget {
     final notifier = ref.read(settingsRepositoryProvider.notifier);
     // The installed artifact's own version (§26), not a hand-kept constant.
     final appVersion = ref.watch(appVersionProvider).value ?? '';
+    final hasExamples = ref.watch(hasExampleRoutesProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
@@ -142,6 +144,43 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: const Text('Create routes from GPX tracks'),
                 onTap: () => _importGpx(context, ref),
               ),
+              const Divider(height: 1, color: AppColors.outline),
+              if (hasExamples)
+                ListTile(
+                  key: const ValueKey('remove-examples'),
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Remove example routes'),
+                  subtitle: const Text('Delete the bundled demo routes'),
+                  onTap: () async {
+                    await removeExampleRoutes(ref.container);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Example routes removed.'),
+                          duration: Duration(milliseconds: 600),
+                        ),
+                      );
+                    }
+                  },
+                )
+              else
+                ListTile(
+                  key: const ValueKey('restore-examples'),
+                  leading: const Icon(Icons.explore_outlined),
+                  title: const Text('Restore example routes'),
+                  subtitle: const Text('Re-add the bundled demo routes'),
+                  onTap: () async {
+                    await installExampleRoutes(ref.container);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Example routes restored.'),
+                          duration: Duration(milliseconds: 600),
+                        ),
+                      );
+                    }
+                  },
+                ),
               const Divider(height: 1, color: AppColors.outline),
               ListTile(
                 key: const ValueKey('delete-all'),

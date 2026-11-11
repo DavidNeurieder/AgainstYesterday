@@ -72,6 +72,7 @@ Map<String, Object?> _routeJson(Route r) => {
   'geometry': [for (final p in r.geometry) _geoJson(p)],
   'attempt_count': r.attemptCount,
   'pb_s': ?r.personalBest?.seconds,
+  if (r.isExample) 'example': true,
 };
 
 Route _routeFrom(Map<String, Object?> json) => Route(
@@ -86,6 +87,7 @@ Route _routeFrom(Map<String, Object?> json) => Route(
   personalBest: json['pb_s'] == null
       ? null
       : Elapsed.seconds((json['pb_s']! as num).toDouble()),
+  isExample: (json['example'] as bool?) ?? false,
 );
 
 Map<String, Object?> _activityJson(Activity a) {
@@ -100,6 +102,7 @@ Map<String, Object?> _activityJson(Activity a) {
     'performance': ?a.performance,
     if (track != null) 'track': [for (final p in track) _pointJson(p)],
     if (rawFixes != null) 'raw_fixes': [for (final f in rawFixes) _fixJson(f)],
+    if (a.isExample) 'example': true,
   };
 }
 
@@ -126,6 +129,7 @@ Activity _activityFrom(Map<String, Object?> json) => Activity(
           for (final fix in json['raw_fixes']! as List)
             _fixFrom(fix as Map<String, Object?>),
         ],
+  isExample: (json['example'] as bool?) ?? false,
 );
 
 /// Serializes a route list to a compact JSON string.

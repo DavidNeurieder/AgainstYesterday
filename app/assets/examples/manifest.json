@@ -1,0 +1,20 @@
+{
+  "id": "example-cycling-helsinki",
+  "name": "Cycling Helsinki",
+  "difficulty": "moderate",
+  "terrain": "mixed",
+  "routeGpx": "cycling_helsinki_1.gpx",
+  "runGpx": [
+    "cycling_helsinki_1.gpx",
+    "cycling_helsinki_2.gpx",
+    "cycling_helsinki_3.gpx",
+    "cycling_helsinki_4.gpx",
+    "cycling_helsinki_5.gpx",
+    "cycling_helsinki_6.gpx"
+  ],
+  "license": {
+    "name": "CC BY 4.0",
+    "source": "GeoPrivacy (2023)",
+    "attribution": "GPS data: GeoPrivacy (2023) | CC BY 4.0"
+  }
+}

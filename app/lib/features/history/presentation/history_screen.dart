@@ -43,7 +43,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activities = ref.watch(activityRepositoryProvider);
+    final allActivities = ref.watch(activityRepositoryProvider);
+    final activities = [
+      for (final a in allActivities)
+        if (!a.isExample) a,
+    ];
     final routes = ref.watch(routeRepositoryProvider);
     final pb = computeHistoryPb(activities, routes);
 

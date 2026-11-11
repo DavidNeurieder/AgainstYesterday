@@ -27,6 +27,7 @@ import '../../map/offline_regions.dart';
 import '../../map/route_map_autosave.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
+import '../application/example_routes.dart';
 import '../application/route_stats.dart';
 import '../../../widgets/route_map.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -55,7 +56,29 @@ class RouteDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(route.name),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(child: Text(route.name)),
+            if (route.isExample) ...[
+              const SizedBox(width: AppSpacing.sm),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceHigh,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.outline),
+                ),
+                child: Text(
+                  'Example',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           IconButton(
             key: const ValueKey('route-statistics'),
@@ -123,6 +146,17 @@ class RouteDetailScreen extends ConsumerWidget {
               context,
             ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
           ),
+          if (route.isExample)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                kExampleAttribution,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ),
           const SizedBox(height: AppSpacing.lg),
           // M19: the detail page races this exact route, never another one.
           PrimaryButton(

@@ -74,18 +74,22 @@ class HistoryPb {
 HistoryPb computeHistoryPb(List<Activity> activities, List<Route> routes) {
   final seed = <String, double>{
     for (final route in routes)
-      if (route.personalBest case final pb?) route.id: pb.seconds,
+      if (!route.isExample)
+        if (route.personalBest case final pb?) route.id: pb.seconds,
   };
 
   // The current best per route: the faster of the seed and all attempts.
   final best = <String, double>{...seed};
   final attemptsByRoute = <String, List<Activity>>{};
   for (final activity in activities) {
+    if (activity.isExample) continue;
     final routeId = activity.routeId;
     final duration = activity.duration;
     if (routeId == null || duration == null) {
       continue;
     }
+    // Example routes never contribute to personal PBs.
+    if (routes.any((r) => r.id == routeId && r.isExample)) continue;
     (attemptsByRoute[routeId] ??= []).add(activity);
     final seconds = duration.seconds;
     if (best[routeId] case final current?) {

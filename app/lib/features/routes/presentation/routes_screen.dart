@@ -22,6 +22,7 @@ import '../../../persistence/persistence.dart';
 import '../../../widgets/route_silhouette.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
+import '../application/example_routes.dart';
 import '../application/route_stats.dart';
 
 class RoutesScreen extends ConsumerWidget {
@@ -95,8 +96,25 @@ class RoutesScreen extends ConsumerWidget {
 /// The first-run read of the library: what a route is, what the ghost is and
 /// what the live gap means — shown only while no route has been recorded yet,
 /// so a fresh install is never just an empty list under a button.
-class _WelcomeCard extends StatelessWidget {
+class _WelcomeCard extends ConsumerStatefulWidget {
   const _WelcomeCard();
+
+  @override
+  ConsumerState<_WelcomeCard> createState() => _WelcomeCardState();
+}
+
+class _WelcomeCardState extends ConsumerState<_WelcomeCard> {
+  bool _installing = false;
+
+  Future<void> _install() async {
+    if (_installing) return;
+    setState(() => _installing = true);
+    try {
+      await installExampleRoutes(ref.container);
+    } finally {
+      if (mounted) setState(() => _installing = false);
+    }
+  }
 
   static const List<(IconData, String)> _lines = [
     (Icons.route, 'Record a route once — the run saves the course.'),
@@ -142,6 +160,19 @@ class _WelcomeCard extends StatelessWidget {
             Text(
               'No routes yet. Record your first route.',
               style: textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            OutlinedButton.icon(
+              key: const ValueKey('explore-examples'),
+              onPressed: _installing ? null : _install,
+              icon: _installing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.explore_outlined),
+              label: Text(_installing ? 'Loading…' : 'EXPLORE EXAMPLE ROUTES'),
             ),
           ],
         ),
@@ -190,7 +221,33 @@ class _RouteCourseCard extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(route.name, style: textTheme.titleMedium),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(route.name, style: textTheme.titleMedium),
+                            ),
+                            if (route.isExample) ...[
+                              const SizedBox(width: AppSpacing.sm),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceHigh,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.outline),
+                                ),
+                                child: Text(
+                                  'Example',
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: AppColors.textMuted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           '${route.distance.formatWith(units)} · '

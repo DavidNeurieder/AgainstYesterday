@@ -187,6 +187,15 @@ class RouteRepository extends Notifier<List<Route>> {
     await writeBestEffort(store, _routesKey, routeListToJson(state));
   }
 
+  /// Replaces the whole catalog with [next] and persists it.
+  ///
+  /// Used to remove a subset (e.g. all example routes) without dropping the
+  /// rest of the library.
+  Future<void> setRoutes(List<Route> next) async {
+    state = [...next];
+    await _persist();
+  }
+
   /// Drops every route from the catalog (Settings → Delete all data, M21).
   void clear() => state = const [];
 

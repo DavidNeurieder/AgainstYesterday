@@ -90,6 +90,7 @@ class Route {
     required this.geometry,
     this.attemptCount = 0,
     this.personalBest,
+    this.isExample = false,
   });
 
   final String id;
@@ -98,6 +99,30 @@ class Route {
   final List<GeoPoint> geometry;
   final int attemptCount;
   final Elapsed? personalBest;
+
+  /// Whether this route ships with the app as a bundled demonstration course.
+  /// Example routes are read-only-ish (removable/restorable) and are excluded
+  /// from personal statistics and history aggregates.
+  final bool isExample;
+
+  Route copyWith({
+    String? id,
+    String? name,
+    Distance? distance,
+    List<GeoPoint>? geometry,
+    int? attemptCount,
+    Elapsed? personalBest,
+    bool? isExample,
+  }) =>
+      Route(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        distance: distance ?? this.distance,
+        geometry: geometry ?? this.geometry,
+        attemptCount: attemptCount ?? this.attemptCount,
+        personalBest: personalBest ?? this.personalBest,
+        isExample: isExample ?? this.isExample,
+      );
 }
 
 /// A completed or in-progress recording.
@@ -111,6 +136,7 @@ class Activity {
     this.performance,
     this.track,
     this.rawFixes,
+    this.isExample = false,
   });
 
   final String id;
@@ -129,6 +155,11 @@ class Activity {
   /// additively so the complete source trace survives the recording lifecycle
   /// and can be exported/replayed later — not just the derived [track].
   final List<GpsFix>? rawFixes;
+
+  /// Whether this activity is a bundled demonstration run rather than a real
+  /// recording. Example activities are excluded from personal history and
+  /// statistics.
+  final bool isExample;
 }
 
 /// One attempt reduced to the route axis (GPS → distance ↔ elapsed time).
