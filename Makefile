@@ -32,11 +32,11 @@ endif
         build-linux-release build-cli-release release-all repro-check repro-compare
 
 build: maplibre-fdroid-clean
-	cd app && flutter build apk --debug --split-per-abi \
+	cd app && flutter build apk --debug --split-per-abi --target-platform android-arm64 \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 build-release: maplibre-fdroid-clean engine-android
-	cd app && flutter build apk --release --split-per-abi \
+	cd app && flutter build apk --release --split-per-abi --target-platform android-arm64 \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 build-linux-release: engine-build

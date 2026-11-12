@@ -9,8 +9,8 @@
 # `libgps_engine.so` through the platform loader (§6).
 #
 # Usage:
-#   ./tool/build_rust_engine_android.sh                 # arm64-v8a + x86_64
-#   ABIS=arm64-v8a ./tool/build_rust_engine_android.sh  # a single ABI
+#   ./tool/build_rust_engine_android.sh                 # arm64-v8a
+#   ABIS="arm64-v8a x86_64" ./tool/build_rust_engine_android.sh  # multiple ABIs
 #   ANDROID_API_LEVEL=26 ./tool/build_rust_engine_android.sh
 #
 # Then build/run the app against the real engine:
@@ -35,7 +35,7 @@ JNI_LIBS="$REPO_ROOT/app/android/app/src/main/jniLibs"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 # 24 is Flutter's default minSdkVersion (FlutterExtension.kt).
 API="${ANDROID_API_LEVEL:-24}"
-ABIS="${ABIS:-arm64-v8a x86_64}"
+ABIS="${ABIS:-arm64-v8a}"
 
 # Maps an Android ABI directory name to its Rust target triple.
 target_for_abi() {
