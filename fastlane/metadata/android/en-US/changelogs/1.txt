@@ -1,1 +1,6 @@
-Initial release (0.1.0).
+Initial release (0.1.0):
+- Race your routes against a ghost of your personal best with a live AHEAD/BEHIND gap.
+- Record runs with live distance, pace and time; see splits, results and run history.
+- Route library with stats, route/run replay, and GPX import/export.
+- Map view with per-route offline maps on supported device builds.
+- Bundled example route to explore, dark/light themes, and on-device storage (no account, no cloud).

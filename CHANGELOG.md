@@ -7,10 +7,21 @@ documented here, grouped by the implementation milestones in
 
 ---
 
-## [0.1.0] - 2026-11-10
+## [0.1.0] - 2026-11-12
 
 ### Added
 
+- A welcome card on the Routes screen for an empty library (with “Try replay a
+  route” guidance and a pointer to importing GPX tracks in Settings → Data) and
+  an opt-in bundled example course (“Cycling Finland”, GeoPrivacy CC BY 4.0,
+  adapted) with install/remove/restore, attribution on the route, and exclusion
+  from personal history/PB aggregates.
+- Replay and “Race this run” actions on each run row in the route detail: replay
+  opens the run replay, and racing a specific run uses that attempt as the ghost
+  (`/race/:id/ghost/:ghostId`) instead of the route’s personal best.
+- `make release-all` builds and collects Android, Linux, and CLI release
+  artifacts into `release/v<version>/` (split-per-ABI APKs, the `gps-engine`
+  binary, and a standalone `against_yesterday-linux-x64.tar.gz` bundle).
 - The companion CLI gains `gps-engine map`: it renders one or more GPX files
   (or a directory of them) into a self-contained HTML page that overlays every
   track on a MapLibre basemap, with per-track colours, start/finish markers, a
@@ -799,6 +810,39 @@ safety net:
 ---
 
 ## 2026-09-14
+
+- Settings → About now shows the real installed app version (via
+  `package_info_plus`).
+
+### Changed
+
+- A fresh install opens directly on the Routes screen (the first-launch intro
+  flow was removed); the one-time location rationale before a run remains.
+- Android/iOS/Linux app identity renamed from the personal
+  `dev.neurieder.against_yesterday` namespace to `app.against_yesterday`
+  (applicationId/namespace, Kotlin package, platform channel names, iOS bundle
+  identifiers, Linux application id).
+- Refreshed the launcher/app icon (Android mipmaps, iOS AppIcon set, docs and
+  fastlane icons).
+- Android builds now produce split-per-ABI APKs (`--split-per-abi`) for smaller,
+  per-device artifacts with distinct versionCodes (F-Droid-friendly).
+- Release builds are unsigned and the Android NDK is pinned (`28.2.13676358`)
+  with the Rust Android engine build preferring the same pinned NDK, improving
+  reproducibility for F-Droid; local/distribution signing can be applied to the
+  unsigned APKs or via a Gradle signing config.
+- `make clean` also removes installed Android Rust engine libraries from
+  `app/android/app/src/main/jniLibs/`.
+- The Linux desktop no longer persists map tiles/offline regions (on-demand
+  rendering only); device/MapLibre offline-map behavior is unchanged.
+
+### Fixed
+
+- Primary action buttons (e.g. “RACE YOUR BEST”, “RACE AGAIN”) render with
+  readable foreground contrast instead of white-on-white in the dark theme.
+- Native launch/splash screens use a black background in dark system mode on
+  Android (including API 31+ `windowSplashScreenBackground`) and adapt on iOS.
+- Offline-region availability test aligned with Linux desktop map persistence
+  being disabled.
 
 ### M14 — Polish
 

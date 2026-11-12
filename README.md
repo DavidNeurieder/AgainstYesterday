@@ -23,12 +23,10 @@ Flutter app  →  EngineService (facade)  →  Rust engine (FFI)
   and desktop; device builds opt into the MapLibre renderer (the engine behind
   Organic Maps) with `MAP_VIEW=true`: the route, the travelled portion, the YOU
   and PB-ghost markers and a follow camera with recenter.
-- **Offline maps** — each route's map is saved locally the first time you open
-  the route or any of its runs, so a course and every run of it share one map.
-  Regions are managed in Settings → Map (progress, delete with confirmation,
-  OSM attribution); route detail shows the state and retries a failed save.
-  Saving is triggered by browsing, size-capped and one at a time, so the app
-  never floods the tile provider.
+- **Offline maps** — on MapLibre device builds, each route's map can be saved
+  locally (and managed in Settings → Map with progress, delete and attribution).
+  Saving is per-route, size-capped and one at a time; on the Linux desktop the
+  app renders maps on demand and does not persist them.
 - **Route library** — course cards with PB/average/last stats, a performance
   chart of every attempt, and attempt history.
 - **Results & history** — run-complete interstitial with NEW PERSONAL BEST
@@ -104,8 +102,17 @@ is also why `make install` and `make build-release` run it first:
 
 ```bash
 ./app/tool/build_rust_engine_android.sh            # arm64-v8a + x86_64
-cd app && flutter build apk --release
+make build-release   # split-per-ABI unsigned release APKs
 ```
+
+`make build` and `make build-release` produce split-per-ABI APKs under
+`app/build/app/outputs/flutter-apk/` (e.g. `app-arm64-v8a-debug.apk`,
+`app-arm64-v8a-release.apk`); `make install` builds and sideloads the debug APK
+matching the connected device’s ABI. `make release-all` builds the Android,
+Linux, and CLI release artifacts and copies them to `release/v<version>/`
+(split APKs, `gps-engine`, and `against_yesterday-linux-x64.tar.gz`). Release
+APKs are unsigned by default (for reproducible/F-Droid builds) — sign them with
+`apksigner` or configure a Gradle signing config for local signed releases.
 
 The binaries are gitignored build artifacts; rerun the script after a fresh
 checkout. To force the fake (demonstration/test builds), use
