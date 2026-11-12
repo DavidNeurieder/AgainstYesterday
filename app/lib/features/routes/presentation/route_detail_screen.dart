@@ -561,7 +561,10 @@ Future<void> renameRoute(
       ],
     ),
   );
-  controller.dispose();
+  // Defer disposal and the store mutation past the dialog's teardown so they
+  // don't race the overlay's deactivation (which trips Flutter's
+  // _dependents.isEmpty assertion).
+  await Future<void>.delayed(Duration.zero);
   if (result == null || !context.mounted) return;
   final newName = result.trim();
   if (newName.isEmpty || newName == route.name) return;
