@@ -82,6 +82,15 @@ class RouteDetailScreen extends ConsumerWidget {
         ),
         actions: [
           IconButton(
+            key: const ValueKey('rename-route'),
+            tooltip: 'Rename route',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () {
+              AppHaptics.selection(ref);
+              renameRoute(context, ref, route);
+            },
+          ),
+          IconButton(
             key: const ValueKey('route-statistics'),
             tooltip: 'Statistics',
             icon: const Icon(Icons.insights_outlined),
@@ -513,6 +522,55 @@ class _RetryButton extends ConsumerWidget {
                 .downloadRoute(route),
       icon: const Icon(Icons.refresh),
       label: const Text('Try again'),
+    );
+  }
+}
+
+/// Renames [route] after asking the user for a new name. The id (and every
+/// run keyed to it) is left untouched, so only the display name changes.
+Future<void> renameRoute(
+  BuildContext context,
+  WidgetRef ref,
+  Route route,
+) async {
+  final controller = TextEditingController(text: route.name);
+  final result = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      key: const ValueKey('rename-route-dialog'),
+      title: const Text('Rename route'),
+      content: TextField(
+        key: const ValueKey('rename-route-field'),
+        controller: controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        decoration: const InputDecoration(labelText: 'Name'),
+        onSubmitted: (value) => Navigator.of(context).pop(value),
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('rename-route-cancel'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('rename-route-confirm'),
+          onPressed: () => Navigator.of(context).pop(controller.text),
+          child: const Text('Rename'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (result == null || !context.mounted) return;
+  final newName = result.trim();
+  if (newName.isEmpty || newName == route.name) return;
+  await ref.read(routeRepositoryProvider.notifier).saveRoute(
+        route.copyWith(name: newName),
+      );
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Renamed to $newName.')),
     );
   }
 }
