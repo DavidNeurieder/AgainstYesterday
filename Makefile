@@ -29,7 +29,7 @@ endif
         connected-test connected-test-engine connected-test-gps \
         engine-build engine-test engine-lint engine-fmt engine-doc \
         engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean \
-        build-linux-release build-cli-release release-all
+        build-linux-release build-cli-release release-all repro-check repro-compare
 
 build: maplibre-fdroid-clean
 	cd app && flutter build apk --debug --split-per-abi \
@@ -56,6 +56,29 @@ release-all: build-release build-linux-release build-cli-release
 	rm -rf $(RELEASE_DIR)/linux-bundle $(RELEASE_DIR)/against_yesterday-linux-x64.tar.gz
 	tar -C app/build/linux/x64/release -czf $(RELEASE_DIR)/against_yesterday-linux-x64.tar.gz bundle
 	@echo "Release artifacts copied to $(RELEASE_DIR)"
+
+# Reusable F-Droid/local reproducibility checks (see app/tool/fdroid_repro.sh).
+# REPRO_ABI selects the Android ABI to test (default: arm64-v8a).
+# REPRO_REF compares build output against a reference APK/dir/hash file.
+REPRO_ABI ?= arm64-v8a
+REPRO_ARTIFACT := app/build/app/outputs/flutter-apk/app-$(REPRO_ABI)-release.apk
+REPRO_BUILD_CMD := ABIS=$(REPRO_ABI) ./app/tool/build_rust_engine_android.sh && cd app && flutter build apk --release --split-per-abi --target-platform android-$(if $(filter arm64-v8a,$(REPRO_ABI)),arm64,$(if $(filter armeabi-v7a,$(REPRO_ABI)),arm,arm64)) --dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+REPRO_CLEAN_CMD := rm -rf app/build && cargo clean && rm -rf app/android/app/src/main/jniLibs
+
+repro-check:
+	./app/tool/fdroid_repro.sh \
+		--twice \
+		--clean-cmd "$(REPRO_CLEAN_CMD)" \
+		--build-cmd "$(REPRO_BUILD_CMD)" \
+		--artifacts "$(REPRO_ARTIFACT)"
+
+repro-compare:
+	@if [ -z "$(REPRO_REF)" ]; then echo "Usage: make repro-compare REPRO_REF=/path/to/reference-apk-or-dir"; exit 2; fi
+	./app/tool/fdroid_repro.sh \
+		--clean-cmd "$(REPRO_CLEAN_CMD)" \
+		--build-cmd "$(REPRO_BUILD_CMD)" \
+		--artifacts "$(REPRO_ARTIFACT)" \
+		--reference "$(REPRO_REF)"
 
 run: engine-build
 	cd app && flutter run
