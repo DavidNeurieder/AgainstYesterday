@@ -41,6 +41,10 @@ Flutter app  →  EngineService (facade)  →  Rust engine (FFI)
 - **Developer diagnostics** — a `DEV_TOOLS` gated readout of the live engine /
   GPS / track / route / ghost / persistence state, plus one-tap export of the
   current run as a raw-GPS fixture for regression replay.
+  
+## Screenshots
+
+<img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="180" alt="Screenshot 1"> <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="180" alt="Screenshot 2"> <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width="180" alt="Screenshot 3"> <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width="180" alt="Screenshot 4"> 
 
 ## Repository layout
 
