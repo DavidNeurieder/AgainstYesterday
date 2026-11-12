@@ -29,14 +29,45 @@ endif
         connected-test connected-test-engine connected-test-gps \
         engine-build engine-test engine-lint engine-fmt engine-doc \
         engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean \
-        build-linux-release build-cli-release release-all repro-check repro-compare
+        build-linux-release build-cli-release release-all repro-check repro-compare \
+        stale-android-apks-debug stale-android-apks-release
 
-build: maplibre-fdroid-clean
-	cd app && flutter build apk --debug --split-per-abi --target-platform android-arm64 \
+# Android artifacts are built for exactly one ABI: the phone target. Flutter
+# keeps APKs from earlier multi-ABI builds in the output directory, so a plain
+# glob would copy those stale files into release/ too. Build and copy by name.
+ANDROID_ABI ?= arm64-v8a
+# Maps a Flutter ABI name to the value --target-platform expects.
+target_platform = $(if $(filter arm64-v8a,$(1)),android-arm64,$(if $(filter armeabi-v7a,$(1)),android-arm,android-x64))
+ANDROID_TARGET_PLATFORM := $(call target_platform,$(ANDROID_ABI))
+APK_OUT := app/build/app/outputs/flutter-apk
+ANDROID_APK := $(APK_OUT)/app-$(ANDROID_ABI)-release.apk
+
+# Removes APKs of other ABIs from earlier builds, so neither `release-all` nor
+# the `install` fallback can pick up a stale artifact. Only the artifacts of the
+# build type being produced are pruned, so a debug build keeps a release APK.
+# $(1) is the APK build type (debug/release).
+define prune_stale_apks
+	@for f in $(APK_OUT)/app-*-$(1).apk; do \
+		[ -e "$$f" ] || continue; \
+		case "$$f" in \
+			*"/app-$(ANDROID_ABI)-"*) ;; \
+			*) echo "Removing stale $$f"; rm -f "$$f" "$$f".sha1 ;; \
+		esac; \
+	done
+endef
+
+stale-android-apks-debug:
+	$(call prune_stale_apks,debug)
+
+stale-android-apks-release:
+	$(call prune_stale_apks,release)
+
+build: stale-android-apks-debug maplibre-fdroid-clean
+	cd app && flutter build apk --debug --split-per-abi --target-platform $(ANDROID_TARGET_PLATFORM) \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
-build-release: maplibre-fdroid-clean engine-android
-	cd app && flutter build apk --release --split-per-abi --target-platform android-arm64 \
+build-release: stale-android-apks-release maplibre-fdroid-clean engine-android
+	cd app && flutter build apk --release --split-per-abi --target-platform $(ANDROID_TARGET_PLATFORM) \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 build-linux-release: engine-build
@@ -51,7 +82,8 @@ RELEASE_DIR := release/v$(VERSION_NAME)
 
 release-all: build-release build-linux-release build-cli-release
 	mkdir -p $(RELEASE_DIR)
-	cp app/build/app/outputs/flutter-apk/app-*-release.apk $(RELEASE_DIR)/
+	rm -f $(RELEASE_DIR)/*.apk
+	cp $(ANDROID_APK) $(RELEASE_DIR)/
 	cp target/release/gps-engine $(RELEASE_DIR)/gps-engine
 	rm -rf $(RELEASE_DIR)/linux-bundle $(RELEASE_DIR)/against_yesterday-linux-x64.tar.gz
 	tar -C app/build/linux/x64/release -czf $(RELEASE_DIR)/against_yesterday-linux-x64.tar.gz bundle
@@ -61,8 +93,8 @@ release-all: build-release build-linux-release build-cli-release
 # REPRO_ABI selects the Android ABI to test (default: arm64-v8a).
 # REPRO_REF compares build output against a reference APK/dir/hash file.
 REPRO_ABI ?= arm64-v8a
-REPRO_ARTIFACT := app/build/app/outputs/flutter-apk/app-$(REPRO_ABI)-release.apk
-REPRO_BUILD_CMD := ABIS=$(REPRO_ABI) ./app/tool/build_rust_engine_android.sh && cd app && flutter build apk --release --split-per-abi --target-platform android-$(if $(filter arm64-v8a,$(REPRO_ABI)),arm64,$(if $(filter armeabi-v7a,$(REPRO_ABI)),arm,arm64)) --dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+REPRO_ARTIFACT := $(APK_OUT)/app-$(REPRO_ABI)-release.apk
+REPRO_BUILD_CMD := ABIS=$(REPRO_ABI) ./app/tool/build_rust_engine_android.sh && cd app && flutter build apk --release --split-per-abi --target-platform $(call target_platform,$(REPRO_ABI)) --dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 REPRO_CLEAN_CMD := rm -rf app/build && cargo clean && rm -rf app/android/app/src/main/jniLibs
 
 repro-check:

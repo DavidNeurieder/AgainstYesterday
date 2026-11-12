@@ -20,7 +20,7 @@ documented here, grouped by the implementation milestones in
   opens the run replay, and racing a specific run uses that attempt as the ghost
   (`/race/:id/ghost/:ghostId`) instead of the route’s personal best.
 - `make release-all` builds and collects Android, Linux, and CLI release
-  artifacts into `release/v<version>/` (split-per-ABI APKs, the `gps-engine`
+  artifacts into `release/v<version>/` (the arm64-v8a APK, the `gps-engine`
   binary, and a standalone `against_yesterday-linux-x64.tar.gz` bundle).
 - The companion CLI gains `gps-engine map`: it renders one or more GPX files
   (or a directory of them) into a self-contained HTML page that overlays every

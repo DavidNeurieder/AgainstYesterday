@@ -143,8 +143,8 @@ and bundled as a native library, which `tool/build_rust_engine_android.sh`
 does:
 
 ```bash
-./tool/build_rust_engine_android.sh          # arm64-v8a + x86_64
-ABIS=arm64-v8a ./tool/build_rust_engine_android.sh   # a single ABI
+./tool/build_rust_engine_android.sh          # arm64-v8a
+ABIS="arm64-v8a x86_64" ./tool/build_rust_engine_android.sh   # several ABIs
 ```
 
 It builds `gps-engine` with the NDK clang linker for API 24 (Flutter's default

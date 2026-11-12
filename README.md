@@ -105,17 +105,20 @@ picks it up and the bare name `libgps_engine.so` resolves on the device. That
 is also why `make install` and `make build-release` run it first:
 
 ```bash
-./app/tool/build_rust_engine_android.sh            # arm64-v8a + x86_64
-make build-release   # split-per-ABI unsigned release APKs
+./app/tool/build_rust_engine_android.sh            # arm64-v8a
+make build-release   # arm64-v8a release APK
 ```
 
-`make build` and `make build-release` produce split-per-ABI APKs under
-`app/build/app/outputs/flutter-apk/` (e.g. `app-arm64-v8a-debug.apk`,
+`make build` and `make build-release` produce an arm64-v8a APK under
+`app/build/app/outputs/flutter-apk/` (`app-arm64-v8a-debug.apk`,
 `app-arm64-v8a-release.apk`); `make install` builds and sideloads the debug APK
-matching the connected device’s ABI. `make release-all` builds the Android,
-Linux, and CLI release artifacts and copies them to `release/v<version>/`
-(split APKs, `gps-engine`, and `against_yesterday-linux-x64.tar.gz`). Release
-APKs are unsigned by default (for reproducible/F-Droid builds) — sign them with
+matching the connected device’s ABI. `ANDROID_ABI=...` overrides the target
+(e.g. `ANDROID_ABI=x86_64` for an emulator). `make release-all` builds the
+Android, Linux, and CLI release artifacts and copies them to
+`release/v<version>/` (the one APK, `gps-engine`, and
+`against_yesterday-linux-x64.tar.gz`), clearing older APKs from that directory
+first. Release APKs are unsigned by default (for reproducible/F-Droid builds) —
+sign them with
 `apksigner` or configure a Gradle signing config for local signed releases.
 
 The binaries are gitignored build artifacts; rerun the script after a fresh
