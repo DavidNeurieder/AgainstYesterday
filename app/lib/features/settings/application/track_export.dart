@@ -126,6 +126,19 @@ String gpxActivityFileName({
       : 'against-yesterday-$slug-$stamp.gpx';
 }
 
+/// The file name for a single route's export: the route slug plus a timestamp,
+/// so repeated exports never clobber each other:
+/// `against-yesterday-river-loop-2026-10-09-141530.gpx`.
+String gpxRouteFileName({
+  required Route route,
+  DateTime? now,
+}) {
+  final slug = _slug(route.name.isEmpty ? route.id : route.name);
+  final stamp = _stamp(now ?? DateTime.now());
+  return slug.isEmpty
+      ? 'against-yesterday-$stamp.gpx'
+      : 'against-yesterday-$slug-$stamp.gpx';
+}
 String _stamp(DateTime when) {
   final local = when.toLocal();
   String two(int value) => value.toString().padLeft(2, '0');

@@ -156,16 +156,15 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('gpx-export-confirm')));
     await tester.pumpAndSettle();
 
-    expect(exporter.calls, hasLength(1));
-    final saved = exporter.calls.single;
-    expect(saved.fileName, startsWith('against-yesterday-'));
-    expect(saved.fileName, endsWith('.gpx'));
-    expect(saved.contents, startsWith('<?xml'));
-    expect(saved.contents, contains('<trk>'));
-    expect(saved.contents, contains('</gpx>'));
-    // Three demo routes, no activity tracks → three <trk> elements.
-    expect('<trk>'.allMatches(saved.contents).length, 3);
-    expect(find.text('Saved ${saved.fileName} to Downloads.'), findsOneWidget);
+    // §26: each chosen track becomes its own GPX file.
+    expect(exporter.calls, hasLength(3));
+    for (final call in exporter.calls) {
+      expect(call.fileName, startsWith('against-yesterday-'));
+      expect(call.fileName, endsWith('.gpx'));
+      expect(call.contents, startsWith('<?xml'));
+      expect('<trk>'.allMatches(call.contents).length, 1);
+    }
+    expect(find.text('Saved 3 files to Downloads.'), findsOneWidget);
   });
 
   testWidgets('export GPX writes only the tracks left checked', (tester) async {

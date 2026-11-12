@@ -259,29 +259,50 @@ class SettingsScreen extends ConsumerWidget {
       );
       return;
     }
-    // §26: a window to pick the tracks, not a dump of the whole catalog.
+    // §26: a window to pick the tracks. Each chosen track is written to its
+    // own GPX file, never combined into one document.
     final selected = await showGpxExportDialog(context, tracks: tracks);
     if (selected == null || selected.isEmpty) {
       return;
     }
-    final gpx = buildGpxTracks(selected);
-    if (gpx == null) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Nothing to export yet.')),
-      );
-      return;
+    final routeNames = {
+      for (final route in ref.read(routeRepositoryProvider)) route.id: route.name,
+    };
+    final exporter = ref.read(trackExporterProvider);
+    final now = DateTime.now();
+    var saved = 0;
+    String? lastFileName;
+    String? firstError;
+    for (final track in selected) {
+      final gpx = buildGpxTracks([track]);
+      if (gpx == null) continue;
+      final fileName = track.kind == GpxExportKind.activity
+          ? gpxActivityFileName(
+              activity: track.activity!,
+              routeName: routeNames[track.activity!.routeId],
+            )
+          : gpxRouteFileName(route: track.route!, now: now);
+      try {
+        await exporter.saveToDownloads(fileName: fileName, contents: gpx);
+        saved++;
+        lastFileName = fileName;
+      } on TrackExportException catch (error) {
+        firstError = error.message;
+        break;
+      }
     }
-    final fileName = gpxFileName(DateTime.now());
-    try {
-      await ref
-          .read(trackExporterProvider)
-          .saveToDownloads(fileName: fileName, contents: gpx);
+    if (!context.mounted) return;
+    if (firstError != null) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Saved $fileName to Downloads.')),
+        SnackBar(content: Text('Export failed: $firstError')),
       );
-    } on TrackExportException catch (error) {
+    } else if (saved == 1 && lastFileName != null) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Export failed: ${error.message}')),
+        SnackBar(content: Text('Saved $lastFileName to Downloads.')),
+      );
+    } else {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Saved $saved files to Downloads.')),
       );
     }
   }
