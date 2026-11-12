@@ -53,8 +53,8 @@ release-all: build-release build-linux-release build-cli-release
 	mkdir -p $(RELEASE_DIR)
 	cp app/build/app/outputs/flutter-apk/app-*-release.apk $(RELEASE_DIR)/
 	cp target/release/gps-engine $(RELEASE_DIR)/gps-engine
-	rm -rf $(RELEASE_DIR)/linux-bundle
-	cp -r app/build/linux/x64/release/bundle $(RELEASE_DIR)/linux-bundle
+	rm -rf $(RELEASE_DIR)/linux-bundle $(RELEASE_DIR)/against_yesterday-linux-x64.tar.gz
+	tar -C app/build/linux/x64/release -czf $(RELEASE_DIR)/against_yesterday-linux-x64.tar.gz bundle
 	@echo "Release artifacts copied to $(RELEASE_DIR)"
 
 run: engine-build
