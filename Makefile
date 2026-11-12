@@ -31,11 +31,11 @@ endif
         engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean
 
 build: maplibre-fdroid-clean
-	cd app && flutter build apk --debug \
+	cd app && flutter build apk --debug --split-per-abi \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 build-release: maplibre-fdroid-clean engine-android
-	cd app && flutter build apk --release \
+	cd app && flutter build apk --release --split-per-abi \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 run: engine-build
@@ -58,7 +58,13 @@ FORCE:
 # Builds the debug APK (with Android cdylibs bundled, so the app auto-selects
 # the native Rust engine) and sideloads it into the connected device/emulator.
 install: maplibre-fdroid-clean engine-android build
-	adb install -r app/build/app/outputs/flutter-apk/app-debug.apk
+	@ABI=$$(adb shell getprop ro.product.cpu.abi | tr -d '\r'); \
+	APK=app/build/app/outputs/flutter-apk/app-$${ABI}-debug.apk; \
+	if [ ! -f "$$APK" ]; then \
+		APK=$$(ls app/build/app/outputs/flutter-apk/app-*-debug.apk 2>/dev/null | head -1); \
+	fi; \
+	echo "Installing $$APK"; \
+	adb install -r "$$APK"
 
 test-rust-engine: engine-build
 	cd app && flutter test --dart-define=REQUIRE_RUST_ENGINE=true

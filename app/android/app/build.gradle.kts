@@ -32,10 +32,9 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        ndk {
-            // Ship only the newest ARM ABI to reduce APK size.
-            abiFilters += listOf("arm64-v8a")
-        }
+        // ABI selection is controlled at build time (e.g. --split-per-abi for
+        // F-Droid/release) so each shipped APK stays small without hard-coding a
+        // single architecture here.
     }
 
     buildTypes {
