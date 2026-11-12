@@ -8,6 +8,19 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// ABI selection follows the target platform Flutter was invoked with
+// (`--target-platform android-arm64`, which `make build`/`build-release` and
+// the F-Droid recipe pass). Gradle called directly (no target-platform
+// property) falls back to the phone target, arm64-v8a.
+val flutterTargetPlatform = (project.findProperty("target-platform") as String?)
+    ?: "android-arm64"
+val androidAbi = when {
+    flutterTargetPlatform.contains("arm64") -> "arm64-v8a"
+    flutterTargetPlatform.contains("android-arm") -> "armeabi-v7a"
+    flutterTargetPlatform.contains("x64") -> "x86_64"
+    else -> "arm64-v8a"
+}
+
 android {
     namespace = "app.against_yesterday"
     compileSdk = flutter.compileSdkVersion
@@ -32,13 +45,22 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        // ABI selection is controlled at build time (e.g. --split-per-abi for
-        // F-Droid/release) so each shipped APK stays small without hard-coding a
-        // single architecture here.
     }
 
     buildTypes {
+        // Flutter's Gradle plugin adds ABI filters for every platform to each
+        // build type when the build is not split per ABI. Narrow them back to
+        // the one ABI being built, so the non-split APK does not carry engine
+        // or plugin libraries for other architectures.
+        listOf("debug", "release").forEach { buildTypeName ->
+            named(buildTypeName) {
+                ndk {
+                    abiFilters.clear()
+                    abiFilters.add(androidAbi)
+                }
+            }
+        }
+
         release {
             // Unsigned release APKs for reproducible/F-Droid builds (F-Droid signs
             // artifacts itself). For a locally signed release, configure a signing

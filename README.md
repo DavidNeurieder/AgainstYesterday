@@ -110,12 +110,13 @@ make build-release   # arm64-v8a release APK
 ```
 
 `make build` and `make build-release` produce an arm64-v8a APK under
-`app/build/app/outputs/flutter-apk/` (`app-arm64-v8a-debug.apk`,
-`app-arm64-v8a-release.apk`); `make install` builds and sideloads the debug APK
-matching the connected device’s ABI. `ANDROID_ABI=...` overrides the target
-(e.g. `ANDROID_ABI=x86_64` for an emulator). `make release-all` builds the
+`app/build/app/outputs/flutter-apk/` (`app-debug.apk`, `app-release.apk`); no
+`--split-per-abi` is used, so the versionCode is the pubspec build number
+(`0.1.0+1` → `1`) rather than a per-ABI code. `make install` builds and
+sideloads the debug APK. `ANDROID_ABI=...` overrides the target (e.g.
+`ANDROID_ABI=x86_64` for an emulator). `make release-all` builds the
 Android, Linux, and CLI release artifacts and copies them to
-`release/v<version>/` (the one APK, `gps-engine`, and
+`release/v<version>/` (the APK, `gps-engine`, and
 `against_yesterday-linux-x64.tar.gz`), clearing older APKs from that directory
 first. Release APKs are unsigned by default (for reproducible/F-Droid builds) —
 sign them with

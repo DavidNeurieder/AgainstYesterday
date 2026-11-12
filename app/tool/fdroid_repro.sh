@@ -11,11 +11,19 @@
 #
 # The script is generic: point it at your app's build command and artifact(s).
 #
+# Cross-environment caveat: Flutter/Dart AOT snapshots embed the absolute paths
+# of the app sources and of the Flutter SDK (as file:/// URIs), so two builds
+# are byte-identical only when the app and the Flutter SDK sit at the same
+# absolute paths. Comparing against an F-Droid buildserver artifact therefore
+# needs that layout too (the buildserver uses /home/vagrant/build/<appid>);
+# F-Droid's own reproducibility check rebuilds twice in one path and is
+# unaffected.
+#
 # Examples:
 #   # Local self-reproducibility check (build twice, compare):
 #   ./app/tool/fdroid_repro.sh \
-#     --build-cmd "cd app && flutter build apk --release --split-per-abi --target-platform android-arm64" \
-#     --artifacts "app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" \
+#     --build-cmd "cd app && flutter build apk --release --target-platform android-arm64" \
+#     --artifacts "app/build/app/outputs/flutter-apk/app-release.apk" \
 #     --clean-cmd "rm -rf app/build" \
 #     --twice
 #

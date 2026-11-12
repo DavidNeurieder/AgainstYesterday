@@ -440,6 +440,12 @@ documented here, grouped by the implementation milestones in
 
 ### Changed
 
+- Android release builds now ship one arm64-v8a APK with no `--split-per-abi`
+  step: splitting a single ABI only changed the versionCode to 2001, which did
+  not match the pubspec build number (1) or the F-Droid recipe, whose build
+  failed on that mismatch. Gradle filters the packaged native libraries to the
+  `--target-platform` Flutter was invoked with, so the APK is still arm64-only
+  (and `ANDROID_ABI=x86_64` still works for an emulator).
 - Route matching got a prepared-geometry fast path. `PreparedTrack` indexes a
   recording once (polyline, per-segment boxes, cumulative distances, 50 m
   length basis), `compare_prepared` / `compare_either_direction_prepared`

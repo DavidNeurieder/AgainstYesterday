@@ -30,27 +30,31 @@ endif
         engine-build engine-test engine-lint engine-fmt engine-doc \
         engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean \
         build-linux-release build-cli-release release-all repro-check repro-compare \
-        stale-android-apks-debug stale-android-apks-release
+        stale-android-apks-debug stale-android-apks-release stale-android-jnilibs
 
-# Android artifacts are built for exactly one ABI: the phone target. Flutter
-# keeps APKs from earlier multi-ABI builds in the output directory, so a plain
-# glob would copy those stale files into release/ too. Build and copy by name.
+# Android artifacts are built for exactly one ABI: the phone target. That also
+# means no --split-per-abi: a split of a single ABI adds nothing but a per-ABI
+# versionCode (2001 for arm64-v8a), which no longer matches the `+<build>`
+# number in pubspec.yaml that the release and F-Droid metadata declare. Flutter
+# keeps APKs from earlier builds in the output directory, so build and copy by
+# name instead of globbing.
 ANDROID_ABI ?= arm64-v8a
 # Maps a Flutter ABI name to the value --target-platform expects.
 target_platform = $(if $(filter arm64-v8a,$(1)),android-arm64,$(if $(filter armeabi-v7a,$(1)),android-arm,android-x64))
 ANDROID_TARGET_PLATFORM := $(call target_platform,$(ANDROID_ABI))
 APK_OUT := app/build/app/outputs/flutter-apk
-ANDROID_APK := $(APK_OUT)/app-$(ANDROID_ABI)-release.apk
+ANDROID_APK := $(APK_OUT)/app-release.apk
+ANDROID_DEBUG_APK := $(APK_OUT)/app-debug.apk
 
-# Removes APKs of other ABIs from earlier builds, so neither `release-all` nor
-# the `install` fallback can pick up a stale artifact. Only the artifacts of the
-# build type being produced are pruned, so a debug build keeps a release APK.
-# $(1) is the APK build type (debug/release).
+# Removes APKs from earlier builds (including split-per-ABI leftovers), so
+# neither `release-all` nor `install` can pick up a stale artifact. Only the
+# artifacts of the build type being produced are pruned, so a debug build keeps
+# a release APK. $(1) is the APK build type (debug/release).
 define prune_stale_apks
-	@for f in $(APK_OUT)/app-*-$(1).apk; do \
+	@for f in $(APK_OUT)/app*.apk; do \
 		[ -e "$$f" ] || continue; \
 		case "$$f" in \
-			*"/app-$(ANDROID_ABI)-"*) ;; \
+			*"/app-$(1).apk") ;; \
 			*) echo "Removing stale $$f"; rm -f "$$f" "$$f".sha1 ;; \
 		esac; \
 	done
@@ -62,12 +66,24 @@ stale-android-apks-debug:
 stale-android-apks-release:
 	$(call prune_stale_apks,release)
 
+# The Rust engine script installs one cdylib per configured ABI into jniLibs.
+# Leftovers from an earlier ABI would otherwise be packaged (or silently stale)
+# in a later build of a different ABI.
+stale-android-jnilibs:
+	@for d in app/android/app/src/main/jniLibs/*/; do \
+		[ -d "$$d" ] || continue; \
+		case "$${d%/}" in \
+			*"/jniLibs/$(ANDROID_ABI)") ;; \
+			*) echo "Removing stale $${d%/}"; rm -rf "$$d" ;; \
+		esac; \
+	done
+
 build: stale-android-apks-debug maplibre-fdroid-clean
-	cd app && flutter build apk --debug --split-per-abi --target-platform $(ANDROID_TARGET_PLATFORM) \
+	cd app && flutter build apk --debug --target-platform $(ANDROID_TARGET_PLATFORM) \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 build-release: stale-android-apks-release maplibre-fdroid-clean engine-android
-	cd app && flutter build apk --release --split-per-abi --target-platform $(ANDROID_TARGET_PLATFORM) \
+	cd app && flutter build apk --release --target-platform $(ANDROID_TARGET_PLATFORM) \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
 build-linux-release: engine-build
@@ -93,8 +109,8 @@ release-all: build-release build-linux-release build-cli-release
 # REPRO_ABI selects the Android ABI to test (default: arm64-v8a).
 # REPRO_REF compares build output against a reference APK/dir/hash file.
 REPRO_ABI ?= arm64-v8a
-REPRO_ARTIFACT := $(APK_OUT)/app-$(REPRO_ABI)-release.apk
-REPRO_BUILD_CMD := ABIS=$(REPRO_ABI) ./app/tool/build_rust_engine_android.sh && cd app && flutter build apk --release --split-per-abi --target-platform $(call target_platform,$(REPRO_ABI)) --dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+REPRO_ARTIFACT := $(APK_OUT)/app-release.apk
+REPRO_BUILD_CMD := ABIS=$(REPRO_ABI) ./app/tool/build_rust_engine_android.sh && cd app && flutter build apk --release --target-platform $(call target_platform,$(REPRO_ABI)) --dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 REPRO_CLEAN_CMD := rm -rf app/build && cargo clean && rm -rf app/android/app/src/main/jniLibs
 
 repro-check:
@@ -129,14 +145,11 @@ run-cli: engine-build
 FORCE:
 .PHONY: FORCE
 
-# Builds the debug APK (with Android cdylibs bundled, so the app auto-selects
-# the native Rust engine) and sideloads it into the connected device/emulator.
+# Builds the debug APK (with the Android arm64 cdylib bundled, so the app
+# auto-selects the native Rust engine) and sideloads it into the connected
+# device/emulator.
 install: maplibre-fdroid-clean engine-android build
-	@ABI=$$(adb shell getprop ro.product.cpu.abi | tr -d '\r'); \
-	APK=app/build/app/outputs/flutter-apk/app-$${ABI}-debug.apk; \
-	if [ ! -f "$$APK" ]; then \
-		APK=$$(ls app/build/app/outputs/flutter-apk/app-*-debug.apk 2>/dev/null | head -1); \
-	fi; \
+	@APK=$(ANDROID_DEBUG_APK); \
 	echo "Installing $$APK"; \
 	adb install -r "$$APK"
 
@@ -181,8 +194,8 @@ engine-doc:
 maplibre-fdroid-clean:
 	./app/tool/fdroid_prebuild.sh
 
-engine-android:
-	./app/tool/build_rust_engine_android.sh
+engine-android: stale-android-jnilibs
+	ABIS=$(ANDROID_ABI) ./app/tool/build_rust_engine_android.sh
 
 check:
 	cd app && flutter analyze
