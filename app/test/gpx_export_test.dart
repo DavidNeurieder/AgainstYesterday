@@ -62,7 +62,8 @@ void main() {
       ];
       final gpx = buildGpx(const [], [activityWithTrack(track: track)])!;
       expect('<trk>'.allMatches(gpx).length, 1);
-      expect(gpx, contains('<trkpt lat="52.5005" lon="13.4005"></trkpt>'));
+      expect(gpx, contains('<trkpt lat="52.5005" lon="13.4005">'));
+      expect(gpx, contains('<time>2026-01-01T00:00:00.000Z</time>'));
     });
 
     test('skips empty geometry and nameless metadata safely', () {
@@ -89,6 +90,44 @@ void main() {
         contains('<name>Tom &amp; Jerry &lt;&quot;Lakes&quot;&gt;</name>'),
       );
       expect(gpx, isNot(contains('& <')));
+    });
+  });
+
+  group('exportableTracks', () {
+    test('lists route geometry and recorded runs, skipping empty ones', () {
+      final empty = Route(
+        id: 'empty',
+        name: 'Empty',
+        distance: const Distance.kilometers(0),
+        geometry: const [],
+      );
+      final tracks = exportableTracks(
+        [route, empty],
+        [activityWithTrack(), Activity(id: 'no-track', startedAt: _epoch)],
+      );
+      expect(
+        [for (final track in tracks) track.id],
+        ['route:river-loop', 'activity:act-009'],
+      );
+      expect(tracks.first.kind, GpxExportKind.route);
+      expect(tracks.first.name, 'River Loop');
+      expect(tracks.first.route, isNotNull);
+      expect(tracks.last.kind, GpxExportKind.activity);
+      expect(tracks.last.name, startsWith('River Loop · '));
+      expect(tracks.last.activity, isNotNull);
+    });
+
+    test('buildGpxTracks writes exactly the chosen tracks', () {
+      final tracks = exportableTracks([route], [activityWithTrack()]);
+      final gpx = buildGpxTracks([tracks.last])!;
+      expect('<trk>'.allMatches(gpx).length, 1);
+      // The run's track carries its times; the route's bare geometry is gone.
+      expect(gpx, contains('<time>2026-01-01T00:00:00.000Z</time>'));
+      expect(gpx, isNot(contains('lon="13.4"></trkpt>')));
+    });
+
+    test('buildGpxTracks is null for an empty selection', () {
+      expect(buildGpxTracks(const []), isNull);
     });
   });
 

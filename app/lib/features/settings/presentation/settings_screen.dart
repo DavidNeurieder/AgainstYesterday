@@ -31,6 +31,7 @@ import '../application/link_launcher.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import '../application/track_export.dart';
+import 'gpx_export_dialog.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -133,7 +134,7 @@ class SettingsScreen extends ConsumerWidget {
                 key: const ValueKey('export-gpx'),
                 leading: const Icon(Icons.ios_share_outlined),
                 title: const Text('Export GPX'),
-                subtitle: const Text('Save routes and runs to Downloads'),
+                subtitle: const Text('Choose routes and runs to save'),
                 onTap: () => _exportGpx(context, ref),
               ),
               const Divider(height: 1, color: AppColors.outline),
@@ -247,10 +248,23 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _exportGpx(BuildContext context, WidgetRef ref) async {
-    final routes = ref.read(routeRepositoryProvider);
-    final activities = ref.read(activityRepositoryProvider);
-    final gpx = buildGpx(routes, activities);
     final messenger = ScaffoldMessenger.of(context);
+    final tracks = exportableTracks(
+      ref.read(routeRepositoryProvider),
+      ref.read(activityRepositoryProvider),
+    );
+    if (tracks.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Nothing to export yet.')),
+      );
+      return;
+    }
+    // §26: a window to pick the tracks, not a dump of the whole catalog.
+    final selected = await showGpxExportDialog(context, tracks: tracks);
+    if (selected == null || selected.isEmpty) {
+      return;
+    }
+    final gpx = buildGpxTracks(selected);
     if (gpx == null) {
       messenger.showSnackBar(
         const SnackBar(content: Text('Nothing to export yet.')),

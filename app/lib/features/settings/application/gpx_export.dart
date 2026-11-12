@@ -11,25 +11,101 @@ library;
 
 import '../../../engine/models.dart';
 
-/// Builds a GPX document from [routes] and [activities], or `null` when there
-/// is nothing to export (no route geometry, no activity tracks).
-String? buildGpx(List<Route> routes, List<Activity> activities) {
-  final tracks = <String>[
+/// One selectable track in Settings → Export GPX (§26): either a saved route
+/// (its geometry is the track) or one recorded run.
+///
+/// The export chooser lists these, and [buildGpxTracks] writes exactly the
+/// entries the user picked, so the dialog and the document can never disagree
+/// about which tracks exist.
+class GpxExportTrack {
+  const GpxExportTrack({
+    required this.id,
+    required this.name,
+    required this.kind,
+    this.route,
+    this.activity,
+  }) : assert(
+          (route == null) != (activity == null),
+          'a track is either a route or an activity',
+        );
+
+  /// Stable list key: `route:<id>` or `activity:<id>`.
+  final String id;
+
+  /// The `<trk>` name, and what the chooser lists.
+  final String name;
+
+  /// What kind of track this is, for the chooser's grouping.
+  final GpxExportKind kind;
+
+  /// The saved route this entry writes, or `null` for a run.
+  final Route? route;
+
+  /// The recorded run this entry writes, or `null` for a route.
+  final Activity? activity;
+}
+
+/// The two kinds of exportable track, in chooser order.
+enum GpxExportKind {
+  route('Routes'),
+  activity('Runs');
+
+  const GpxExportKind(this.label);
+
+  /// Section heading in the chooser.
+  final String label;
+}
+
+/// Every track Settings → Export GPX can write, in display order: saved
+/// routes with geometry first, then recorded runs with a track.
+///
+/// Routes without geometry and runs without a recorded track are skipped,
+/// because there is nothing to write for them.
+List<GpxExportTrack> exportableTracks(
+  List<Route> routes,
+  List<Activity> activities,
+) {
+  final routeNames = {for (final route in routes) route.id: route.name};
+  return [
     for (final route in routes)
       if (route.geometry.isNotEmpty)
-        _trackXml(route.name, [for (final p in route.geometry) (p.latitude, p.longitude)]),
+        GpxExportTrack(
+          id: 'route:${route.id}',
+          name: route.name.isEmpty ? route.id : route.name,
+          kind: GpxExportKind.route,
+          route: route,
+        ),
     for (final activity in activities)
       if (activity.track != null && activity.track!.isNotEmpty)
-        _trackXml(
-          activity.routeId ?? 'run',
-          [
-            for (final p in activity.track!)
-              (p.position.latitude, p.position.longitude),
-          ],
+        GpxExportTrack(
+          id: 'activity:${activity.id}',
+          name: _activityTrackName(activity, routeNames[activity.routeId]),
+          kind: GpxExportKind.activity,
+          activity: activity,
         ),
   ];
-  return _document(tracks);
 }
+
+/// Builds a GPX document holding exactly [tracks] (a chooser selection), or
+/// `null` when the list is empty.
+String? buildGpxTracks(List<GpxExportTrack> tracks) {
+  final documents = <String>[
+    for (final track in tracks)
+      switch (track.route) {
+        final route? => _trackXml(
+            track.name,
+            [for (final p in route.geometry) (p.latitude, p.longitude)],
+          ),
+        null => _trackXmlWithTime(track.name, track.activity!.track!),
+      },
+  ];
+  return _document(documents);
+}
+
+/// Builds a GPX document from [routes] and [activities], or `null` when there
+/// is nothing to export (no route geometry, no activity tracks).
+String? buildGpx(List<Route> routes, List<Activity> activities) =>
+    buildGpxTracks(exportableTracks(routes, activities));
 
 /// Builds a single-run GPX document for History's per-run export (§33
 /// "activity → export GPX"), or `null` when [activity] has no recorded track

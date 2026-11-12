@@ -136,12 +136,24 @@ void main() {
     expect(switchValue(tester).value, isFalse);
   });
 
-  testWidgets('export GPX saves the catalog to Downloads', (tester) async {
+  testWidgets('export GPX asks which tracks to write, then saves them',
+      (tester) async {
     final exporter = _RecordingTrackExporter();
     await openSettings(tester, exporter: exporter);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('export-gpx')), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('export-gpx')));
+    await tester.pumpAndSettle();
+
+    // §26: the chooser lists every exportable track, all checked by default,
+    // and nothing is written until the user confirms.
+    expect(find.byKey(const ValueKey('gpx-export-dialog')), findsOneWidget);
+    for (final id in ['river-loop', 'park-5k', 'huegelrunde']) {
+      expect(find.byKey(ValueKey('gpx-export-route:$id')), findsOneWidget);
+    }
+    expect(exporter.calls, isEmpty);
+
+    await tester.tap(find.byKey(const ValueKey('gpx-export-confirm')));
     await tester.pumpAndSettle();
 
     expect(exporter.calls, hasLength(1));
@@ -156,12 +168,52 @@ void main() {
     expect(find.text('Saved ${saved.fileName} to Downloads.'), findsOneWidget);
   });
 
+  testWidgets('export GPX writes only the tracks left checked', (tester) async {
+    final exporter = _RecordingTrackExporter();
+    await openSettings(tester, exporter: exporter);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('export-gpx')), 200);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('export-gpx')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('gpx-export-route:river-loop')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('gpx-export-route:huegelrunde')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('gpx-export-confirm')));
+    await tester.pumpAndSettle();
+
+    final saved = exporter.calls.single;
+    expect('<trk>'.allMatches(saved.contents).length, 1);
+    expect(saved.contents, contains('<name>Park 5K</name>'));
+    expect(saved.contents, isNot(contains('River Loop')));
+    expect(saved.contents, isNot(contains('Hügelrunde')));
+  });
+
+  testWidgets('export GPX writes nothing when the chooser is cancelled',
+      (tester) async {
+    final exporter = _RecordingTrackExporter();
+    await openSettings(tester, exporter: exporter);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('export-gpx')), 200);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('export-gpx')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('gpx-export-cancel')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('gpx-export-dialog')), findsNothing);
+    expect(exporter.calls, isEmpty);
+  });
+
   testWidgets('export GPX reports a failed write', (tester) async {
     final exporter = _RecordingTrackExporter(fail: true);
     await openSettings(tester, exporter: exporter);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('export-gpx')), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('export-gpx')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('gpx-export-confirm')));
     await tester.pumpAndSettle();
 
     expect(find.text('Export failed: Downloads is not writable.'), findsOneWidget);
