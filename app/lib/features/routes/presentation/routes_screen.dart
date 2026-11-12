@@ -24,7 +24,6 @@ import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/example_routes.dart';
 import '../application/route_stats.dart';
-import 'route_detail_screen.dart' show renameRoute;
 
 class RoutesScreen extends ConsumerWidget {
   const RoutesScreen({super.key});
@@ -81,10 +80,6 @@ class RoutesScreen extends ConsumerWidget {
                 AppHaptics.medium(ref);
                 // Pushed over the shell so back returns to the courses tab.
                 context.push('/race/${route.id}');
-              },
-              onRename: () {
-                AppHaptics.selection(ref);
-                renameRoute(context, ref, route);
               },
             ),
             const SizedBox(height: AppSpacing.sm),
@@ -212,14 +207,12 @@ class _RouteCourseCard extends ConsumerWidget {
     required this.stats,
     required this.onTap,
     required this.onRace,
-    required this.onRename,
   });
 
   final Route route;
   final RouteStats stats;
   final VoidCallback onTap;
   final VoidCallback onRace;
-  final VoidCallback onRename;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -287,13 +280,6 @@ class _RouteCourseCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  IconButton(
-                    key: ValueKey('rename-route-${route.id}'),
-                    tooltip: 'Rename route',
-                    icon: const Icon(Icons.edit_outlined, size: 20),
-                    visualDensity: VisualDensity.compact,
-                    onPressed: onRename,
-                  ),
                   if (stats.pb case final pb?)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
