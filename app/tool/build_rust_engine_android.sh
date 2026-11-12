@@ -64,10 +64,11 @@ host_tag() {
   echo "$os-$arch"
 }
 
-# NDK selection is explicit rather than "whichever sorts last": CI pins a
-# version through ANDROID_NDK_HOME (or ANDROID_NDK_VERSION) so a runner image
-# update cannot silently change the native toolchain. The fallback below only
-# accepts an unambiguous install — directory order never decides the winner.
+# NDK selection is explicit for reproducible builds. CI/F-Droid should pin a
+# version through ANDROID_NDK_HOME or ANDROID_NDK_VERSION; if unset, prefer the
+# project's pinned NDK when present, otherwise accept a single unambiguous
+# install (directory order never decides the winner).
+PINNED_NDK_VERSION="${PINNED_NDK_VERSION:-28.2.13676358}"
 resolve_ndk() {
   if [ -n "${ANDROID_NDK_HOME:-}" ]; then
     printf '%s\n' "$ANDROID_NDK_HOME"
@@ -75,6 +76,10 @@ resolve_ndk() {
   fi
   if [ -n "${ANDROID_NDK_VERSION:-}" ]; then
     printf '%s\n' "$SDK/ndk/$ANDROID_NDK_VERSION"
+    return 0
+  fi
+  if [ -d "$SDK/ndk/$PINNED_NDK_VERSION" ]; then
+    printf '%s\n' "$SDK/ndk/$PINNED_NDK_VERSION"
     return 0
   fi
   local candidates=() found

@@ -11,7 +11,8 @@ plugins {
 android {
     namespace = "app.against_yesterday"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pin the NDK for reproducible/F-Droid builds (matches this Flutter SDK).
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -39,9 +40,9 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Unsigned release APKs for reproducible/F-Droid builds (F-Droid signs
+            // artifacts itself). For a locally signed release, configure a signing
+            // config here or pass one at build time.
         }
     }
 }
