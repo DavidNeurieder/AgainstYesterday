@@ -132,3 +132,6 @@ full-test-device:
 clean:
 	cd app && flutter clean
 	cargo clean
+	rm -rf app/android/app/src/main/jniLibs/*/libgps_engine.so
+	-rmdir app/android/app/src/main/jniLibs/* 2>/dev/null || true
+	-rmdir app/android/app/src/main/jniLibs 2>/dev/null || true
