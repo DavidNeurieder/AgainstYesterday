@@ -28,7 +28,8 @@ endif
 .PHONY: build build-release install run run-linux run-cli test test-rust-engine lint tz-test \
         connected-test connected-test-engine connected-test-gps \
         engine-build engine-test engine-lint engine-fmt engine-doc \
-        engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean
+        engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean \
+        build-linux-release build-cli-release release-all
 
 build: maplibre-fdroid-clean
 	cd app && flutter build apk --debug --split-per-abi \
@@ -37,6 +38,24 @@ build: maplibre-fdroid-clean
 build-release: maplibre-fdroid-clean engine-android
 	cd app && flutter build apk --release --split-per-abi \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+
+build-linux-release: engine-build
+	cd app && flutter build linux --release \
+		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+
+build-cli-release:
+	cargo build --release -p gps-engine
+
+VERSION_NAME := $(shell sed -n 's/^version: *\([^+]*\).*/\1/p' app/pubspec.yaml)
+RELEASE_DIR := release/v$(VERSION_NAME)
+
+release-all: build-release build-linux-release build-cli-release
+	mkdir -p $(RELEASE_DIR)
+	cp app/build/app/outputs/flutter-apk/app-*-release.apk $(RELEASE_DIR)/
+	cp target/release/gps-engine $(RELEASE_DIR)/gps-engine
+	rm -rf $(RELEASE_DIR)/linux-bundle
+	cp -r app/build/linux/x64/release/bundle $(RELEASE_DIR)/linux-bundle
+	@echo "Release artifacts copied to $(RELEASE_DIR)"
 
 run: engine-build
 	cd app && flutter run
