@@ -234,6 +234,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             const SizedBox(height: AppSpacing.sm),
             ..._pbTimeline(context, routes, activities),
             const SizedBox(height: AppSpacing.lg),
+            Text('Route insights', style: textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            _RouteInsights(routes: routes, activities: activities),
+            const SizedBox(height: AppSpacing.lg),
             Text('Routes', style: textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             for (final r in routes) ...[
@@ -444,6 +448,107 @@ class _ConsistencyCalendar extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+
+class _RouteInsights extends StatelessWidget {
+  const _RouteInsights({required this.routes, required this.activities});
+
+  final List<Route> routes;
+  final List<Activity> activities;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    if (routes.isEmpty) return const SizedBox.shrink();
+
+    final statsByRoute = {
+      for (final r in routes)
+        r: computeRouteStats(
+          route: r,
+          attempts: [
+            for (final a in activities)
+              if (a.routeId == r.id && a.duration != null) a,
+          ],
+        ),
+    };
+
+    // Most completed.
+    final byRuns = [...routes]..sort((a, b) =>
+        statsByRoute[b]!.runs.compareTo(statsByRoute[a]!.runs));
+    // Most improved (most negative trend first).
+    final improved = routes
+        .where((r) => statsByRoute[r]!.trendSecondsPerRun != null)
+        .toList()
+      ..sort((a, b) => statsByRoute[a]!
+          .trendSecondsPerRun!
+          .compareTo(statsByRoute[b]!.trendSecondsPerRun!));
+    // Most competitive: smallest (last - pb) / pb.
+    final competitive = routes.where((r) {
+      final s = statsByRoute[r]!;
+      return s.last != null && s.pb != null && s.pb!.seconds > 0;
+    }).toList()
+      ..sort((a, b) {
+        final sa = statsByRoute[a]!;
+        final sb = statsByRoute[b]!;
+        final ga = (sa.last!.seconds - sa.pb!.seconds) / sa.pb!.seconds;
+        final gb = (sb.last!.seconds - sb.pb!.seconds) / sb.pb!.seconds;
+        return ga.compareTo(gb);
+      });
+
+    Widget row(String label, Route r, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 110,
+                child: Text(
+                  label,
+                  style: textTheme.bodySmall?.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+              Expanded(child: Text(r.name, style: textTheme.bodyMedium)),
+              Text(value, style: textTheme.bodySmall),
+            ],
+          ),
+        );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (byRuns.isNotEmpty)
+              row('Most completed', byRuns.first,
+                  '${statsByRoute[byRuns.first]!.runs} runs'),
+            if (improved.isNotEmpty)
+              row('Most improved', improved.first,
+                  '${statsByRoute[improved.first]!.trendSecondsPerRun!.toStringAsFixed(1)} s/run'),
+            if (competitive.isNotEmpty) ...[
+              () {
+                final r = competitive.first;
+                final s = statsByRoute[r]!;
+                final gap = s.last!.seconds - s.pb!.seconds;
+                return row(
+                  'Most competitive',
+                  r,
+                  gap <= 0 ? 'at PB' : '+${Elapsed.seconds(gap).format()}',
+                );
+              }(),
+            ],
+            if (byRuns.isEmpty && improved.isEmpty && competitive.isEmpty)
+              Text(
+                'Not enough data yet.',
+                style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
