@@ -120,9 +120,12 @@ for abi in $ABIS; do
   fi
 
   if ! rustup target list --installed | grep -qx "$target"; then
-    echo "error: Rust target $target is not installed." >&2
-    echo "       rustup target add $target" >&2
-    exit 1
+    echo ">> Rust target $target is not installed; installing it..."
+    rustup target add "$target" || {
+      echo "error: could not install Rust target $target." >&2
+      echo "       run: rustup target add $target" >&2
+      exit 1
+    }
   fi
 
   linker="$TOOLCHAIN/$target$API-clang"
