@@ -368,6 +368,13 @@ class TrackAnalyticsSection extends ConsumerWidget {
                       : '${Elapsed.seconds(a.bestPaceMsPerKm! / 1000.0).format()} /km',
                 ),
                 _AnalyticsRow(
+                  key: const ValueKey('analytics-smoothed-pace'),
+                  label: 'Smoothed pace (5-sample)',
+                  value: a.paceSamples.length < 5
+                      ? '—'
+                      : '${Elapsed.seconds(_smoothedPace(a.paceSamples) / 1000.0).format()} /km',
+                ),
+                _AnalyticsRow(
                   key: const ValueKey('analytics-avg-speed'),
                   label: 'Average speed',
                   value: a.averageSpeedMps == null
@@ -698,6 +705,20 @@ class _PaceMapSectionState extends State<_PaceMapSection> {
       ],
     );
   }
+}
+
+double _smoothedPace(List<({double distanceMeters, int paceMsPerKm})> samples) {
+  final window = 5;
+  var best = double.infinity;
+  for (var i = window - 1; i < samples.length; i++) {
+    var sum = 0.0;
+    for (var j = i - window + 1; j <= i; j++) {
+      sum += samples[j].paceMsPerKm;
+    }
+    final avg = sum / window;
+    if (avg < best) best = avg;
+  }
+  return best.isFinite ? best : samples.map((s) => s.paceMsPerKm.toDouble()).reduce((a, b) => a < b ? a : b);
 }
 
 String _formatDate(DateTime dt) {

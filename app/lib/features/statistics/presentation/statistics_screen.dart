@@ -30,11 +30,16 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
   _StatsPeriod _period = _StatsPeriod.all;
 
   DateTime _periodStart(_StatsPeriod p, DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
     switch (p) {
       case _StatsPeriod.week:
-        return now.subtract(const Duration(days: 7));
+        return today.subtract(const Duration(days: 7));
       case _StatsPeriod.month:
-        return DateTime(now.year, now.month - 1, now.day);
+        final prevMonth = now.month == 1 ? 12 : now.month - 1;
+        final prevYear = now.month == 1 ? now.year - 1 : now.year;
+        final lastDay = DateTime(prevYear, prevMonth + 1, 0).day;
+        final day = now.day > lastDay ? lastDay : now.day;
+        return DateTime(prevYear, prevMonth, day);
       case _StatsPeriod.year:
         return DateTime(now.year - 1, now.month, now.day);
       case _StatsPeriod.all:
