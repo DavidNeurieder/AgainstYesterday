@@ -167,11 +167,17 @@ tz-test:
 connected-test:
 	cd app && ./tool/android_integration_test.sh
 
-connected-test-engine: engine-android
+# Connected suites run on an emulator (x86_64) by default but may also run on
+# a physical device (arm64-v8a). Build the Rust engine for both ABIs so the
+# library resolves regardless of the target, instead of throwing
+# "USE_RUST_ENGINE=true is set but no Rust engine library could be loaded".
+connected-test-engine:
+	ABIS="arm64-v8a x86_64" ./app/tool/build_rust_engine_android.sh
 	cd app && ./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true
 
 # Real-receiver suite: fixes simulated through the emulator geo console.
-connected-test-gps: engine-android
+connected-test-gps:
+	ABIS="arm64-v8a x86_64" ./app/tool/build_rust_engine_android.sh
 	cd app && ./tool/android_integration_test.sh --device-gps --dart-define=USE_RUST_ENGINE=true
 
 engine-build:
