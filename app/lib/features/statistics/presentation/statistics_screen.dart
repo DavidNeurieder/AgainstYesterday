@@ -111,6 +111,18 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     ];
   }
 
+  List<List<Activity>> _weeklyActivityBuckets(List<Activity> acts) {
+    final now = DateTime.now();
+    final buckets = List<List<Activity>>.generate(8, (_) => []);
+    for (final a in acts) {
+      final weeksAgo = now.difference(a.startedAt).inDays ~/ 7;
+      if (weeksAgo < 0 || weeksAgo >= 8) continue;
+      final idx = 7 - weeksAgo;
+      buckets[idx].add(a);
+    }
+    return buckets;
+  }
+
   @override
   Widget build(BuildContext context) {
     final routes = ref.watch(routeRepositoryProvider);
@@ -197,6 +209,7 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             _WeeklyBarChart(
               buckets: _weeklyBuckets(filtered, (a) => a.distance?.meters ?? 0),
               unit: 'm',
+              weekActivities: _weeklyActivityBuckets(filtered),
             ),
             const SizedBox(height: AppSpacing.lg),
             Text('Pace trend', style: textTheme.titleMedium),
@@ -208,6 +221,9 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               ),
               unit: 'min/km',
               lowerIsBetter: true,
+              weekActivities: _weeklyActivityBuckets(
+                filtered.where((a) => a.duration != null && a.distance != null && a.distance!.meters > 0).toList(),
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
             Text('Consistency (last 4 weeks)', style: textTheme.titleMedium),
@@ -290,61 +306,106 @@ class _SummaryGrid extends StatelessWidget {
 }
 
 
-class _WeeklyBarChart extends StatelessWidget {
+class _WeeklyBarChart extends StatefulWidget {
   const _WeeklyBarChart({
     required this.buckets,
     required this.unit,
     this.lowerIsBetter = false,
+    this.weekActivities,
   });
 
   final List<double> buckets;
   final String unit;
   final bool lowerIsBetter;
+  final List<List<Activity>>? weekActivities;
+
+  @override
+  State<_WeeklyBarChart> createState() => _WeeklyBarChartState();
+}
+
+class _WeeklyBarChartState extends State<_WeeklyBarChart> {
+  int? _selected;
 
   @override
   Widget build(BuildContext context) {
+    final buckets = widget.buckets;
     final maxV = buckets.isEmpty
         ? 1.0
         : buckets.reduce((a, b) => a > b ? a : b).clamp(1.0, double.infinity);
-    return SizedBox(
-      height: 120,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          for (final v in buckets)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Tooltip(
-                      message: '${v.toStringAsFixed(unit == 'm' ? 0 : 2)} $unit',
-                      child: Container(
-                        height: (v / maxV * 90).clamp(2.0, 90.0),
-                        decoration: BoxDecoration(
-                          color: AppColors.you,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: 120,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var i = 0; i < buckets.length; i++)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _selected = i),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Tooltip(
+                            message:
+                                '${buckets[i].toStringAsFixed(widget.unit == 'm' ? 0 : 2)} ${widget.unit}',
+                            child: Container(
+                              height: (buckets[i] / maxV * 90).clamp(2.0, 90.0),
+                              decoration: BoxDecoration(
+                                color: _selected == i
+                                    ? AppColors.pb
+                                    : AppColors.you,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            buckets[i] == 0
+                                ? ''
+                                : buckets[i].toStringAsFixed(
+                                    widget.unit == 'm' ? 0 : 1),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(color: AppColors.textMuted),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      v == 0 ? '' : v.toStringAsFixed(unit == 'm' ? 0 : 1),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppColors.textMuted,
-                          ),
-                    ),
-                  ],
+                  ),
                 ),
+            ],
+          ),
+        ),
+        if (_selected != null &&
+            widget.weekActivities != null &&
+            _selected! < widget.weekActivities!.length) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Week ${_selected! + 1}: ${widget.weekActivities![_selected!].length} activities',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          for (final a in widget.weekActivities![_selected!])
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Text(
+                '${a.startedAt.toLocal().day}/${a.startedAt.toLocal().month} · '
+                '${a.duration?.format() ?? '—'} · '
+                '${a.distance?.meters.toStringAsFixed(0) ?? '—'} m',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
               ),
             ),
         ],
-      ),
+      ],
     );
   }
 }
-
 
 class _ConsistencyCalendar extends StatelessWidget {
   const _ConsistencyCalendar({required this.activities});
