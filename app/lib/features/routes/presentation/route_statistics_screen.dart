@@ -198,6 +198,10 @@ class RouteStatisticsSectionScreen extends ConsumerWidget {
               attempts: attempts,
             ),
           },
+          if (section == RouteStatsSection.performance && attempts.length >= 2) ...[
+            const SizedBox(height: AppSpacing.lg),
+            HeadToHeadSection(route: route, attempts: attempts),
+          ],
           if (attempts.isEmpty && section != RouteStatsSection.segments) ...[
             const SizedBox(height: AppSpacing.md),
             Text(

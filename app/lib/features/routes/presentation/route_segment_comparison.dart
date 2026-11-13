@@ -11,6 +11,7 @@ import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/dependencies.dart';
+import '../../../engine/engine_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
@@ -234,4 +235,197 @@ List<TrackPoint> _monotonicTrack(List<TrackPoint> points) {
         timestamp: start.add(Duration(seconds: i)),
       ),
   ];
+}
+
+/// Builds engine [Attempt]s from a selection of activities on [route], using the
+/// same monotonic-timestamp sanitising as the segment comparison. Returns an
+/// empty list when fewer than two usable attempts exist.
+Future<List<Attempt>> buildRouteAttempts({
+  required EngineService engine,
+  required Route route,
+  required List<Activity> selected,
+}) async {
+  final attempts = <Attempt>[];
+  for (final a in selected) {
+    if (a.track == null || a.track!.length < 2) continue;
+    final sanitized = _monotonicTrack(a.track!);
+    try {
+      final att = await engine.createAttempt(
+        activityId: a.id,
+        routeId: route.id,
+        points: sanitized,
+        routeGeometry: route.geometry,
+      );
+      attempts.add(att);
+      continue;
+    } catch (_) {}
+    final synthetic = [
+      for (var i = 0; i < sanitized.length; i++)
+        TrackPoint(
+          position: sanitized[i].position,
+          altitudeMeters: sanitized[i].altitudeMeters,
+          timestamp: sanitized.first.timestamp.add(Duration(seconds: i)),
+        ),
+    ];
+    try {
+      final att = await engine.createAttempt(
+        activityId: a.id,
+        routeId: route.id,
+        points: synthetic,
+        routeGeometry: route.geometry,
+      );
+      attempts.add(att);
+    } catch (_) {}
+  }
+  return attempts;
+}
+
+/// Head-to-head comparison of two attempts on one route.
+class HeadToHeadSection extends ConsumerStatefulWidget {
+  const HeadToHeadSection({
+    super.key,
+    required this.route,
+    required this.attempts,
+  });
+
+  final Route route;
+  final List<Activity> attempts;
+
+  @override
+  ConsumerState<HeadToHeadSection> createState() =>
+      _HeadToHeadSectionState();
+}
+
+class _HeadToHeadSectionState extends ConsumerState<HeadToHeadSection> {
+  Activity? _a;
+  Activity? _b;
+  bool _loading = false;
+  List<RouteSegmentComparison>? _comparison;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.attempts.length >= 2) {
+      _a = widget.attempts.first;
+      _b = widget.attempts[1];
+    }
+    _run();
+  }
+
+  @override
+  void didUpdateWidget(covariant HeadToHeadSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attempts.length != widget.attempts.length) {
+      if (widget.attempts.length >= 2) {
+        _a = widget.attempts.first;
+        _b = widget.attempts.length > 1 ? widget.attempts[1] : null;
+      }
+      _run();
+    }
+  }
+
+  Future<void> _run() async {
+    if (_a == null || _b == null) return;
+    final engine = ref.read(engineServiceProvider);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final atts = await buildRouteAttempts(
+        engine: engine,
+        route: widget.route,
+        selected: [_a!, _b!],
+      );
+      if (atts.length < 2) {
+        setState(() {
+          _comparison = null;
+          _loading = false;
+          _error = 'Need two usable attempts.';
+        });
+        return;
+      }
+      final result = await engine.compareRouteSegments(
+        attempts: atts,
+        segmentDistanceMeters: 1000,
+        routeDistanceMeters: widget.route.distance.meters,
+      );
+      setState(() {
+        _comparison = result;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    if (widget.attempts.length < 2) {
+      return Text(
+        'Need at least two attempts to compare.',
+        style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Head to head', style: textTheme.titleMedium),
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButton<Activity>(
+                value: _a,
+                isExpanded: true,
+                items: [
+                  for (final a in widget.attempts)
+                    DropdownMenuItem(value: a, child: Text(_label(a))),
+                ],
+                onChanged: (v) {
+                  setState(() => _a = v);
+                  _run();
+                },
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: DropdownButton<Activity>(
+                value: _b,
+                isExpanded: true,
+                items: [
+                  for (final a in widget.attempts)
+                    DropdownMenuItem(value: a, child: Text(_label(a))),
+                ],
+                onChanged: (v) {
+                  setState(() => _b = v);
+                  _run();
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        if (_loading)
+          const Center(child: CircularProgressIndicator())
+        else if (_error != null)
+          Text(_error!, style: textTheme.bodySmall?.copyWith(color: AppColors.error))
+        else if (_comparison == null || _comparison!.isEmpty)
+          Text('No comparison available.',
+              style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted))
+        else
+          _SegmentTable(comparison: _comparison!),
+      ],
+    );
+  }
+
+  String _label(Activity a) {
+    final d = a.startedAt.toLocal();
+    return '${d.day}/${d.month} ${a.duration?.format() ?? ''}'.trim();
+  }
 }
