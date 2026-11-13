@@ -452,7 +452,7 @@ impl RouteStats {
 
         // recent average: newest up to 5
         let mut sorted_by_time: Vec<&Attempt> = attempts.iter().collect();
-        sorted_by_time.sort_by(|a, b| b.0.cmp(&a.0));
+        sorted_by_time.sort_by_key(|a| std::cmp::Reverse(a.0));
         let recent: Vec<f64> = sorted_by_time.iter().take(5).map(|a| a.1).collect();
         let recent_average = if recent.is_empty() {
             None
@@ -471,7 +471,7 @@ impl RouteStats {
             None
         } else {
             let mut by_time = attempts.to_vec();
-            by_time.sort_by(|a, b| b.0.cmp(&a.0));
+            by_time.sort_by_key(|a| std::cmp::Reverse(a.0));
             by_time.first().map(|a| a.1)
         };
 
@@ -535,7 +535,7 @@ fn trend_seconds_per_run(attempts: &[Attempt]) -> Option<f64> {
     if timed.len() < 2 {
         return None;
     }
-    timed.sort_by(|a, b| a.0.cmp(&b.0));
+    timed.sort_by_key(|a| a.0);
     let n = timed.len() as f64;
     let xs: Vec<f64> = (0..timed.len()).map(|i| i as f64).collect();
     let ys: Vec<f64> = timed.iter().map(|a| a.1).collect();
