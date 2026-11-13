@@ -881,6 +881,11 @@ class _FakeLiveRun implements LiveRunHandle {
   bool _paused = false;
   bool _disposed = false;
 
+  /// Active elapsed seconds while running (advances with fix time, even when
+  /// stationary) used for the live ghost comparison.
+  double _activeElapsed = 0;
+  DateTime? _activeLastTime;
+
   bool _accepts(GpsFix fix) {
     if (fix.accuracyMeters != null && fix.accuracyMeters! > _maxAccuracy) {
       return false;
@@ -973,6 +978,13 @@ class _FakeLiveRun implements LiveRunHandle {
   void push(GpsFix fix) {
     if (_disposed || _paused) return;
     if (!_accepts(fix)) return;
+    final prevTime = _activeLastTime;
+    if (prevTime != null) {
+      final dt = fix.timestamp.difference(prevTime).inMilliseconds / 1000.0;
+      if (dt > 0) _activeElapsed += dt;
+    }
+    _activeLastTime = fix.timestamp;
+
     if (_route != null && _routeLength > 0) {
       final pos = GeoPoint(latitude: fix.latitude, longitude: fix.longitude);
       final proj = projectOnPolyline(_route, pos);
@@ -1008,6 +1020,7 @@ class _FakeLiveRun implements LiveRunHandle {
     _resetChain();
     _routePrev = null;
     _routePace = 0;
+    _activeLastTime = null;
   }
 
   @override
@@ -1035,6 +1048,8 @@ class _FakeLiveRun implements LiveRunHandle {
     _clearChain();
     _routeCoverage = d;
     _routeMoving = m;
+    _activeElapsed = m;
+    _activeLastTime = null;
     _routePrev = null;
     _routePace = 0;
     _lastFix = null;
@@ -1081,9 +1096,10 @@ class _FakeLiveRun implements LiveRunHandle {
     LiveGhostSnapshot? ghost;
     final samples = _ghostSamples;
     if (samples != null && samples.isNotEmpty) {
+      final active = _activeElapsed;
       final refTime = _referenceTimeAt(samples, dist);
-      final diff = moving - refTime;
-      final ghostDist = _distanceAt(samples, moving);
+      final diff = active - refTime;
+      final ghostDist = _distanceAt(samples, active);
       final spacing = _sampleSpacing(samples, dist);
       final conf = (1.0 - (spacing - 10.0) / 50.0).clamp(0.0, 1.0);
       ghost = LiveGhostSnapshot(

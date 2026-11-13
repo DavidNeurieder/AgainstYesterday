@@ -288,6 +288,12 @@ pub struct LiveRecorder {
     /// Confidence of the last route match, `0.0..=1.0`.
     last_match_confidence: f64,
 
+    /// Active elapsed seconds (advances with fix time while running, including
+    /// stationary periods) used for the live ghost comparison.
+    active_elapsed: f64,
+    /// Timestamp of the last sensor-accepted fix while the run is active.
+    active_last_time: Option<crate::units::Timestamp>,
+
     last_fix: Option<GpsFix>,
     paused: bool,
 }
@@ -313,6 +319,8 @@ impl LiveRecorder {
             last_lateral: None,
             last_raw: None,
             last_match_confidence: 0.0,
+            active_elapsed: 0.0,
+            active_last_time: None,
             last_fix: None,
             paused: false,
         }
@@ -331,6 +339,14 @@ impl LiveRecorder {
         if !fix_passes_sensor_checks(&fix, &self.config.cursor.filter) {
             return;
         }
+
+        if let Some(prev_time) = self.active_last_time {
+            let dt = fix.timestamp.elapsed_since(prev_time).as_secs();
+            if dt > 0.0 {
+                self.active_elapsed += dt;
+            }
+        }
+        self.active_last_time = Some(fix.timestamp);
 
         if self.route.is_some() {
             self.push_route(fix);
@@ -413,6 +429,7 @@ impl LiveRecorder {
         self.route_last_ground = None;
         self.route_last_time = None;
         self.route_pace = Speed::ZERO;
+        self.active_last_time = None;
         if let Some(matcher) = self.matcher.as_mut() {
             let covered = self.route_coverage;
             matcher.seed(Distance::from_meters(covered));
@@ -580,7 +597,13 @@ impl LiveRecorder {
     /// set.
     pub fn ghost_snapshot(&self) -> Option<LiveGhostSnapshot> {
         let ghost = self.ghost.as_ref()?;
-        Some(ghost.snapshot(self.distance(), self.moving()))
+        Some(ghost.snapshot(self.distance(), self.elapsed_for_gap()))
+    }
+
+    /// Active elapsed time used for ghost comparisons. It advances with fix
+    /// timestamps while running, so a stationary runner still accrues time.
+    pub fn elapsed_for_gap(&self) -> Duration {
+        Duration::from_secs(self.active_elapsed.max(0.0))
     }
 }
 
@@ -991,6 +1014,45 @@ mod tests {
             coord(52.5000, 13.4000), // A finish (closes the figure)
         ])
         .unwrap()
+    }
+
+    #[test]
+    fn ghost_time_gap_increases_while_stationary() {
+        let mut rec = LiveRecorder::new(
+            LiveConfig::default(),
+            Some(
+                Route::new(vec![
+                    coord(52.500_00, 13.400_00),
+                    coord(52.520_00, 13.400_00),
+                ])
+                .unwrap(),
+            ),
+        );
+        rec.set_ghost(Some(ghost(5.0, 5_000.0)));
+
+        let base = 1_700_000_000i64;
+        rec.push(fix(52.500_00, 13.400_00, base));
+        rec.push(fix(52.509_00, 13.400_00, base + 200)); // ~1000 m in 200 s
+
+        let snap1 = rec.ghost_snapshot().expect("ghost set");
+        let diff1 = snap1.state.time_difference.as_secs();
+
+        // Runner stays put for 30 s: moving/distance unchanged but time gap grows.
+        rec.push(fix(52.509_00, 13.400_00, base + 230));
+        let snap2 = rec.ghost_snapshot().expect("ghost set");
+        let diff2 = snap2.state.time_difference.as_secs();
+
+        assert!(
+            (snap2.state.distance.meters() - snap1.state.distance.meters()).abs() < 2.0,
+            "distance should not advance while stationary: {} vs {}",
+            snap1.state.distance.meters(),
+            snap2.state.distance.meters()
+        );
+        assert!(
+            diff2 > diff1 + 20.0,
+            "time gap should increase while stationary: {diff1} -> {diff2}"
+        );
+        assert!(!snap2.state.ahead);
     }
 
     #[test]
