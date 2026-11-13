@@ -25,6 +25,7 @@ import '../../../widgets/route_silhouette.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/route_stats.dart';
+import 'pb_progression.dart';
 import 'route_segment_comparison.dart';
 import 'route_stats_view.dart';
 
@@ -198,6 +199,10 @@ class RouteStatisticsSectionScreen extends ConsumerWidget {
               attempts: attempts,
             ),
           },
+          if (section == RouteStatsSection.overview) ...[
+            const SizedBox(height: AppSpacing.lg),
+            PbProgressionSection(route: route, attempts: attempts),
+          ],
           if (section == RouteStatsSection.performance && attempts.length >= 2) ...[
             const SizedBox(height: AppSpacing.lg),
             HeadToHeadSection(route: route, attempts: attempts),
