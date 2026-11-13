@@ -25,7 +25,9 @@ import '../../map/map_surface.dart';
 import '../../map/route_map_autosave.dart';
 import 'elevation_profile.dart';
 import '../application/activity_analytics.dart';
+import '../../result/application/gap_curve.dart';
 import '../../result/application/splits.dart';
+import '../../result/presentation/gap_chart.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/application/track_export.dart';
 
@@ -171,6 +173,24 @@ class ActivityDetailScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.sm),
             for (final split in splits)
               SplitRow(split: split),
+          ],
+          if (route != null && route.personalBest != null && trackMeters >= gapChartMinimumMeters) ...[
+            const SizedBox(height: AppSpacing.xl),
+            Text(
+              'Gap to PB',
+              style: textTheme.titleMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            GapChart(
+              curve: computeGapCurve(
+                activity: activity,
+                route: route,
+                trackMeters: trackMeters,
+              ),
+              units: units,
+            ),
           ],
           if (activity.track case final track? when track.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xl),
