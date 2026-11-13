@@ -23,6 +23,7 @@ class RouteMap extends StatefulWidget {
     super.key,
     required this.geometry,
     this.track = const [],
+    this.trackColors,
     required this.you,
     required this.youProgress,
     this.ghost,
@@ -35,6 +36,11 @@ class RouteMap extends StatefulWidget {
 
   /// The actual recorded GPS path, drawn on top of [geometry].
   final List<GeoPoint> track;
+
+  /// Optional per-segment colours for [track] (length == track.length - 1).
+  /// When present, the track is drawn segment-by-segment in these colours
+  /// (pace colouring); otherwise a single colour is used.
+  final List<Color>? trackColors;
 
   /// Current live position (YOU).
   final GeoPoint you;
@@ -99,6 +105,7 @@ class _RouteMapState extends State<RouteMap> {
                 followAt: widget.you,
                 geometry: widget.geometry,
                 track: widget.track,
+                trackColors: widget.trackColors,
                 youProgress: widget.youProgress,
                 courseColor: widget.courseColor,
               ),
@@ -409,6 +416,7 @@ class _MapPainter extends CustomPainter {
     required this.followAt,
     required this.geometry,
     this.track = const [],
+    this.trackColors,
     required this.youProgress,
     this.courseColor,
   });
@@ -419,6 +427,7 @@ class _MapPainter extends CustomPainter {
   final GeoPoint followAt;
   final List<GeoPoint> geometry;
   final List<GeoPoint> track;
+  final List<Color>? trackColors;
   final double youProgress;
   final Color? courseColor;
 
@@ -445,13 +454,28 @@ class _MapPainter extends CustomPainter {
         for (final g in track)
           world.project(g, shift: shift, follow: follow, followAt: followAt),
       ];
-      final trackPaint = Paint()
-        ..color = AppColors.track
-        ..strokeWidth = 3
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(_path(trackPoints), trackPaint);
+      if (trackColors != null && trackColors!.length == track.length - 1) {
+        for (var i = 0; i < track.length - 1; i++) {
+          final segPaint = Paint()
+            ..color = trackColors![i]
+            ..strokeWidth = 3
+            ..style = PaintingStyle.stroke
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round;
+          final path = Path()
+            ..moveTo(trackPoints[i].dx, trackPoints[i].dy)
+            ..lineTo(trackPoints[i + 1].dx, trackPoints[i + 1].dy);
+          canvas.drawPath(path, segPaint);
+        }
+      } else {
+        final trackPaint = Paint()
+          ..color = AppColors.track
+          ..strokeWidth = 3
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        canvas.drawPath(_path(trackPoints), trackPaint);
+      }
     }
 
     final traveled = _traveledPath(full, youProgress.clamp(0.0, 1.0));

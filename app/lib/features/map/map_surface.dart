@@ -70,6 +70,7 @@ class MapScene {
   const MapScene({
     required this.geometry,
     this.track = const [],
+    this.trackColors,
     required this.you,
     required this.youProgress,
     this.ghost,
@@ -86,6 +87,11 @@ class MapScene {
   /// diverges from the planned course is still visible. Empty when there is
   /// no separate track (thumbnails, activity detail which uses [geometry]).
   final List<GeoPoint> track;
+
+  /// Optional per-segment colours for [track] (length == track.length - 1).
+  /// Used for pace colouring; renderers that cannot honour it fall back to a
+  /// single colour.
+  final List<Color>? trackColors;
 
   /// Current live position (YOU).
   final GeoPoint you;

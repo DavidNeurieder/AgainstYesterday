@@ -148,6 +148,9 @@ class ActivityDetailScreen extends ConsumerWidget {
                   MapScene(
                     geometry: mapGeometry,
                     track: overlayTrack,
+                    trackColors: overlayTrack.length >= 2 && runTrack != null
+                        ? _paceTrackColors(runTrack)
+                        : null,
                     you: trackPositions.isNotEmpty
                         ? trackPositions.first
                         : mapGeometry.first,
@@ -635,6 +638,32 @@ class _PaceDistributionSectionState
   }
 }
 
+List<Color> _paceTrackColors(List<TrackPoint> track) {
+  if (track.length < 2) return const [];
+  final colors = <Color>[];
+  for (var i = 0; i < track.length - 1; i++) {
+    final a = track[i];
+    final b = track[i + 1];
+    final dist = haversineMeters(a.position, b.position);
+    final secs = b.timestamp.difference(a.timestamp).inMilliseconds / 1000.0;
+    double paceMinPerKm = double.infinity;
+    if (dist > 0 && secs > 0) {
+      paceMinPerKm = (secs / dist) * 1000.0 / 60.0;
+    }
+    Color c;
+    if (paceMinPerKm < 5) {
+      c = AppColors.ahead;
+    } else if (paceMinPerKm < 6) {
+      c = AppColors.track;
+    } else if (paceMinPerKm < 7) {
+      c = AppColors.behind;
+    } else {
+      c = AppColors.gpsWarning;
+    }
+    colors.add(c);
+  }
+  return colors;
+}
 String _formatDate(DateTime dt) {
   final d = dt.toLocal();
   return '${d.day}/${d.month}/${d.year}';

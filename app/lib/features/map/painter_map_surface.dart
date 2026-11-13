@@ -21,6 +21,7 @@ class PainterMapSurface implements MapSurface {
   Widget build(BuildContext context, MapScene scene) => RouteMap(
         geometry: scene.geometry,
         track: scene.track,
+        trackColors: scene.trackColors,
         you: scene.you,
         youProgress: scene.youProgress,
         ghost: scene.ghost,
