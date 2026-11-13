@@ -129,15 +129,6 @@ class RouteDetailScreen extends ConsumerWidget {
                         ),
                         fullscreen: false,
                       ),
-                  Positioned(
-                    right: 8,
-                    bottom: 8,
-                    child: FloatingActionButton.small(
-                      heroTag: null,
-                      onPressed: () => _showExpandedMap(context, route, attempts),
-                      child: const Icon(Icons.fullscreen),
-                    ),
-                  ),
                   Positioned.fill(
                     child: Material(
                       color: Colors.transparent,
@@ -146,6 +137,15 @@ class RouteDetailScreen extends ConsumerWidget {
                         splashColor: Colors.white10,
                         highlightColor: Colors.white10,
                       ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: FloatingActionButton.small(
+                      heroTag: null,
+                      onPressed: () => _showExpandedMap(context, route, attempts),
+                      child: const Icon(Icons.fullscreen),
                     ),
                   ),
                 ],
@@ -634,10 +634,10 @@ Future<void> _showExpandedMap(
     builder: (context) {
       final size = MediaQuery.of(context).size;
       return Dialog(
-        insetPadding: const EdgeInsets.all(16),
+        insetPadding: EdgeInsets.zero,
         child: SizedBox(
-          width: size.width * 0.92,
-          height: size.height * 0.78,
+          width: size.width,
+          height: size.height,
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
