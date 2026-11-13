@@ -362,3 +362,174 @@ fn elevation_range(track: &Track) -> (Option<f64>, Option<f64>) {
     }
     (min, max)
 }
+
+/// Route-level statistics derived from a route's personal best and its timed
+/// attempts. Mirrors `RouteStats` in the Flutter client so both sides agree.
+pub struct RouteStats {
+    pub pb_seconds: Option<f64>,
+    pub average_seconds: Option<f64>,
+    pub median_seconds: Option<f64>,
+    pub last_seconds: Option<f64>,
+    pub runs: u32,
+    pub fastest_seconds: Option<f64>,
+    pub slowest_seconds: Option<f64>,
+    pub std_dev_seconds: Option<f64>,
+    pub range_seconds: Option<f64>,
+    pub trend_seconds_per_run: Option<f64>,
+    pub recent_average_seconds: Option<f64>,
+    pub verdict: Option<String>,
+}
+
+/// A timed attempt: (started_at_ms, duration_seconds).
+pub type Attempt = (i64, f64);
+
+impl RouteStats {
+    pub fn compute(pb_seconds: Option<f64>, attempt_count: u32, attempts: &[Attempt]) -> Self {
+        let mut durations: Vec<f64> = attempts.iter().map(|a| a.1).filter(|d| *d > 0.0).collect();
+        durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        let fastest = durations.first().copied();
+        let slowest = durations.last().copied();
+        let pb = match (pb_seconds, fastest) {
+            (Some(p), Some(f)) => Some(p.min(f)),
+            (Some(p), None) => Some(p),
+            (None, Some(f)) => Some(f),
+            (None, None) => None,
+        };
+
+        let average = if durations.is_empty() {
+            None
+        } else {
+            Some(durations.iter().sum::<f64>() / durations.len() as f64)
+        };
+
+        let median = if durations.is_empty() {
+            None
+        } else if durations.len() % 2 == 1 {
+            Some(durations[durations.len() / 2])
+        } else {
+            Some((durations[durations.len() / 2 - 1] + durations[durations.len() / 2]) / 2.0)
+        };
+
+        let std_dev = if durations.len() < 2 {
+            None
+        } else {
+            let avg = average.unwrap();
+            let var = durations.iter().map(|d| (d - avg).powi(2)).sum::<f64>() / durations.len() as f64;
+            Some(var.sqrt())
+        };
+
+        let range = match (fastest, slowest) {
+            (Some(f), Some(s)) => Some(s - f),
+            _ => None,
+        };
+
+        // trend: slope over chronological order
+        let trend = trend_seconds_per_run(attempts);
+
+        // recent average: newest up to 5
+        let mut sorted_by_time: Vec<&Attempt> = attempts.iter().collect();
+        sorted_by_time.sort_by(|a, b| b.0.cmp(&a.0));
+        let recent: Vec<f64> = sorted_by_time
+            .iter()
+            .filter(|a| a.1 > 0.0)
+            .take(5)
+            .map(|a| a.1)
+            .collect();
+        let recent_average = if recent.is_empty() {
+            None
+        } else {
+            Some(recent.iter().sum::<f64>() / recent.len() as f64)
+        };
+
+        let verdict = match (recent_average, average) {
+            (Some(r), Some(a)) if r < a => Some("improving".to_string()),
+            (Some(r), Some(a)) if r > a => Some("slowing".to_string()),
+            (Some(_), Some(_)) => Some("steady".to_string()),
+            _ => None,
+        };
+
+        let last = if attempts.is_empty() {
+            None
+        } else {
+            let mut by_time = attempts.to_vec();
+            by_time.sort_by(|a, b| b.0.cmp(&a.0));
+            by_time.first().map(|a| a.1).filter(|d| *d > 0.0)
+        };
+
+        let runs = if attempts.is_empty() {
+            attempt_count
+        } else {
+            attempt_count.max(attempts.len() as u32)
+        };
+
+        RouteStats {
+            pb_seconds: pb,
+            average_seconds: average,
+            median_seconds: median,
+            last_seconds: last,
+            runs,
+            fastest_seconds: fastest,
+            slowest_seconds: slowest,
+            std_dev_seconds: std_dev,
+            range_seconds: range,
+            trend_seconds_per_run: trend,
+            recent_average_seconds: recent_average,
+            verdict,
+        }
+    }
+
+    pub fn to_json(&self) -> String {
+        fn opt(v: Option<f64>) -> String {
+            match v {
+                Some(x) => format!("{x}"),
+                None => "null".to_string(),
+            }
+        }
+        fn opt_str(v: &Option<String>) -> String {
+            match v {
+                Some(s) => format!(r#""{s}""#),
+                None => "null".to_string(),
+            }
+        }
+        format!(
+            r#"{{"pb_seconds":{pb},"average_seconds":{avg},"median_seconds":{med},"last_seconds":{last},"runs":{runs},"fastest_seconds":{fast},"slowest_seconds":{slow},"std_dev_seconds":{sd},"range_seconds":{rng},"trend_seconds_per_run":{tr},"recent_average_seconds":{ra},"verdict":{v}}}"#,
+            pb = opt(self.pb_seconds),
+            avg = opt(self.average_seconds),
+            med = opt(self.median_seconds),
+            last = opt(self.last_seconds),
+            runs = self.runs,
+            fast = opt(self.fastest_seconds),
+            slow = opt(self.slowest_seconds),
+            sd = opt(self.std_dev_seconds),
+            rng = opt(self.range_seconds),
+            tr = opt(self.trend_seconds_per_run),
+            ra = opt(self.recent_average_seconds),
+            v = opt_str(&self.verdict),
+        )
+    }
+}
+
+fn trend_seconds_per_run(attempts: &[Attempt]) -> Option<f64> {
+    let mut timed: Vec<&Attempt> = attempts.iter().filter(|a| a.1 > 0.0).collect();
+    if timed.len() < 2 {
+        return None;
+    }
+    timed.sort_by(|a, b| a.0.cmp(&b.0));
+    let n = timed.len() as f64;
+    let xs: Vec<f64> = (0..timed.len()).map(|i| i as f64).collect();
+    let ys: Vec<f64> = timed.iter().map(|a| a.1).collect();
+    let mean_x = xs.iter().sum::<f64>() / n;
+    let mean_y = ys.iter().sum::<f64>() / n;
+    let mut num = 0.0;
+    let mut den = 0.0;
+    for i in 0..timed.len() {
+        num += (xs[i] - mean_x) * (ys[i] - mean_y);
+        den += (xs[i] - mean_x) * (xs[i] - mean_x);
+    }
+    if den == 0.0 {
+        None
+    } else {
+        Some(num / den)
+    }
+}
