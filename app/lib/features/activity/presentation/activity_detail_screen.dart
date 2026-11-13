@@ -24,6 +24,7 @@ import '../../../persistence/persistence.dart';
 import '../../map/map_surface.dart';
 import '../../map/route_map_autosave.dart';
 import 'elevation_profile.dart';
+import '../application/activity_analytics.dart';
 import '../../result/application/splits.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/application/track_export.dart';
@@ -186,9 +187,9 @@ class ActivityDetailScreen extends ConsumerWidget {
           ],
           if (activity.track case final track? when track.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xl),
-            TrackAnalyticsSection(track: track),
+            TrackAnalyticsSection(activityId: activity.id),
             const SizedBox(height: AppSpacing.xl),
-            PaceDistributionSection(track: track),
+            PaceDistributionSection(activityId: activity.id),
           ],
           // The raw recorded fixes, for anyone who wants the exact GPS output
           // behind the track: coordinates, local time and altitude when the
@@ -296,42 +297,18 @@ class ActivityDetailScreen extends ConsumerWidget {
 }
 
 /// Engine-computed track analytics (M30): distance, time breakdown, pace,
-/// speed, elevation and GPS quality. Rendered from `EngineService.analyzeTrack`
-/// so fake and Rust engines agree.
-class TrackAnalyticsSection extends ConsumerStatefulWidget {
-  const TrackAnalyticsSection({super.key, required this.track});
+/// speed, elevation and GPS quality. Rendered from the cached
+/// `trackAnalyticsProvider` so fake and Rust engines agree and repeated views
+/// reuse one result.
+class TrackAnalyticsSection extends ConsumerWidget {
+  const TrackAnalyticsSection({super.key, required this.activityId});
 
-  final List<TrackPoint> track;
-
-  @override
-  ConsumerState<TrackAnalyticsSection> createState() =>
-      _TrackAnalyticsSectionState();
-}
-
-class _TrackAnalyticsSectionState
-    extends ConsumerState<TrackAnalyticsSection> {
-  late Future<TrackAnalytics> _future;
+  final String activityId;
 
   @override
-  void initState() {
-    super.initState();
-    _future = _analyze();
-  }
-
-  @override
-  void didUpdateWidget(covariant TrackAnalyticsSection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.track != widget.track) {
-      _future = _analyze();
-    }
-  }
-
-  Future<TrackAnalytics> _analyze() =>
-      ref.read(engineServiceProvider).analyzeTrack(points: widget.track);
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final async = ref.watch(trackAnalyticsProvider(activityId));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -342,26 +319,24 @@ class _TrackAnalyticsSectionState
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        FutureBuilder<TrackAnalytics>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(AppSpacing.lg),
-                  child: CircularProgressIndicator(),
-                ),
-              );
-            }
-            if (snapshot.hasError || !snapshot.hasData) {
+        async.when(
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.lg),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          error: (e, _) => Text(
+            'Analytics unavailable.',
+            style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          ),
+          data: (a) {
+            if (a == null) {
               return Text(
                 'Analytics unavailable.',
-                style: textTheme.bodySmall?.copyWith(
-                  color: AppColors.textMuted,
-                ),
+                style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
               );
             }
-            final a = snapshot.data!;
             final units = ref.watch(displayUnitProvider);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -506,37 +481,15 @@ class _AnalyticsRow extends StatelessWidget {
 }
 
 /// Pace distribution derived from the engine's pace samples.
-class PaceDistributionSection extends ConsumerStatefulWidget {
-  const PaceDistributionSection({super.key, required this.track});
+class PaceDistributionSection extends ConsumerWidget {
+  const PaceDistributionSection({super.key, required this.activityId});
 
-  final List<TrackPoint> track;
-
-  @override
-  ConsumerState<PaceDistributionSection> createState() =>
-      _PaceDistributionSectionState();
-}
-
-class _PaceDistributionSectionState
-    extends ConsumerState<PaceDistributionSection> {
-  late Future<TrackAnalytics> _future;
+  final String activityId;
 
   @override
-  void initState() {
-    super.initState();
-    _future = ref.read(engineServiceProvider).analyzeTrack(points: widget.track);
-  }
-
-  @override
-  void didUpdateWidget(covariant PaceDistributionSection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.track != widget.track) {
-      _future = ref.read(engineServiceProvider).analyzeTrack(points: widget.track);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
+    final async = ref.watch(trackAnalyticsProvider(activityId));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -547,24 +500,25 @@ class _PaceDistributionSectionState
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
-        FutureBuilder<TrackAnalytics>(
-          future: _future,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(AppSpacing.md),
-                  child: CircularProgressIndicator(),
-                ),
-              );
-            }
-            if (snapshot.hasError || !snapshot.hasData) {
+        async.when(
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          error: (e, _) => Text(
+            'Pace distribution unavailable.',
+            style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          ),
+          data: (analytics) {
+            if (analytics == null) {
               return Text(
                 'Pace distribution unavailable.',
                 style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
               );
             }
-            final samples = snapshot.data!.paceSamples;
+            final samples = analytics.paceSamples;
             if (samples.isEmpty) {
               return Text(
                 'No pace samples.',
