@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/app_info.dart';
 import '../../../app/dependencies.dart';
@@ -28,6 +29,7 @@ import '../../routes/application/example_routes.dart';
 import '../application/gpx_export.dart';
 import '../application/gpx_import.dart';
 import '../application/link_launcher.dart';
+import '../application/haptics.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import '../application/track_export.dart';
@@ -144,6 +146,17 @@ class SettingsScreen extends ConsumerWidget {
                 title: const Text('Import GPX'),
                 subtitle: const Text('Create routes from GPX tracks'),
                 onTap: () => _importGpx(context, ref),
+              ),
+              const Divider(height: 1, color: AppColors.outline),
+              ListTile(
+                key: const ValueKey('statistics'),
+                leading: const Icon(Icons.insights_outlined),
+                title: const Text('Statistics'),
+                subtitle: const Text('Overview of routes and runs'),
+                onTap: () {
+                  AppHaptics.selection(ref);
+                  context.push('/statistics');
+                },
               ),
               const Divider(height: 1, color: AppColors.outline),
               if (hasExamples)
