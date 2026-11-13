@@ -68,8 +68,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(surface.scenes, hasLength(1));
-      final scene = surface.scenes.single;
+      // The screen rebuilds once the engine-backed splits resolve; every
+      // build asks for the same scene, so the latest one is the settled one.
+      expect(surface.scenes, isNotEmpty);
+      final scene = surface.scenes.last;
       // The course is the map; the run's own fixes are the overlay.
       expect(scene.geometry, riverLoopRoute.geometry);
       expect(scene.track, [for (final p in track) p.position]);
@@ -125,8 +127,8 @@ void main() {
         return local.scenes;
       }
 
-      final first = (await scenesFor('act-a')).single;
-      final second = (await scenesFor('act-b')).single;
+      final first = (await scenesFor('act-a')).last;
+      final second = (await scenesFor('act-b')).last;
 
       expect(first.geometry, riverLoopRoute.geometry);
       expect(second.geometry, riverLoopRoute.geometry);
@@ -155,7 +157,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final scene = surface.scenes.single;
+      final scene = surface.scenes.last;
       expect(scene.geometry, riverLoopRoute.geometry);
       expect(scene.track, isEmpty);
       expect(scene.you, riverLoopRoute.geometry.first);

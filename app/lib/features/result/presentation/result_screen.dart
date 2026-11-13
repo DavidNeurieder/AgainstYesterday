@@ -24,8 +24,7 @@ import '../../../persistence/persistence.dart';
 import '../../recording/application/recording_controller.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
-import '../application/gap_curve.dart';
-import '../application/splits.dart';
+import '../application/pace_analysis_provider.dart';
 import 'gap_chart.dart';
 
 /// Base stagger step between the result stats' entrance (§30).
@@ -48,29 +47,15 @@ class ResultScreen extends ConsumerWidget {
     final route = live.route;
     final routeName = route?.name ?? 'New route';
     final gap = live.ghostGap;
-    final trackMeters = live.distance.meters;
 
     // The most recently saved activity is the one we just completed.
     final activities = ref.watch(activityRepositoryProvider);
-    final activity = activities.isNotEmpty ? activities.first : null;
 
-    // Splits for runs on a known route with PB and track data.
-    final splits = (activity != null && route != null)
-        ? computeSplits(
-            activity: activity,
-            route: route,
-            trackMeters: trackMeters,
-          )
-        : [];
-
-    // §23 gap curve — the chart above the splits.
-    final gapCurve = (activity != null && route != null)
-        ? computeGapCurve(
-            activity: activity,
-            route: route,
-            trackMeters: trackMeters,
-          )
-        : const <GapPoint>[];
+    // Splits and the §23 gap curve — both computed by the engine.
+    final pace = ref.watch(resultPaceAnalysisProvider).asData?.value ??
+        PaceAnalysis.empty;
+    final splits = pace.splits;
+    final gapCurve = pace.gapCurve;
 
     // Ranking: how many saved runs on this route are faster.
     final rank = _rank(route?.id, live.elapsed, activities);

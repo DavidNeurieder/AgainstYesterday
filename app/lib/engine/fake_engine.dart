@@ -403,6 +403,91 @@ class FakeEngineService implements EngineService {
   }
 
   @override
+  Future<PaceAnalysis> computePaceAnalysis({
+    required Activity activity,
+    required Route route,
+    required double trackMeters,
+  }) async {
+    final track = activity.track;
+    final pb = route.personalBest;
+    final routeMeters = route.distance.meters;
+    if (track == null ||
+        track.length < 2 ||
+        pb == null ||
+        pb.seconds <= 0 ||
+        routeMeters <= 0 ||
+        trackMeters <= 0) {
+      return PaceAnalysis.empty;
+    }
+
+    final start = track.first.timestamp;
+    final cumulative = List<double>.filled(track.length, 0);
+    for (var i = 1; i < track.length; i++) {
+      cumulative[i] = cumulative[i - 1] +
+          haversineMeters(track[i - 1].position, track[i].position);
+    }
+
+    double elapsedAt(double distanceM) {
+      if (distanceM <= 0) {
+        return 0;
+      }
+      if (distanceM >= cumulative.last) {
+        return track.last.timestamp.difference(start).inMicroseconds / 1e6;
+      }
+      for (var i = 1; i < track.length; i++) {
+        if (cumulative[i] >= distanceM) {
+          final segment = cumulative[i] - cumulative[i - 1];
+          final fraction = segment > 0
+              ? ((distanceM - cumulative[i - 1]) / segment).clamp(0.0, 1.0)
+              : 0.0;
+          final a =
+              track[i - 1].timestamp.difference(start).inMicroseconds / 1e6;
+          final b = track[i].timestamp.difference(start).inMicroseconds / 1e6;
+          return a + (b - a) * fraction;
+        }
+      }
+      return track.last.timestamp.difference(start).inMicroseconds / 1e6;
+    }
+
+    final pbSpeed = routeMeters / pb.seconds;
+    final totalKm = (trackMeters / 1000).floor();
+    final splits = <SplitDelta>[];
+    for (var km = 1; km <= totalKm; km++) {
+      final target = km * 1000.0;
+      final elapsed = elapsedAt(target);
+      splits.add(
+        SplitDelta(
+          kilometer: km,
+          elapsedSeconds: elapsed,
+          deltaSeconds: elapsed - target / pbSpeed,
+        ),
+      );
+    }
+
+    final gapCurve = <GapPoint>[];
+    if (trackMeters >= 250) {
+      final offset = route.geometry.isNotEmpty
+          ? haversineMeters(route.geometry.first, track.first.position)
+          : 0.0;
+      final startOffset = offset <= 100 ? offset : 0.0;
+      double gapAt(double d) {
+        final routeD = (startOffset + d).clamp(0.0, routeMeters);
+        return routeD / pbSpeed - elapsedAt(d);
+      }
+
+      gapCurve.add(const GapPoint(distanceMeters: 0, aheadSeconds: 0));
+      for (var d = 100.0; d < trackMeters; d += 100.0) {
+        gapCurve.add(GapPoint(distanceMeters: d, aheadSeconds: gapAt(d)));
+      }
+      gapCurve.add(
+        GapPoint(distanceMeters: trackMeters, aheadSeconds: gapAt(trackMeters)),
+      );
+    }
+
+    return PaceAnalysis(splits: splits, gapCurve: gapCurve);
+  }
+
+  @override
   Future<LiveRunHandle> createLiveRun({
     List<GeoPoint>? route,
     List<AttemptSample>? ghostSamples,

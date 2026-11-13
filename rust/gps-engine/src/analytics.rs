@@ -7,8 +7,11 @@
 //! and ghost racing share one definition. Raw GPS data is never modified; this
 //! module only produces derived, annotated results.
 
+use crate::geo::{Coordinate, distance};
 use crate::track::MovingConfig;
 use crate::track::Track;
+use crate::track::TrackPoint;
+use crate::units::Timestamp;
 
 /// Quality summary for a track's GPS observations.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -547,6 +550,182 @@ fn trend_seconds_per_run(attempts: &[Attempt]) -> Option<f64> {
     if den == 0.0 { None } else { Some(num / den) }
 }
 
+/// One per-kilometer split, measured against the route's personal best.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SplitDelta {
+    /// 1-based kilometer marker.
+    pub kilometer: u32,
+    /// Running elapsed seconds when this kilometer was reached.
+    pub elapsed_seconds: f64,
+    /// Positive = behind the PB, negative = ahead.
+    pub delta_seconds: f64,
+}
+
+/// One sample of the gap-to-PB curve.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GapPoint {
+    /// Distance from the start, in meters.
+    pub distance_meters: f64,
+    /// Seconds ahead of the PB at this distance (negative = behind).
+    pub ahead_seconds: f64,
+}
+
+/// Pace analysis for one attempt: per-kilometer splits plus the gap curve.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaceAnalysis {
+    /// Per-kilometer split deltas.
+    pub splits: Vec<SplitDelta>,
+    /// Gap-to-PB curve, sampled every 100 m.
+    pub gap_curve: Vec<GapPoint>,
+}
+
+impl PaceAnalysis {
+    /// Builds the analysis from a recorded [track] and the route's PB.
+    ///
+    /// [route_start] is the course's first geometry point (used for the
+    /// start-offset correction), [route_meters] the course length and
+    /// [track_meters] the distance this attempt covered.
+    #[must_use]
+    pub fn compute(
+        track: &[TrackPoint],
+        route_start: Option<Coordinate>,
+        route_meters: f64,
+        pb_seconds: f64,
+        track_meters: f64,
+    ) -> Self {
+        let empty = PaceAnalysis {
+            splits: Vec::new(),
+            gap_curve: Vec::new(),
+        };
+        if track.len() < 2 || route_meters <= 0.0 || pb_seconds <= 0.0 || track_meters <= 0.0 {
+            return empty;
+        }
+
+        let start = track[0].timestamp();
+        let cumulative = cumulative_distances(track);
+        let elapsed_at = |d: f64| elapsed_at_distance(track, &cumulative, start, d);
+        let pb_speed = route_meters / pb_seconds;
+
+        let total_km = (track_meters / 1000.0).floor();
+        let mut splits = Vec::new();
+        let mut km = 1u32;
+        while f64::from(km) <= total_km {
+            let target = f64::from(km) * 1000.0;
+            let activity_sec = elapsed_at(target);
+            let pb_sec = target / pb_speed;
+            splits.push(SplitDelta {
+                kilometer: km,
+                elapsed_seconds: activity_sec,
+                delta_seconds: activity_sec - pb_sec,
+            });
+            km += 1;
+        }
+
+        const GAP_STEP_METERS: f64 = 100.0;
+        const GAP_MINIMUM_METERS: f64 = 250.0;
+        let mut gap_curve = Vec::new();
+        if track_meters >= GAP_MINIMUM_METERS {
+            let start_offset = route_start.map_or(0.0, |course_start| {
+                let offset = distance(course_start, track[0].coordinate()).meters();
+                if offset <= 100.0 { offset } else { 0.0 }
+            });
+            let gap_at = |d: f64| {
+                let route_d = (start_offset + d).clamp(0.0, route_meters);
+                route_d / pb_speed - elapsed_at(d)
+            };
+
+            gap_curve.push(GapPoint {
+                distance_meters: 0.0,
+                ahead_seconds: 0.0,
+            });
+            let mut d = GAP_STEP_METERS;
+            while d < track_meters {
+                gap_curve.push(GapPoint {
+                    distance_meters: d,
+                    ahead_seconds: gap_at(d),
+                });
+                d += GAP_STEP_METERS;
+            }
+            gap_curve.push(GapPoint {
+                distance_meters: track_meters,
+                ahead_seconds: gap_at(track_meters),
+            });
+        }
+
+        PaceAnalysis { splits, gap_curve }
+    }
+
+    /// Renders the analysis as a JSON object for the FFI boundary.
+    #[must_use]
+    pub fn to_json(&self) -> String {
+        let splits = self
+            .splits
+            .iter()
+            .map(|s| {
+                format!(
+                    r#"{{"kilometer":{},"elapsed_seconds":{},"delta_seconds":{}}}"#,
+                    s.kilometer, s.elapsed_seconds, s.delta_seconds
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let gap = self
+            .gap_curve
+            .iter()
+            .map(|p| {
+                format!(
+                    r#"{{"distance_meters":{},"ahead_seconds":{}}}"#,
+                    p.distance_meters, p.ahead_seconds
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        format!(r#"{{"splits":[{splits}],"gap_curve":[{gap}]}}"#)
+    }
+}
+
+/// Cumulative great-circle distance at every track point (0 for the first).
+fn cumulative_distances(track: &[TrackPoint]) -> Vec<f64> {
+    let mut out = Vec::with_capacity(track.len());
+    out.push(0.0);
+    for i in 1..track.len() {
+        let seg = distance(track[i - 1].coordinate(), track[i].coordinate()).meters();
+        out.push(out[i - 1] + seg);
+    }
+    out
+}
+
+/// Elapsed seconds at [distance] interpolated along the track.
+fn elapsed_at_distance(
+    track: &[TrackPoint],
+    cumulative: &[f64],
+    start: Timestamp,
+    distance_m: f64,
+) -> f64 {
+    let elapsed = |p: &TrackPoint| p.timestamp().elapsed_since(start).as_secs();
+    if distance_m <= 0.0 {
+        return elapsed(&track[0]);
+    }
+    let total = *cumulative.last().unwrap_or(&0.0);
+    if distance_m >= total {
+        return elapsed(&track[track.len() - 1]);
+    }
+    for i in 1..track.len() {
+        if cumulative[i] >= distance_m {
+            let segment = cumulative[i] - cumulative[i - 1];
+            let fraction = if segment > 0.0 {
+                ((distance_m - cumulative[i - 1]) / segment).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let a = elapsed(&track[i - 1]);
+            let b = elapsed(&track[i]);
+            return a + (b - a) * fraction;
+        }
+    }
+    elapsed(&track[track.len() - 1])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -592,5 +771,56 @@ mod tests {
         assert!(stats.trend_seconds_per_run.unwrap() < 0.0);
         assert_eq!(stats.runs, 3);
         assert_eq!(stats.pb_seconds, Some(200.0));
+    }
+
+    fn flat_track(meters: f64, seconds: f64) -> Vec<TrackPoint> {
+        let mut points = Vec::new();
+        let mut d = 0.0;
+        while d <= meters + 1e-9 {
+            let lat = 52.5 + (d / crate::geo::EARTH_RADIUS_METERS).to_degrees();
+            let t = if meters > 0.0 {
+                seconds * d / meters
+            } else {
+                0.0
+            };
+            points.push(TrackPoint::new(
+                Timestamp::from_unix_ms((t * 1000.0).round() as i64),
+                Coordinate::new(lat, 13.36).unwrap(),
+            ));
+            d += 25.0;
+        }
+        points
+    }
+
+    #[test]
+    fn pb_pace_yields_zero_splits() {
+        let track = flat_track(5000.0, 1500.0);
+        let analysis = PaceAnalysis::compute(&track, None, 5000.0, 1500.0, 5000.0);
+        assert_eq!(analysis.splits.len(), 5);
+        for split in &analysis.splits {
+            assert!(split.delta_seconds.abs() < 0.1, "{split:?}");
+        }
+        assert_eq!(analysis.gap_curve.len(), 51);
+        assert_eq!(analysis.gap_curve.first().unwrap().distance_meters, 0.0);
+        assert_eq!(analysis.gap_curve.last().unwrap().distance_meters, 5000.0);
+    }
+
+    #[test]
+    fn slower_run_is_behind_the_constant_pace_pb() {
+        let track = flat_track(5000.0, 1700.0);
+        let analysis = PaceAnalysis::compute(&track, None, 5000.0, 1500.0, 5000.0);
+        for split in &analysis.splits {
+            assert!(split.delta_seconds > 0.0, "{split:?}");
+            assert!((split.delta_seconds - 40.0 * f64::from(split.kilometer)).abs() < 5.0);
+        }
+        assert!(analysis.gap_curve.last().unwrap().ahead_seconds < 0.0);
+    }
+
+    #[test]
+    fn no_pb_or_short_track_produces_nothing() {
+        let track = flat_track(120.0, 40.0);
+        let analysis = PaceAnalysis::compute(&track, None, 5000.0, 0.0, 120.0);
+        assert!(analysis.splits.is_empty());
+        assert!(analysis.gap_curve.is_empty());
     }
 }

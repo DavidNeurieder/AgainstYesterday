@@ -1408,6 +1408,46 @@ pub extern "C" fn gps_route_stats(
     })
 }
 
+/// Computes per-kilometer splits and the gap-to-PB curve, returning JSON.
+#[unsafe(no_mangle)]
+pub extern "C" fn gps_pace_analysis(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    use crate::analytics::PaceAnalysis;
+
+    dispatch(input, input_len, output, output_len, |data| {
+        let mut rd = Rd::new(data);
+        // pb seconds as i64 ms; -1 means no PB.
+        let pb_raw = rd.i64()?;
+        let pb_seconds = if pb_raw < 0 {
+            None
+        } else {
+            Some(pb_raw as f64 / 1000.0)
+        };
+        let route_meters = rd.f64()?;
+        let has_start = rd.u8()? != 0;
+        let route_start = if has_start {
+            Some(Coordinate::new(rd.f64()?, rd.f64()?).map_err(|e| format!("route start: {e}"))?)
+        } else {
+            None
+        };
+        let track_meters = rd.f64()?;
+        let points = read_points(&mut rd)?;
+        rd.done("pace_analysis")?;
+        let analysis = match pb_seconds {
+            Some(pb) => PaceAnalysis::compute(&points, route_start, route_meters, pb, track_meters),
+            None => PaceAnalysis {
+                splits: Vec::new(),
+                gap_curve: Vec::new(),
+            },
+        };
+        Ok(analysis.to_json().into_bytes())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

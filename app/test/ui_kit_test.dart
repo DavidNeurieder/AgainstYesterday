@@ -14,7 +14,6 @@ import 'package:against_yesterday/core/ui/app_states.dart';
 import 'package:against_yesterday/core/ui/gap_line.dart';
 import 'package:against_yesterday/core/ui/split_row.dart';
 import 'package:against_yesterday/engine/models.dart';
-import 'package:against_yesterday/features/result/application/splits.dart';
 
 void main() {
   Widget frame(Widget child) => MaterialApp(home: Scaffold(body: child));

@@ -26,7 +26,7 @@ import '../../map/route_map_autosave.dart';
 import 'elevation_profile.dart';
 import '../application/activity_analytics.dart';
 import '../../result/application/gap_curve.dart';
-import '../../result/application/splits.dart';
+import '../../result/application/pace_analysis_provider.dart';
 import '../../result/presentation/gap_chart.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/application/track_export.dart';
@@ -71,13 +71,11 @@ class ActivityDetailScreen extends ConsumerWidget {
     final overlayTrack =
         useRouteBase && trackPositions.length >= 2 ? trackPositions : const <GeoPoint>[];
 
-    final splits = (route != null && trackMeters > 0)
-        ? computeSplits(
-            activity: activity,
-            route: route,
-            trackMeters: trackMeters,
-          )
-        : [];
+    // Splits and gap curve are engine-computed for this activity.
+    final pace =
+        ref.watch(activityPaceAnalysisProvider(activityId)).asData?.value ??
+            PaceAnalysis.empty;
+    final splits = pace.splits;
 
     return Scaffold(
       appBar: AppBar(
@@ -184,11 +182,7 @@ class ActivityDetailScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.sm),
             GapChart(
-              curve: computeGapCurve(
-                activity: activity,
-                route: route,
-                trackMeters: trackMeters,
-              ),
+              curve: pace.gapCurve,
               units: units,
             ),
           ],
@@ -229,11 +223,16 @@ class ActivityDetailScreen extends ConsumerWidget {
                 'splits': [
                   for (final s in splits)
                     <String, Object?>{
-                      'index': s.index,
-                      'startDistanceM': s.startDistanceM,
-                      'endDistanceM': s.endDistanceM,
-                      'durationSeconds': s.durationSeconds,
-                      'averageSpeedMps': s.averageSpeedMps,
+                      'kilometer': s.kilometer,
+                      'elapsedSeconds': s.elapsedSeconds,
+                      'deltaSeconds': s.deltaSeconds,
+                    },
+                ],
+                'gapCurve': [
+                  for (final p in pace.gapCurve)
+                    <String, Object?>{
+                      'distanceMeters': p.distanceMeters,
+                      'aheadSeconds': p.aheadSeconds,
                     },
                 ],
                 if (analytics != null)

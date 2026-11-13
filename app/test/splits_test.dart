@@ -1,11 +1,31 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
-import 'package:against_yesterday/features/result/application/splits.dart';
+
+final _engine = FakeEngineService();
+
+const _earthRadiusM = 6371008.8;
+
+/// Degrees of latitude for [meters] along a meridian.
+double _latOffset(double meters) => (meters / _earthRadiusM) * 180 / math.pi;
+
+Future<List<SplitDelta>> _splits({
+  required Activity activity,
+  required Route route,
+  required double trackMeters,
+}) async =>
+    (await _engine.computePaceAnalysis(
+      activity: activity,
+      route: route,
+      trackMeters: trackMeters,
+    ))
+        .splits;
 
 Route _route({double? pbSeconds = 1500}) => Route(
       id: FakeEngineService.riverLoopId,
@@ -25,7 +45,7 @@ List<TrackPoint> _track(double meters, double totalSeconds) {
     final fraction = meters <= 0 ? 0.0 : d / meters;
     points.add(TrackPoint(
       position: GeoPoint(
-        latitude: 52.5 + fraction,
+        latitude: 52.5 + _latOffset(d),
         longitude: 13.36,
       ),
       timestamp: start.add(Duration(
@@ -51,10 +71,10 @@ void main() {
         track: track,
       );
 
-  test('no splits without PB', () {
+  test('no splits without PB', () async {
     final route = _route(pbSeconds: null);
     expect(
-      computeSplits(
+      await _splits(
         activity: activityOf(5000, 1500, track: _track(5000, 1500)),
         route: route,
         trackMeters: 5000,
@@ -63,10 +83,10 @@ void main() {
     );
   });
 
-  test('no splits without a track', () {
+  test('no splits without a track', () async {
     final route = _route();
     expect(
-      computeSplits(
+      await _splits(
         activity: activityOf(5000, 1500),
         route: route,
         trackMeters: 5000,
@@ -75,9 +95,9 @@ void main() {
     );
   });
 
-  test('a PB-matched run yields zero deltas at every km', () {
+  test('a PB-matched run yields zero deltas at every km', () async {
     // 5 km in 1500 s is exactly the PB pace.
-    final splits = computeSplits(
+    final splits = await _splits(
       activity: activityOf(5000, 1500, track: _track(5000, 1500)),
       route: _route(pbSeconds: 1500),
       trackMeters: 5000,
@@ -85,14 +105,16 @@ void main() {
     expect(splits, hasLength(5));
     for (var i = 0; i < splits.length; i++) {
       expect(splits[i].kilometer, i + 1);
-      expect(splits[i].deltaSeconds.abs(), lessThan(1e-6),
+      // Timestamps round to whole milliseconds, so a "perfect" run ties the
+      // PB to within a fraction of a millisecond per segment.
+      expect(splits[i].deltaSeconds.abs(), lessThan(0.01),
           reason: 'km ${i + 1} should tie the PB');
     }
   });
 
-  test('a slower-than-PB run is behind on every split (cumulative)', () {
+  test('a slower-than-PB run is behind on every split (cumulative)', () async {
     // 5 km in 1700 s vs a 1500 s PB: 40 s/km of cumulative gap.
-    final splits = computeSplits(
+    final splits = await _splits(
       activity: activityOf(5000, 1700, track: _track(5000, 1700)),
       route: _route(pbSeconds: 1500),
       trackMeters: 5000,
@@ -105,8 +127,8 @@ void main() {
     }
   });
 
-  test('a faster-than-PB run is ahead on every split', () {
-    final splits = computeSplits(
+  test('a faster-than-PB run is ahead on every split', () async {
+    final splits = await _splits(
       activity: activityOf(5000, 1300, track: _track(5000, 1300)),
       route: _route(pbSeconds: 1500),
       trackMeters: 5000,
@@ -117,9 +139,9 @@ void main() {
     }
   });
 
-  test('a partial run only reports completed kilometers', () {
+  test('a partial run only reports completed kilometers', () async {
     // 2.4 km covered in 800 s.
-    final splits = computeSplits(
+    final splits = await _splits(
       activity: activityOf(2400, 800, track: _track(2400, 800)),
       route: _route(pbSeconds: 1500),
       trackMeters: 2400,

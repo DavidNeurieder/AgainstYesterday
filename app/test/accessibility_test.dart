@@ -17,7 +17,7 @@ import 'package:against_yesterday/core/theme/app_colors.dart';
 import 'package:against_yesterday/core/theme/app_theme.dart';
 import 'package:against_yesterday/core/ui/split_row.dart';
 import 'package:against_yesterday/features/activity/presentation/activity_detail_screen.dart';
-import 'package:against_yesterday/features/result/application/splits.dart';
+import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'test_catalog.dart';

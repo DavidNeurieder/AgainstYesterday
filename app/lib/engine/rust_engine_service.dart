@@ -250,6 +250,49 @@ final class RustEngineService implements EngineService {
     );
   }
   @override
+  Future<PaceAnalysis> computePaceAnalysis({
+    required Activity activity,
+    required Route route,
+    required double trackMeters,
+  }) async {
+    final pb = route.personalBest;
+    final req = _W();
+    req.i64(pb == null ? -1 : (pb.seconds * 1000).round());
+    req.f64(route.distance.meters);
+    final geometry = route.geometry;
+    if (geometry.isNotEmpty) {
+      req.u8(1);
+      req.f64(geometry.first.latitude);
+      req.f64(geometry.first.longitude);
+    } else {
+      req.u8(0);
+    }
+    req.f64(trackMeters);
+    req.points(activity.track ?? const <TrackPoint>[]);
+
+    final json = jsonDecode(utf8.decode(_ffi.paceAnalysis(req.takeBytes())))
+        as Map<String, dynamic>;
+    final splits = <SplitDelta>[
+      for (final s in json['splits'] as List)
+        SplitDelta(
+          kilometer: ((s as Map<String, dynamic>)['kilometer'] as num).toInt(),
+          elapsedSeconds: (s['elapsed_seconds'] as num).toDouble(),
+          deltaSeconds: (s['delta_seconds'] as num).toDouble(),
+        ),
+    ];
+    final gapCurve = <GapPoint>[
+      for (final p in json['gap_curve'] as List)
+        GapPoint(
+          distanceMeters:
+              ((p as Map<String, dynamic>)['distance_meters'] as num)
+                  .toDouble(),
+          aheadSeconds: (p['ahead_seconds'] as num).toDouble(),
+        ),
+    ];
+    return PaceAnalysis(splits: splits, gapCurve: gapCurve);
+  }
+
+  @override
   Future<LiveRunHandle> createLiveRun({
     List<GeoPoint>? route,
     List<AttemptSample>? ghostSamples,

@@ -873,3 +873,51 @@ class RouteStats {
   final Elapsed? recentAverage;
   final String? verdict;
 }
+
+
+/// One per-kilometer split, measured against the route's personal best.
+class SplitDelta {
+  const SplitDelta({
+    required this.kilometer,
+    required this.elapsedSeconds,
+    required this.deltaSeconds,
+  });
+
+  /// 1-based kilometer marker.
+  final int kilometer;
+
+  /// Running elapsed (seconds) when this km was reached.
+  final double elapsedSeconds;
+
+  /// Positive = behind PB, negative = ahead.
+  final double deltaSeconds;
+}
+
+/// One sample of the gap-to-PB curve.
+class GapPoint {
+  const GapPoint({
+    required this.distanceMeters,
+    required this.aheadSeconds,
+  });
+
+  /// Distance from the start, in meters.
+  final double distanceMeters;
+
+  /// Seconds ahead of the PB at this distance (negative = behind).
+  final double aheadSeconds;
+}
+
+/// Engine-computed pace analysis for one attempt: per-kilometer splits plus
+/// the gap-to-PB curve.
+class PaceAnalysis {
+  const PaceAnalysis({required this.splits, required this.gapCurve});
+
+  /// An analysis with no data (no PB, no track, or too short a run).
+  static const PaceAnalysis empty = PaceAnalysis(splits: [], gapCurve: []);
+
+  /// Per-kilometer split deltas.
+  final List<SplitDelta> splits;
+
+  /// Gap-to-PB curve, sampled every 100 m.
+  final List<GapPoint> gapCurve;
+}

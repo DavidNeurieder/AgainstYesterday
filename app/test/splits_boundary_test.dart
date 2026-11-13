@@ -8,11 +8,31 @@
 /// uneven (each split must reflect the cumulative clock, not a flat average).
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
-import 'package:against_yesterday/features/result/application/splits.dart';
+
+final _engine = FakeEngineService();
+
+const _earthRadiusM = 6371008.8;
+
+/// Degrees of latitude for [meters] along a meridian.
+double _latOffset(double meters) => (meters / _earthRadiusM) * 180 / math.pi;
+
+Future<List<SplitDelta>> _splits({
+  required Activity activity,
+  required Route route,
+  required double trackMeters,
+}) async =>
+    (await _engine.computePaceAnalysis(
+      activity: activity,
+      route: route,
+      trackMeters: trackMeters,
+    ))
+        .splits;
 
 Route _route({double distanceM = 5000, double? pbSeconds = 1500}) => Route(
       id: FakeEngineService.riverLoopId,
@@ -32,7 +52,7 @@ List<TrackPoint> _track(double meters, double totalSeconds) {
     final fraction = meters <= 0 ? 0.0 : d / meters;
     points.add(TrackPoint(
       position: GeoPoint(
-        latitude: 52.5 + fraction,
+        latitude: 52.5 + _latOffset(d),
         longitude: 13.36,
       ),
       timestamp: start.add(Duration(
@@ -55,7 +75,7 @@ List<TrackPoint> _pacedTrack() {
         : 400.0 + (d - 1000.0) / 25.0 * 30.0; // then 30 s per 25 m.
     points.add(TrackPoint(
       position: GeoPoint(
-        latitude: 52.5 + d / 2000.0,
+        latitude: 52.5 + _latOffset(d),
         longitude: 13.36,
       ),
       timestamp: start.add(Duration(milliseconds: (seconds * 1000).round())),
@@ -80,8 +100,8 @@ void main() {
       );
 
   group('the km boundary', () {
-    test('just under 1 km produces no splits', () {
-      final splits = computeSplits(
+    test('just under 1 km produces no splits', () async {
+      final splits = await _splits(
         activity: activityOf(999, 300, track: _track(999, 300)),
         route: _route(pbSeconds: 300),
         trackMeters: 999,
@@ -89,9 +109,9 @@ void main() {
       expect(splits, isEmpty);
     });
 
-    test('exactly 1.000 km produces exactly one split', () {
+    test('exactly 1.000 km produces exactly one split', () async {
       // 1 km in 60 s matches the route's PB pace (5000 m in 300 s).
-      final splits = computeSplits(
+      final splits = await _splits(
         activity: activityOf(1000, 60, track: _track(1000, 60)),
         route: _route(pbSeconds: 300),
         trackMeters: 1000,
@@ -101,8 +121,8 @@ void main() {
       expect(splits.single.deltaSeconds.abs(), lessThan(1e-6));
     });
 
-    test('just over 1.000 km still reports only the completed km', () {
-      final splits = computeSplits(
+    test('just over 1.000 km still reports only the completed km', () async {
+      final splits = await _splits(
         activity: activityOf(1001, 60.06, track: _track(1001, 60.06)),
         route: _route(pbSeconds: 300),
         trackMeters: 1001,
@@ -110,8 +130,8 @@ void main() {
       expect(splits, hasLength(1));
     });
 
-    test('a 0.999 km run even at record pace earns no split', () {
-      final splits = computeSplits(
+    test('a 0.999 km run even at record pace earns no split', () async {
+      final splits = await _splits(
         activity: activityOf(999, 60, track: _track(999, 60)),
         route: _route(pbSeconds: 1500),
         trackMeters: 999,
@@ -121,10 +141,10 @@ void main() {
   });
 
   group('marginal personal bests', () {
-    test('beating the PB by three seconds flips every delta negative', () {
+    test('beating the PB by three seconds flips every delta negative', () async {
       // 1497 s vs a 1500 s PB: 0.6 s/km margin — real but tiny. (Deliberately
       // larger than a millisecond so ms-precision tracks stay faithful.)
-      final splits = computeSplits(
+      final splits = await _splits(
         activity: activityOf(5000, 1497, track: _track(5000, 1497)),
         route: _route(pbSeconds: 1500),
         trackMeters: 5000,
@@ -138,8 +158,8 @@ void main() {
   });
 
   group('internal pacing', () {
-    test('each split honors the cumulative clock of the paced run', () {
-      final splits = computeSplits(
+    test('each split honors the cumulative clock of the paced run', () async {
+      final splits = await _splits(
         activity: activityOf(2000, 1600, track: _pacedTrack()),
         route: _route(pbSeconds: 1500),
         trackMeters: 2000,

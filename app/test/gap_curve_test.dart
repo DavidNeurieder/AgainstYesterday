@@ -4,6 +4,8 @@
 /// M26 (§23): the gap-to-PB curve and the performance graph built from it.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/core/units.dart';
@@ -11,6 +13,13 @@ import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/result/application/gap_curve.dart';
 import 'package:against_yesterday/features/result/presentation/gap_chart.dart';
+
+final _engine = FakeEngineService();
+
+const _earthRadiusM = 6371008.8;
+
+/// Degrees of latitude for [meters] along a meridian.
+double _latOffset(double meters) => (meters / _earthRadiusM) * 180 / math.pi;
 
 Route _route({double? pbSeconds = 1500}) => Route(
       id: FakeEngineService.riverLoopId,
@@ -29,7 +38,7 @@ List<TrackPoint> _track(double meters, double totalSeconds) {
   for (var d = 0.0; d <= meters; d += 25.0) {
     final fraction = meters <= 0 ? 0.0 : d / meters;
     points.add(TrackPoint(
-      position: GeoPoint(latitude: 52.5 + fraction, longitude: 13.36),
+      position: GeoPoint(latitude: 52.5 + _latOffset(d), longitude: 13.36),
       timestamp: start.add(Duration(
         milliseconds: (totalSeconds * 1000 * fraction).round(),
       )),
@@ -47,44 +56,48 @@ Activity _activity({List<TrackPoint>? track}) => Activity(
       track: track,
     );
 
-List<GapPoint> _curve({
+Future<List<GapPoint>> _curve({
   required double meters,
   required double seconds,
   double? pbSeconds = 1500,
   double? trackMeters,
-}) =>
-    computeGapCurve(
-      activity: _activity(track: _track(meters, seconds)),
-      route: _route(pbSeconds: pbSeconds),
-      trackMeters: trackMeters ?? meters,
-    );
+}) async {
+  final analysis = await _engine.computePaceAnalysis(
+    activity: _activity(track: _track(meters, seconds)),
+    route: _route(pbSeconds: pbSeconds),
+    trackMeters: trackMeters ?? meters,
+  );
+  return analysis.gapCurve;
+}
 
 void main() {
   group('computeGapCurve', () {
-    test('is empty without a PB, a track, or enough distance', () {
+    test('is empty without a PB, a track, or enough distance', () async {
       expect(
-        _curve(meters: 5000, seconds: 1700, pbSeconds: null),
+        await _curve(meters: 5000, seconds: 1700, pbSeconds: null),
         isEmpty,
         reason: 'no PB → no curve',
       );
       expect(
-        computeGapCurve(
+        (await _engine.computePaceAnalysis(
           activity: _activity(),
           route: _route(),
           trackMeters: 5000,
-        ),
+        ))
+            .gapCurve,
         isEmpty,
         reason: 'no track → no curve',
       );
       expect(
-        _curve(meters: 120, seconds: 45, trackMeters: 120),
+        await _curve(meters: 120, seconds: 45, trackMeters: 120),
         isEmpty,
         reason: 'under gapChartMinimumMeters → no curve',
       );
     });
 
-    test('starts at the origin and samples every 100 m to the finish', () {
-      final curve = _curve(meters: 5000, seconds: 1700);
+    test('starts at the origin and samples every 100 m to the finish',
+        () async {
+      final curve = await _curve(meters: 5000, seconds: 1700);
       expect(curve.first.distanceMeters, 0);
       expect(curve.first.aheadSeconds, 0);
       expect(curve, hasLength(51)); // origin + 100…4900 + finish
@@ -96,8 +109,8 @@ void main() {
       }
     });
 
-    test('a PB-matched run stays at zero along the whole curve', () {
-      final curve = _curve(meters: 5000, seconds: 1500);
+    test('a PB-matched run stays at zero along the whole curve', () async {
+      final curve = await _curve(meters: 5000, seconds: 1500);
       expect(curve, hasLength(51));
       for (final point in curve) {
         expect(point.aheadSeconds.abs(), lessThan(0.05),
@@ -105,9 +118,9 @@ void main() {
       }
     });
 
-    test('a slower run falls behind linearly (positive = ahead)', () {
+    test('a slower run falls behind linearly (positive = ahead)', () async {
       // 5 km in 1700 s vs a 1500 s PB: −0.04 s per meter.
-      final curve = _curve(meters: 5000, seconds: 1700);
+      final curve = await _curve(meters: 5000, seconds: 1700);
       for (final point in curve) {
         expect(point.aheadSeconds, lessThan(0.01),
             reason: 'at ${point.distanceMeters} m');
@@ -116,9 +129,9 @@ void main() {
       expect(curve.last.aheadSeconds, closeTo(-200, 3));
     });
 
-    test('a faster run pulls ahead linearly', () {
+    test('a faster run pulls ahead linearly', () async {
       // 5 km in 1300 s vs a 1500 s PB: +0.04 s per meter.
-      final curve = _curve(meters: 5000, seconds: 1300);
+      final curve = await _curve(meters: 5000, seconds: 1300);
       for (final point in curve) {
         expect(point.aheadSeconds, greaterThan(-0.01),
             reason: 'at ${point.distanceMeters} m');
@@ -127,8 +140,8 @@ void main() {
       expect(curve.last.aheadSeconds, closeTo(200, 3));
     });
 
-    test('includes the exact end of a partial run', () {
-      final curve = _curve(meters: 950, seconds: 300, trackMeters: 950);
+    test('includes the exact end of a partial run', () async {
+      final curve = await _curve(meters: 950, seconds: 300, trackMeters: 950);
       expect(curve.first.distanceMeters, 0);
       expect(curve.last.distanceMeters, 950);
       expect(curve, hasLength(11)); // origin + 100…900 + 950

@@ -57,6 +57,15 @@ abstract class EngineService {
     required List<Activity> attempts,
   });
 
+  /// Per-kilometer splits and the gap-to-PB curve for [activity] on [route],
+  /// computed by the engine. [trackMeters] is the distance the attempt
+  /// covered (it may be shorter than the full route).
+  Future<PaceAnalysis> computePaceAnalysis({
+    required Activity activity,
+    required Route route,
+    required double trackMeters,
+  });
+
   /// Creates a stateful live recorder owned by the engine.
   ///
   /// Pass [route] to follow a recognised course (coverage/progress/off-route

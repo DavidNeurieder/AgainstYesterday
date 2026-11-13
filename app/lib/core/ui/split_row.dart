@@ -6,7 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../features/result/application/splits.dart';
+import '../../engine/models.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../units.dart';
