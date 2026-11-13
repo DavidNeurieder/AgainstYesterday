@@ -9,7 +9,7 @@ library;
 
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Route;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -140,26 +140,13 @@ class ActivityDetailScreen extends ConsumerWidget {
           // top, so switching between runs keeps the same ground underfoot.
           if (mapGeometry.length >= 2) ...[
             const SizedBox(height: AppSpacing.xl),
-            SizedBox(
-              height: 240,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: mapSurface.build(
-                  context,
-                  MapScene(
-                    geometry: mapGeometry,
-                    track: overlayTrack,
-                    trackColors: overlayTrack.length >= 2 && runTrack != null
-                        ? _paceTrackColors(runTrack)
-                        : null,
-                    you: trackPositions.isNotEmpty
-                        ? trackPositions.first
-                        : mapGeometry.first,
-                    youProgress: trackPositions.isEmpty ? 0 : 1,
-                    staticView: true,
-                  ),
-                ),
-              ),
+            _PaceMapSection(
+              mapSurface: mapSurface,
+              mapGeometry: mapGeometry,
+              overlayTrack: overlayTrack,
+              runTrack: runTrack,
+              trackPositions: trackPositions,
+              route: route,
             ),
           ],
           if (activity.track case final track? when track.any((p) => p.altitudeMeters != null)) ...[
@@ -618,6 +605,101 @@ List<Color> _paceTrackColors(List<TrackPoint> track) {
   }
   return colors;
 }
+class _PaceMapSection extends StatefulWidget {
+  const _PaceMapSection({
+    required this.mapSurface,
+    required this.mapGeometry,
+    required this.overlayTrack,
+    required this.runTrack,
+    required this.trackPositions,
+    required this.route,
+  });
+
+  final MapSurface mapSurface;
+  final List<GeoPoint> mapGeometry;
+  final List<GeoPoint> overlayTrack;
+  final List<TrackPoint>? runTrack;
+  final List<GeoPoint> trackPositions;
+  final Route? route;
+
+  @override
+  State<_PaceMapSection> createState() => _PaceMapSectionState();
+}
+
+class _PaceMapSectionState extends State<_PaceMapSection> {
+  bool _showGap = false;
+
+  List<Color>? _colors() {
+    final track = widget.runTrack;
+    if (track == null || track.length < 2 || widget.overlayTrack.length < 2) {
+      return null;
+    }
+    if (_showGap) {
+      final pb = widget.route?.personalBest;
+      if (pb == null || widget.route == null) return _paceTrackColors(track);
+      final totalDist = widget.route!.distance.meters;
+      if (totalDist <= 0) return _paceTrackColors(track);
+      final colors = <Color>[];
+      double cumDist = 0;
+      for (var i = 0; i < track.length - 1; i++) {
+        final a = track[i];
+        final b = track[i + 1];
+        final segDist = haversineMeters(a.position, b.position);
+        final midDist = cumDist + segDist / 2;
+        cumDist += segDist;
+        final curElapsed =
+            b.timestamp.difference(track.first.timestamp).inMilliseconds /
+                1000.0;
+        final pbElapsed = pb.seconds * (midDist / totalDist);
+        colors.add(curElapsed <= pbElapsed ? AppColors.ahead : AppColors.behind);
+      }
+      return colors;
+    }
+    return _paceTrackColors(track);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPb = widget.route?.personalBest != null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hasPb)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Pace')),
+                ButtonSegment(value: true, label: Text('vs PB')),
+              ],
+              selected: {_showGap},
+              onSelectionChanged: (s) => setState(() => _showGap = s.first),
+            ),
+          ),
+        SizedBox(
+          height: 240,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: widget.mapSurface.build(
+              context,
+              MapScene(
+                geometry: widget.mapGeometry,
+                track: widget.overlayTrack,
+                trackColors: _colors(),
+                you: widget.trackPositions.isNotEmpty
+                    ? widget.trackPositions.first
+                    : widget.mapGeometry.first,
+                youProgress: widget.trackPositions.isEmpty ? 0 : 1,
+                staticView: true,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 String _formatDate(DateTime dt) {
   final d = dt.toLocal();
   return '${d.day}/${d.month}/${d.year}';
