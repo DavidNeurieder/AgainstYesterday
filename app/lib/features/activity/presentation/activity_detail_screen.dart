@@ -670,6 +670,11 @@ class _PaceMapSectionState extends State<_PaceMapSection> {
       if (totalDist <= 0) return _paceTrackColors(track);
       final colors = <Color>[];
       double cumDist = 0;
+      final offsetM = widget.route != null && widget.route!.geometry.isNotEmpty
+          ? haversineMeters(widget.route!.geometry.first, track.first.position)
+          : 0.0;
+      final startOffset = offsetM <= 100.0 ? offsetM : 0.0;
+      final totalDistClamped = (widget.route!.distance.meters).clamp(1.0, double.infinity);
       for (var i = 0; i < track.length - 1; i++) {
         final a = track[i];
         final b = track[i + 1];
@@ -679,7 +684,8 @@ class _PaceMapSectionState extends State<_PaceMapSection> {
         final curElapsed =
             b.timestamp.difference(track.first.timestamp).inMilliseconds /
                 1000.0;
-        final pbElapsed = pb.seconds * (midDist / totalDist);
+        final routeMid = (startOffset + midDist).clamp(0.0, totalDistClamped);
+        final pbElapsed = pb.seconds * (routeMid / totalDistClamped);
         colors.add(curElapsed <= pbElapsed ? AppColors.ahead : AppColors.behind);
       }
       return colors;

@@ -58,10 +58,22 @@ List<GapPoint> computeGapCurve({
     return const <GapPoint>[];
   }
 
+  // Start-offset correction: if the recorded track's first fix is slightly
+  // away from the route start, shift the PB reference so distance 0 on the
+  // track corresponds to the same point on the course. Only applied for small
+  // offsets to avoid corrupting genuinely off-route starts.
+  final offsetM = route.geometry.isNotEmpty
+      ? haversineMeters(route.geometry.first, track.first.position)
+      : 0.0;
+  final startOffset = offsetM <= 100.0 ? offsetM : 0.0;
+
   final startTime = track.first.timestamp;
   final pbSpeed = routeMeters / pb.seconds; // m/s constant-pace PB
 
-  double gapAt(double d) => d / pbSpeed - elapsedAtDistance(track, startTime, d);
+  double gapAt(double d) {
+    final routeD = (startOffset + d).clamp(0.0, routeMeters);
+    return routeD / pbSpeed - elapsedAtDistance(track, startTime, d);
+  }
 
   final points = <GapPoint>[
     const GapPoint(distanceMeters: 0, aheadSeconds: 0),

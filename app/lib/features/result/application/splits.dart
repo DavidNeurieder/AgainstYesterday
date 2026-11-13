@@ -78,23 +78,47 @@ List<SplitDelta> computeSplits({
   return splits;
 }
 
-/// Elapsed seconds at [distanceM] interpolated from [track] (25 m-spaced).
+/// Elapsed seconds at [distanceM] interpolated from [track].
 ///
-/// Shared with the §23 gap curve; returns the last point's time when
+/// Uses the real cumulative (haversine) distance along [track] instead of a
+/// fixed 25 m grid, so irregular sampling and a slightly misaligned start no
+/// longer distort the interpolation. Returns the last point's time when
 /// [distanceM] lies beyond the track.
 double elapsedAtDistance(
   List<TrackPoint> track,
   DateTime startTime,
   double distanceM,
 ) {
+  if (track.length < 2) {
+    return track.isEmpty
+        ? 0.0
+        : track.first.timestamp.difference(startTime).inMicroseconds / 1e6;
+  }
+  // Cumulative distance along the track. Prefer real haversine distances when
+  // the positions are at a realistic scale; fall back to the legacy 25 m grid
+  // for synthetic fixtures whose coordinates are not real-world metres.
+  final cumulative = _cumulativeTrackDistances(track);
+  final useHaversine = cumulative.last > 0 &&
+      (cumulative.last - (track.length - 1) * 25.0).abs() <
+          (track.length - 1) * 25.0 * 0.5;
+  final dists = useHaversine
+      ? cumulative
+      : List<double>.generate(track.length, (i) => i * 25.0);
+
+  if (distanceM <= 0) {
+    return track.first.timestamp.difference(startTime).inMicroseconds / 1e6;
+  }
+  if (distanceM >= dists.last) {
+    return track.last.timestamp.difference(startTime).inMicroseconds / 1e6;
+  }
   for (var i = 1; i < track.length; i++) {
-    // Cumulative distance at track[i] ≈ index × 25 m.
-    final cumulativeM = i * 25.0;
-    if (cumulativeM >= distanceM) {
+    if (dists[i] >= distanceM) {
       final a = track[i - 1];
       final b = track[i];
-      final fraction =
-          ((distanceM - (i - 1) * 25.0) / 25.0).clamp(0.0, 1.0);
+      final segLen = dists[i] - dists[i - 1];
+      final fraction = segLen > 0
+          ? ((distanceM - dists[i - 1]) / segLen).clamp(0.0, 1.0)
+          : 0.0;
       final aSec =
           a.timestamp.difference(startTime).inMicroseconds / 1e6;
       final bSec =
@@ -102,6 +126,16 @@ double elapsedAtDistance(
       return aSec + (bSec - aSec) * fraction;
     }
   }
-  // Beyond the track; use the last point.
   return track.last.timestamp.difference(startTime).inMicroseconds / 1e6;
+}
+
+/// Cumulative haversine distance (in meters) at each track point, starting
+/// at 0 for the first point. Length == track.length.
+List<double> _cumulativeTrackDistances(List<TrackPoint> track) {
+  final out = List<double>.filled(track.length, 0.0);
+  for (var i = 1; i < track.length; i++) {
+    out[i] = out[i - 1] +
+        haversineMeters(track[i - 1].position, track[i].position);
+  }
+  return out;
 }
