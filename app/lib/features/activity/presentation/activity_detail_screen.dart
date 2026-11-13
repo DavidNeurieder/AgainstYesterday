@@ -14,7 +14,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../app/dependencies.dart';
 import '../../../core/ui/split_row.dart';
+import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../map/map_surface.dart';
@@ -176,6 +178,10 @@ class ActivityDetailScreen extends ConsumerWidget {
             for (final split in splits)
               SplitRow(split: split),
           ],
+          if (activity.track case final track? when track.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xl),
+            TrackAnalyticsSection(track: track),
+          ],
           // The raw recorded fixes, for anyone who wants the exact GPS output
           // behind the track: coordinates, local time and altitude when the
           // receiver reported it.
@@ -207,6 +213,216 @@ class ActivityDetailScreen extends ConsumerWidget {
             'Run on ${_formatDate(activity.startedAt)}',
             textAlign: TextAlign.center,
             style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Engine-computed track analytics (M30): distance, time breakdown, pace,
+/// speed, elevation and GPS quality. Rendered from `EngineService.analyzeTrack`
+/// so fake and Rust engines agree.
+class TrackAnalyticsSection extends ConsumerStatefulWidget {
+  const TrackAnalyticsSection({super.key, required this.track});
+
+  final List<TrackPoint> track;
+
+  @override
+  ConsumerState<TrackAnalyticsSection> createState() =>
+      _TrackAnalyticsSectionState();
+}
+
+class _TrackAnalyticsSectionState
+    extends ConsumerState<TrackAnalyticsSection> {
+  late Future<TrackAnalytics> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _analyze();
+  }
+
+  @override
+  void didUpdateWidget(covariant TrackAnalyticsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.track != widget.track) {
+      _future = _analyze();
+    }
+  }
+
+  Future<TrackAnalytics> _analyze() =>
+      ref.read(engineServiceProvider).analyzeTrack(points: widget.track);
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Track analytics',
+          style: textTheme.titleMedium?.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        FutureBuilder<TrackAnalytics>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.lg),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+            if (snapshot.hasError || !snapshot.hasData) {
+              return Text(
+                'Analytics unavailable.',
+                style: textTheme.bodySmall?.copyWith(
+                  color: AppColors.textMuted,
+                ),
+              );
+            }
+            final a = snapshot.data!;
+            final units = ref.watch(displayUnitProvider);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-distance'),
+                  label: 'Distance',
+                  value: Distance.meters(a.distanceMeters).formatWith(units),
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-elapsed'),
+                  label: 'Elapsed time',
+                  value: Elapsed.seconds(a.elapsedTimeMs / 1000.0).formatClock(),
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-moving'),
+                  label: 'Moving time',
+                  value: Elapsed.seconds(a.movingTimeMs / 1000.0).formatClock(),
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-paused'),
+                  label: 'Paused time',
+                  value: Elapsed.seconds(a.pausedTimeMs / 1000.0).formatClock(),
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-stopped'),
+                  label: 'Stopped time',
+                  value: Elapsed.seconds(a.stoppedTimeMs / 1000.0).formatClock(),
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-avg-pace'),
+                  label: 'Average pace',
+                  value: a.averagePaceMsPerKm == null
+                      ? '—'
+                      : '${Elapsed.seconds(a.averagePaceMsPerKm! / 1000.0).format()} /km',
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-best-pace'),
+                  label: 'Best pace',
+                  value: a.bestPaceMsPerKm == null
+                      ? '—'
+                      : '${Elapsed.seconds(a.bestPaceMsPerKm! / 1000.0).format()} /km',
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-avg-speed'),
+                  label: 'Average speed',
+                  value: a.averageSpeedMps == null
+                      ? '—'
+                      : '${(a.averageSpeedMps! * 3.6).toStringAsFixed(2)} km/h',
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-moving-speed'),
+                  label: 'Moving speed',
+                  value: a.movingSpeedMps == null
+                      ? '—'
+                      : '${(a.movingSpeedMps! * 3.6).toStringAsFixed(2)} km/h',
+                ),
+                _AnalyticsRow(
+                  key: const ValueKey('analytics-max-speed'),
+                  label: 'Max speed',
+                  value: a.maxSpeedMps == null
+                      ? '—'
+                      : '${(a.maxSpeedMps! * 3.6).toStringAsFixed(2)} km/h',
+                ),
+                if (a.elevationGainMeters != null)
+                  _AnalyticsRow(
+                    key: const ValueKey('analytics-elev-gain'),
+                    label: 'Elevation gain',
+                    value: '${a.elevationGainMeters!.toStringAsFixed(1)} m',
+                  ),
+                if (a.elevationLossMeters != null)
+                  _AnalyticsRow(
+                    key: const ValueKey('analytics-elev-loss'),
+                    label: 'Elevation loss',
+                    value: '${a.elevationLossMeters!.toStringAsFixed(1)} m',
+                  ),
+                if (a.elevationMinMeters != null)
+                  _AnalyticsRow(
+                    key: const ValueKey('analytics-elev-min'),
+                    label: 'Min elevation',
+                    value: '${a.elevationMinMeters!.toStringAsFixed(1)} m',
+                  ),
+                if (a.elevationMaxMeters != null)
+                  _AnalyticsRow(
+                    key: const ValueKey('analytics-elev-max'),
+                    label: 'Max elevation',
+                    value: '${a.elevationMaxMeters!.toStringAsFixed(1)} m',
+                  ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'GPS quality: ${a.quality.acceptedSamples} accepted, '
+                  '${a.quality.rejectedSamples} rejected, '
+                  '${(a.quality.coverageRatio * 100).toStringAsFixed(0)}% coverage, '
+                  '${a.quality.gpsGapCount} gaps'
+                  '${a.quality.hasSufficientDistance ? '' : ' (insufficient distance)'}'
+                  '${a.quality.hasElevationData ? '' : ' (no elevation)'}',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _AnalyticsRow extends StatelessWidget {
+  const _AnalyticsRow({super.key, required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            textAlign: TextAlign.right,
+            style: textTheme.titleSmall?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),
