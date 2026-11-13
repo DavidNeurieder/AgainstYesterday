@@ -7,12 +7,14 @@ library;
 import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../persistence/persistence.dart';
+import 'package:go_router/go_router.dart';
 import '../../routes/application/route_stats.dart';
+import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 
 enum _StatsPeriod { week, month, year, all }
@@ -114,10 +116,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     final now = DateTime.now();
     final start = _periodStart(_period, now);
     final prevStart = _periodStart(_period, start);
-    final filtered = [
+    final filtered = <Activity>[
       for (final a in activities) if (!a.startedAt.isBefore(start)) a,
     ];
-    final previous = [
+    final previous = <Activity>[
       for (final a in activities)
         if (!a.startedAt.isBefore(prevStart) && a.startedAt.isBefore(start)) a,
     ];
@@ -377,7 +379,7 @@ class _ConsistencyCalendar extends StatelessWidget {
   }
 }
 
-class _RouteStatCard extends StatelessWidget {
+class _RouteStatCard extends ConsumerWidget {
   const _RouteStatCard({
     required this.route,
     required this.activities,
@@ -389,15 +391,21 @@ class _RouteStatCard extends StatelessWidget {
   final Units units;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
     final attempts = [
       for (final a in activities) if (a.routeId == route.id && a.duration != null) a,
     ];
     final stats = computeRouteStats(route: route, attempts: attempts);
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          AppHaptics.selection(ref);
+          context.push('/route/${route.id}');
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -425,6 +433,7 @@ class _RouteStatCard extends StatelessWidget {
               ),
           ],
         ),
+      ),
       ),
     );
   }
