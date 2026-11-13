@@ -278,6 +278,7 @@ class FakeEngineService implements EngineService {
                         1000.0),
             ].where((v) => v.isFinite && v > 0).fold<double?>(null, (a, b) => a == null || b > a ? b : a),
       bestPaceMsPerKm: null,
+      smoothedBestPaceMsPerKm: null,
       elevationGainMeters: hasAlt ? gain : null,
       elevationLossMeters: hasAlt ? loss : null,
       elevationMinMeters: minAlt,

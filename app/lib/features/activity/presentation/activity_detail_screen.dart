@@ -389,10 +389,12 @@ class TrackAnalyticsSection extends ConsumerWidget {
                 ),
                 _AnalyticsRow(
                   key: const ValueKey('analytics-smoothed-pace'),
-                  label: 'Smoothed pace (5-sample)',
-                  value: a.paceSamples.length < 5
-                      ? '—'
-                      : '${Elapsed.seconds(_smoothedPace(a.paceSamples) / 1000.0).format()} /km',
+                  label: 'Smoothed pace (engine)',
+                  value: a.smoothedBestPaceMsPerKm == null
+                      ? (a.paceSamples.length < 5
+                          ? '—'
+                          : '${Elapsed.seconds(_smoothedPace(a.paceSamples) / 1000.0).format()} /km')
+                      : '${Elapsed.seconds(a.smoothedBestPaceMsPerKm! / 1000.0).format()} /km',
                 ),
                 _AnalyticsRow(
                   key: const ValueKey('analytics-avg-speed'),

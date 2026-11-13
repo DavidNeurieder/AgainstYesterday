@@ -172,6 +172,13 @@ final class RustEngineService implements EngineService {
               paceMsPerKm: (m['pace_ms_per_km'] as num).toInt());
         })
         .toList(growable: false);
+    final smoothedPaceSamples = (json['smoothed_pace_samples'] as List<dynamic>? ?? [])
+        .map((e) {
+          final m = e as Map<String, dynamic>;
+          return (distanceMeters: (m['distance_m'] as num).toDouble(),
+              paceMsPerKm: (m['pace_ms_per_km'] as num).toInt());
+        })
+        .toList(growable: false);
     final elevSamples = (json['elevation_samples'] as List<dynamic>? ?? [])
         .map((e) {
           final m = e as Map<String, dynamic>;
@@ -190,11 +197,13 @@ final class RustEngineService implements EngineService {
       movingSpeedMps: (json['moving_speed_mps'] as num?)?.toDouble(),
       maxSpeedMps: (json['max_speed_mps'] as num?)?.toDouble(),
       bestPaceMsPerKm: json['best_pace_ms_per_km'] as int?,
+      smoothedBestPaceMsPerKm: json['smoothed_best_pace_ms_per_km'] as int?,
       elevationGainMeters: (json['elevation_gain_m'] as num?)?.toDouble(),
       elevationLossMeters: (json['elevation_loss_m'] as num?)?.toDouble(),
       elevationMinMeters: (json['elevation_min_m'] as num?)?.toDouble(),
       elevationMaxMeters: (json['elevation_max_m'] as num?)?.toDouble(),
       paceSamples: paceSamples,
+      smoothedPaceSamples: smoothedPaceSamples,
       elevationSamples: elevSamples,
       quality: TrackAnalyticsQuality(
         acceptedSamples: (quality['accepted_samples'] as num).toInt(),

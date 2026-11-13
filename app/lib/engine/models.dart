@@ -781,11 +781,13 @@ class TrackAnalytics {
     this.movingSpeedMps,
     this.maxSpeedMps,
     this.bestPaceMsPerKm,
+    this.smoothedBestPaceMsPerKm,
     this.elevationGainMeters,
     this.elevationLossMeters,
     this.elevationMinMeters,
     this.elevationMaxMeters,
     this.paceSamples = const [],
+    this.smoothedPaceSamples = const [],
     this.elevationSamples = const [],
     required this.quality,
   });
@@ -805,6 +807,8 @@ class TrackAnalytics {
   final double? elevationMinMeters;
   final double? elevationMaxMeters;
   final List<({double distanceMeters, int paceMsPerKm})> paceSamples;
+  final List<({double distanceMeters, int paceMsPerKm})> smoothedPaceSamples;
+  final int? smoothedBestPaceMsPerKm;
   final List<({double distanceMeters, double elevationMeters})> elevationSamples;
   final TrackAnalyticsQuality quality;
 }
