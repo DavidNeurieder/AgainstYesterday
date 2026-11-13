@@ -54,6 +54,56 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     return buckets;
   }
 
+  List<Widget> _pbTimeline(BuildContext context, List<Route> routes, List<Activity> activities) {
+    final textTheme = Theme.of(context).textTheme;
+    final routeNames = {for (final r in routes) r.id: r.name};
+    final events = <Activity>[];
+    for (final r in routes) {
+      final attempts = [
+        for (final a in activities)
+          if (a.routeId == r.id && a.duration != null) a,
+      ]..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+      Elapsed? best;
+      for (final a in attempts) {
+        if (best == null || a.duration!.seconds < best.seconds) {
+          best = a.duration;
+          events.add(a);
+        }
+      }
+    }
+    events.sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    if (events.isEmpty) {
+      return [
+        Text(
+          'No personal bests yet.',
+          style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+        ),
+      ];
+    }
+    return [
+      for (final a in events.take(5))
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              const Icon(Icons.emoji_events, size: 16, color: AppColors.pb),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  '${routeNames[a.routeId] ?? 'Route'} · ${a.duration!.format()}',
+                  style: textTheme.bodyMedium,
+                ),
+              ),
+              Text(
+                '${a.startedAt.toLocal().day}/${a.startedAt.toLocal().month}',
+                style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+              ),
+            ],
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final routes = ref.watch(routeRepositoryProvider);
@@ -156,6 +206,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             Text('Consistency (last 4 weeks)', style: textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             _ConsistencyCalendar(activities: filtered),
+            const SizedBox(height: AppSpacing.lg),
+            Text('Recent achievements', style: textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            ..._pbTimeline(context, routes, activities),
             const SizedBox(height: AppSpacing.lg),
             Text('Routes', style: textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
