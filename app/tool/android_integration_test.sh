@@ -142,20 +142,9 @@ cleanup() {
   if [ -n "$PD_RUN_PID" ]; then
     kill "$PD_RUN_PID" >/dev/null 2>&1 || true
   fi
-  if [ "$BOOTS_EMULATOR" = "1" ]; then
-    "$ADB" -s "$SERIAL" emu kill >/dev/null 2>&1 || true
-    # Wait for the emulator to actually leave adb before exiting. Back-to-back
-    # suites run in one CI job (full, device-gps, permissions, process-death),
-    # and a following suite that still sees the dying serial skips its own boot
-    # and then waits out BOOT_TIMEOUT for a device that is busy shutting down.
-    local i
-    for ((i = 0; i < 90; i++)); do
-      if ! "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1; then
-        break
-      fi
-      sleep 1
-    done
-  fi
+  # Intentionally keep the emulator running after tests finish so it can be
+  # reused across runs. It is only booted here when no device was already
+  # available, but we never shut it down on exit.
 }
 trap cleanup EXIT
 
