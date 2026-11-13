@@ -153,6 +153,10 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
               lowerIsBetter: true,
             ),
             const SizedBox(height: AppSpacing.lg),
+            Text('Consistency (last 4 weeks)', style: textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            _ConsistencyCalendar(activities: filtered),
+            const SizedBox(height: AppSpacing.lg),
             Text('Routes', style: textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             for (final r in routes) ...[
@@ -273,6 +277,48 @@ class _WeeklyBarChart extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+
+class _ConsistencyCalendar extends StatelessWidget {
+  const _ConsistencyCalendar({required this.activities});
+
+  final List<Activity> activities;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final days = <DateTime>[];
+    for (var i = 27; i >= 0; i--) {
+      days.add(DateTime(now.year, now.month, now.day).subtract(Duration(days: i)));
+    }
+    final active = <String>{};
+    for (final a in activities) {
+      final d = a.startedAt.toLocal();
+      active.add('${d.year}-${d.month}-${d.day}');
+    }
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7,
+        mainAxisSpacing: 4,
+        crossAxisSpacing: 4,
+      ),
+      itemCount: days.length,
+      itemBuilder: (context, i) {
+        final d = days[i];
+        final key = '${d.year}-${d.month}-${d.day}';
+        final isActive = active.contains(key);
+        return Container(
+          decoration: BoxDecoration(
+            color: isActive ? AppColors.you : AppColors.surfaceHigh,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        );
+      },
     );
   }
 }
