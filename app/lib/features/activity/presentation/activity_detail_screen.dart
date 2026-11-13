@@ -184,6 +184,8 @@ class ActivityDetailScreen extends ConsumerWidget {
           if (activity.track case final track? when track.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xl),
             TrackAnalyticsSection(track: track),
+            const SizedBox(height: AppSpacing.xl),
+            PaceDistributionSection(track: track),
           ],
           // The raw recorded fixes, for anyone who wants the exact GPS output
           // behind the track: coordinates, local time and altitude when the
@@ -496,6 +498,139 @@ class _AnalyticsRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Pace distribution derived from the engine's pace samples.
+class PaceDistributionSection extends ConsumerStatefulWidget {
+  const PaceDistributionSection({super.key, required this.track});
+
+  final List<TrackPoint> track;
+
+  @override
+  ConsumerState<PaceDistributionSection> createState() =>
+      _PaceDistributionSectionState();
+}
+
+class _PaceDistributionSectionState
+    extends ConsumerState<PaceDistributionSection> {
+  late Future<TrackAnalytics> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ref.read(engineServiceProvider).analyzeTrack(points: widget.track);
+  }
+
+  @override
+  void didUpdateWidget(covariant PaceDistributionSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.track != widget.track) {
+      _future = ref.read(engineServiceProvider).analyzeTrack(points: widget.track);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Pace distribution',
+          style: textTheme.titleMedium?.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        FutureBuilder<TrackAnalytics>(
+          future: _future,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+            if (snapshot.hasError || !snapshot.hasData) {
+              return Text(
+                'Pace distribution unavailable.',
+                style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+              );
+            }
+            final samples = snapshot.data!.paceSamples;
+            if (samples.isEmpty) {
+              return Text(
+                'No pace samples.',
+                style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+              );
+            }
+            // Buckets in min/km: <5, 5-6, 6-7, 7-8, >8
+            final buckets = <String, int>{
+              '<5:00': 0,
+              '5-6:00': 0,
+              '6-7:00': 0,
+              '7-8:00': 0,
+              '>8:00': 0,
+            };
+            for (final s in samples) {
+              final minPerKm = s.paceMsPerKm / 60000.0;
+              if (minPerKm < 5) {
+                buckets['<5:00'] = buckets['<5:00']! + 1;
+              } else if (minPerKm < 6) {
+                buckets['5-6:00'] = buckets['5-6:00']! + 1;
+              } else if (minPerKm < 7) {
+                buckets['6-7:00'] = buckets['6-7:00']! + 1;
+              } else if (minPerKm < 8) {
+                buckets['7-8:00'] = buckets['7-8:00']! + 1;
+              } else {
+                buckets['>8:00'] = buckets['>8:00']! + 1;
+              }
+            }
+            final maxCount = buckets.values.reduce((a, b) => a > b ? a : b);
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                for (final entry in buckets.entries)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            height: maxCount == 0
+                                ? 4
+                                : (entry.value / maxCount * 80).clamp(4.0, 80.0),
+                            decoration: BoxDecoration(
+                              color: AppColors.you,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            entry.key,
+                            style: textTheme.labelSmall?.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          Text(
+                            '${entry.value}',
+                            style: textTheme.labelSmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }
