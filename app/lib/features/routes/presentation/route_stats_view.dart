@@ -78,10 +78,35 @@ class RouteStatsView extends StatelessWidget {
               ],
             ),
           ),
-        if (stats.last != null && stats.pb != null)
-          _StatRow(
-            label: 'Last vs PB',
-            value: Elapsed.seconds(stats.last!.seconds - stats.pb!.seconds),
+        if (stats.recentAverage != null && stats.runs >= 2)
+          _StatRow(label: 'Recent (last 5)', value: stats.recentAverage),
+        if (stats.verdict != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Verdict',
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  stats.verdict!,
+                  textAlign: TextAlign.right,
+                  style: textTheme.titleSmall?.copyWith(
+                    color: stats.verdict == 'improving'
+                        ? AppColors.ahead
+                        : (stats.verdict == 'slowing'
+                            ? AppColors.behind
+                            : AppColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
           ),
         if (showChart && attempts.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.md),

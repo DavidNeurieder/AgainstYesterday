@@ -25,6 +25,8 @@ class RouteStats {
     this.stdDev,
     this.range,
     this.trendSecondsPerRun,
+    this.recentAverage,
+    this.verdict,
   });
 
   /// Fastest ever on this route (seed PB when no history beats it).
@@ -58,6 +60,12 @@ class RouteStats {
   /// Linear trend of attempt times over chronological order, in seconds per
   /// run (negative means getting faster).
   final double? trendSecondsPerRun;
+
+  /// Mean of the most recent up-to-5 timed attempts (newest first).
+  final Elapsed? recentAverage;
+
+  /// Short verdict derived from recent vs overall average.
+  final String? verdict;
 }
 
 /// Computes [RouteStats] for [route] from its [attempts] (activities that
@@ -113,6 +121,27 @@ RouteStats computeRouteStats({
   // Trend: slope of duration over chronological run order (seconds per run).
   final trendSecondsPerRun = _trend(attempts);
 
+  // Recent average: mean of the newest up to 5 timed attempts.
+  final recentSorted = [...attempts]..sort(
+      (a, b) => b.startedAt.compareTo(a.startedAt),
+    );
+  final recentTimed = [
+    for (final a in recentSorted)
+      if (a.duration != null) a.duration!,
+  ].take(5).toList();
+  final recentAverage = recentTimed.isEmpty
+      ? null
+      : Elapsed.seconds(
+          recentTimed.fold<num>(0, (s, e) => s + e.seconds) /
+              recentTimed.length,
+        );
+  String? verdict;
+  if (recentAverage != null && average != null) {
+    verdict = recentAverage.seconds < average.seconds
+        ? 'improving'
+        : (recentAverage.seconds > average.seconds ? 'slowing' : 'steady');
+  }
+
   final recent = [...attempts]..sort(
       (a, b) => b.startedAt.compareTo(a.startedAt),
     );
@@ -133,6 +162,8 @@ RouteStats computeRouteStats({
     stdDev: stdDev,
     range: range,
     trendSecondsPerRun: trendSecondsPerRun,
+    recentAverage: recentAverage,
+    verdict: verdict,
   );
 }
 
