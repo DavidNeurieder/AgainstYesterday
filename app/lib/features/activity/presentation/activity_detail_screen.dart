@@ -7,6 +7,8 @@
 /// layout as [ResultScreen] but reads persisted data from the repositories.
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +26,7 @@ import '../../map/route_map_autosave.dart';
 import 'elevation_profile.dart';
 import '../../result/application/splits.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../settings/application/track_export.dart';
 
 class ActivityDetailScreen extends ConsumerWidget {
   const ActivityDetailScreen({super.key, required this.activityId});
@@ -194,16 +197,83 @@ class ActivityDetailScreen extends ConsumerWidget {
             key: const ValueKey('export-analysis'),
             onPressed: () async {
               final messenger = ScaffoldMessenger.of(context);
-              await Clipboard.setData(
-                ClipboardData(
-                  text: 'Distance: ${activity.distance?.formatWith(ref.read(displayUnitProvider)) ?? '—'}\n'
-                      'Duration: ${activity.duration?.formatClock() ?? '—'}\n'
-                      'Fixes: ${activity.track?.length ?? 0}',
-                ),
-              );
-              messenger.showSnackBar(
-                const SnackBar(content: Text('Analysis copied to clipboard.')),
-              );
+              final engine = ref.read(engineServiceProvider);
+              final track = activity.track ?? const <TrackPoint>[];
+              TrackAnalytics? analytics;
+              try {
+                analytics = await engine.analyzeTrack(points: track);
+              } catch (_) {
+                analytics = null;
+              }
+              final payload = <String, Object?>{
+                'activityId': activity.id,
+                'routeId': activity.routeId,
+                'startedAt': activity.startedAt.toUtc().toIso8601String(),
+                'distanceMeters': activity.distance?.meters,
+                'durationSeconds': activity.duration?.seconds,
+                'performance': activity.performance,
+                'fixCount': track.length,
+                'splits': [
+                  for (final s in splits)
+                    <String, Object?>{
+                      'index': s.index,
+                      'startDistanceM': s.startDistanceM,
+                      'endDistanceM': s.endDistanceM,
+                      'durationSeconds': s.durationSeconds,
+                      'averageSpeedMps': s.averageSpeedMps,
+                    },
+                ],
+                if (analytics != null)
+                  'analytics': <String, Object?>{
+                    'distanceMeters': analytics.distanceMeters,
+                    'elapsedTimeMs': analytics.elapsedTimeMs,
+                    'movingTimeMs': analytics.movingTimeMs,
+                    'pausedTimeMs': analytics.pausedTimeMs,
+                    'stoppedTimeMs': analytics.stoppedTimeMs,
+                    'averagePaceMsPerKm': analytics.averagePaceMsPerKm,
+                    'averageSpeedMps': analytics.averageSpeedMps,
+                    'movingSpeedMps': analytics.movingSpeedMps,
+                    'maxSpeedMps': analytics.maxSpeedMps,
+                    'bestPaceMsPerKm': analytics.bestPaceMsPerKm,
+                    'elevationGainMeters': analytics.elevationGainMeters,
+                    'elevationLossMeters': analytics.elevationLossMeters,
+                    'elevationMinMeters': analytics.elevationMinMeters,
+                    'elevationMaxMeters': analytics.elevationMaxMeters,
+                    'quality': <String, Object?>{
+                      'acceptedSamples': analytics.quality.acceptedSamples,
+                      'rejectedSamples': analytics.quality.rejectedSamples,
+                      'coverageRatio': analytics.quality.coverageRatio,
+                      'gpsGapCount': analytics.quality.gpsGapCount,
+                      'hasSufficientDistance':
+                          analytics.quality.hasSufficientDistance,
+                      'hasElevationData': analytics.quality.hasElevationData,
+                    },
+                  },
+                'exportedAt': DateTime.now().toUtc().toIso8601String(),
+              };
+              final contents =
+                  const JsonEncoder.withIndent('  ').convert(payload);
+              final fileName =
+                  'against-yesterday-analysis-${activity.id}.json';
+              try {
+                await ref.read(trackExporterProvider).saveToDownloads(
+                      fileName: fileName,
+                      contents: contents,
+                    );
+                messenger.showSnackBar(
+                  SnackBar(content: Text('Saved $fileName to Downloads.')),
+                );
+              } on TrackExportException catch (error) {
+                await Clipboard.setData(ClipboardData(text: contents));
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Exported to clipboard (Downloads unavailable: '
+                      '${error.message}).',
+                    ),
+                  ),
+                );
+              }
             },
             icon: const Icon(Icons.download_rounded),
             label: const Text('Export analysis'),
