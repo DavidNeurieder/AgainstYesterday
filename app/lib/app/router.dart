@@ -15,6 +15,7 @@ import '../features/dev/presentation/diagnostics_screen.dart';
 import '../features/history/presentation/history_screen.dart';
 import '../features/recording/presentation/record_flow_screen.dart';
 import '../features/recording/presentation/route_record_flow_screen.dart';
+import '../features/result/presentation/result_screen.dart';
 import '../features/routes/presentation/route_detail_screen.dart';
 import '../features/routes/presentation/route_statistics_screen.dart';
 import '../features/routes/presentation/routes_screen.dart';
@@ -85,6 +86,10 @@ GoRouter buildRouter() {
       GoRoute(
         path: '/record-route',
         builder: (context, state) => const RouteRecordFlowScreen(),
+      ),
+      GoRoute(
+        path: '/record/result',
+        builder: (context, state) => const ResultScreen(),
       ),
       GoRoute(
         path: '/statistics',
