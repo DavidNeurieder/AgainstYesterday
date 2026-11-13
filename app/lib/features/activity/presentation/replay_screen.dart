@@ -21,6 +21,7 @@ import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../map/map_surface.dart';
+import 'elevation_profile.dart';
 import '../../map/route_map_autosave.dart';
 import '../../recording/application/ghost_profile.dart';
 import '../../recording/presentation/race_hud.dart';
@@ -421,10 +422,18 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
             if (_showAnalysis)
               Padding(
                 padding: const EdgeInsets.only(top: AppSpacing.sm),
-                child: Text(
-                  'Analysis: ${snap.elapsedSeconds.toStringAsFixed(1)} s / '
-                  '${snap.distanceMeters.toStringAsFixed(1)} m',
-                  style: Theme.of(context).textTheme.bodySmall,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Analysis: ${snap.elapsedSeconds.toStringAsFixed(1)} s / '
+                      '${snap.distanceMeters.toStringAsFixed(1)} m',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (_activityTrack != null && _activityTrack!.isNotEmpty)
+                      ReplayAnalysisPanel(track: _activityTrack!),
+                  ],
                 ),
               ),
           ],
@@ -576,5 +585,93 @@ class _ReplayControls extends StatelessWidget {
       }
     }
     return best;
+  }
+}
+
+/// Analysis panel shown under the replay map when the analysis toggle is on.
+/// Surfaces engine-computed TrackAnalytics (pace, speed, elevation, quality)
+/// for the recorded track so replay doubles as a review tool.
+class ReplayAnalysisPanel extends ConsumerStatefulWidget {
+  const ReplayAnalysisPanel({super.key, required this.track});
+
+  final List<TrackPoint> track;
+
+  @override
+  ConsumerState<ReplayAnalysisPanel> createState() =>
+      _ReplayAnalysisPanelState();
+}
+
+class _ReplayAnalysisPanelState extends ConsumerState<ReplayAnalysisPanel> {
+  late Future<TrackAnalytics> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ref.read(engineServiceProvider).analyzeTrack(points: widget.track);
+  }
+
+  @override
+  void didUpdateWidget(covariant ReplayAnalysisPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.track != widget.track) {
+      _future = ref.read(engineServiceProvider).analyzeTrack(points: widget.track);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return FutureBuilder<TrackAnalytics>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Text(
+            'Analytics unavailable.',
+            style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          );
+        }
+        final a = snapshot.data!;
+        final hasElev =
+            widget.track.any((p) => p.altitudeMeters != null);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Distance ${a.distanceMeters.toStringAsFixed(0)} m · '
+              'Moving ${Elapsed.seconds(a.movingTimeMs / 1000.0).formatClock()} · '
+              'Avg pace ${a.averagePaceMsPerKm == null ? '—' : '${Elapsed.seconds(a.averagePaceMsPerKm! / 1000.0).format()} /km'} · '
+              'Max speed ${a.maxSpeedMps == null ? '—' : '${(a.maxSpeedMps! * 3.6).toStringAsFixed(1)} km/h'}',
+              style: textTheme.bodySmall,
+            ),
+            if (a.elevationGainMeters != null)
+              Text(
+                'Elev +${a.elevationGainMeters!.toStringAsFixed(0)} / '
+                '-${a.elevationLossMeters?.toStringAsFixed(0) ?? '0'} m',
+                style: textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            if (hasElev) ...[
+              const SizedBox(height: AppSpacing.sm),
+              RepaintBoundary(child: ElevationProfile(track: widget.track)),
+            ],
+            Text(
+              'GPS quality: ${a.quality.acceptedSamples} accepted, '
+              '${a.quality.rejectedSamples} rejected, '
+              '${(a.quality.coverageRatio * 100).toStringAsFixed(0)}% coverage',
+              style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
