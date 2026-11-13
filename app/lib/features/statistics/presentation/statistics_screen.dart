@@ -318,11 +318,14 @@ class _WeeklyBarChart extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Container(
-                      height: (v / maxV * 90).clamp(2.0, 90.0),
-                      decoration: BoxDecoration(
-                        color: AppColors.you,
-                        borderRadius: BorderRadius.circular(4),
+                    Tooltip(
+                      message: '${v.toStringAsFixed(unit == 'm' ? 0 : 2)} $unit',
+                      child: Container(
+                        height: (v / maxV * 90).clamp(2.0, 90.0),
+                        decoration: BoxDecoration(
+                          color: AppColors.you,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 4),
