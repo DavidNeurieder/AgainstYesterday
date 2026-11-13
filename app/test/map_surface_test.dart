@@ -226,7 +226,7 @@ class _RecordingMapSurface implements MapSurface {
   final scenes = <MapScene>[];
 
   @override
-  Widget build(BuildContext context, MapScene scene) {
+  Widget build(BuildContext context, MapScene scene, {bool fullscreen = true}) {
     scenes.add(scene);
     return const SizedBox.shrink();
   }

@@ -41,8 +41,24 @@ class FlutterMapSurface implements MapSurface {
   final Directory? cacheRoot;
 
   @override
-  Widget build(BuildContext context, MapScene scene) =>
-      FlutterMapRouteMap(scene: scene, cacheRoot: cacheRoot);
+  Widget build(BuildContext context, MapScene scene, {bool fullscreen = true}) {
+    final map = FlutterMapRouteMap(scene: scene, cacheRoot: cacheRoot);
+    if (!fullscreen) return map;
+    return Stack(
+      children: [
+        map,
+        Positioned(
+          right: 8,
+          bottom: 8,
+          child: FloatingActionButton.small(
+            heroTag: null,
+            onPressed: () => showFullscreenMap(context, scene, this),
+            child: const Icon(Icons.fullscreen),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// The desktop map view. Kept public so a widget test can pump it directly;

@@ -127,7 +127,17 @@ class RouteDetailScreen extends ConsumerWidget {
                           youProgress: 0,
                           staticView: true,
                         ),
+                        fullscreen: false,
                       ),
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: FloatingActionButton.small(
+                      heroTag: null,
+                      onPressed: () => _showExpandedMap(context, route, attempts),
+                      child: const Icon(Icons.fullscreen),
+                    ),
+                  ),
                   Positioned.fill(
                     child: Material(
                       color: Colors.transparent,

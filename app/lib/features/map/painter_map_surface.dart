@@ -9,7 +9,7 @@
 /// flag rather than a rewrite.
 library;
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import '../../widgets/route_map.dart';
 import 'map_surface.dart';
@@ -18,15 +18,32 @@ class PainterMapSurface implements MapSurface {
   const PainterMapSurface();
 
   @override
-  Widget build(BuildContext context, MapScene scene) => RouteMap(
-        geometry: scene.geometry,
-        track: scene.track,
-        trackColors: scene.trackColors,
-        you: scene.you,
-        youProgress: scene.youProgress,
-        ghost: scene.ghost,
-        name: scene.name,
-        courseColor: scene.courseColor,
-        staticView: scene.staticView,
-      );
+  Widget build(BuildContext context, MapScene scene, {bool fullscreen = true}) {
+    final map = RouteMap(
+      geometry: scene.geometry,
+      track: scene.track,
+      trackColors: scene.trackColors,
+      you: scene.you,
+      youProgress: scene.youProgress,
+      ghost: scene.ghost,
+      name: scene.name,
+      courseColor: scene.courseColor,
+      staticView: scene.staticView,
+    );
+    if (!fullscreen) return map;
+    return Stack(
+      children: [
+        map,
+        Positioned(
+          right: 8,
+          bottom: 8,
+          child: FloatingActionButton.small(
+            heroTag: null,
+            onPressed: () => showFullscreenMap(context, scene, this),
+            child: const Icon(Icons.fullscreen),
+          ),
+        ),
+      ],
+    );
+  }
 }

@@ -28,8 +28,24 @@ class MaplibreMapSurface implements MapSurface {
   const MaplibreMapSurface();
 
   @override
-  Widget build(BuildContext context, MapScene scene) =>
-      MaplibreRouteMap(scene: scene);
+  Widget build(BuildContext context, MapScene scene, {bool fullscreen = true}) {
+    final map = MaplibreRouteMap(scene: scene);
+    if (!fullscreen) return map;
+    return Stack(
+      children: [
+        map,
+        Positioned(
+          right: 8,
+          bottom: 8,
+          child: FloatingActionButton.small(
+            heroTag: null,
+            onPressed: () => showFullscreenMap(context, scene, this),
+            child: const Icon(Icons.fullscreen),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// The live MapLibre view. Kept public so an integration test can pump it

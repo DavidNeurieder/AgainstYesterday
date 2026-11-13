@@ -26,8 +26,7 @@ library;
 
 import 'dart:io';
 
-import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../engine/models.dart';
 import '../settings/application/settings_controller.dart';
@@ -125,7 +124,7 @@ class MapScene {
 
 /// Renders a [MapScene]. Implemented by the painter fallback and by MapLibre.
 abstract interface class MapSurface {
-  Widget build(BuildContext context, MapScene scene);
+  Widget build(BuildContext context, MapScene scene, {bool fullscreen = true});
 }
 
 /// The renderer for this build. Tests override it with a recording fake to
@@ -175,4 +174,22 @@ MapSurface resolveMapSurface({
     MapRenderer.maplibre => const MaplibreMapSurface(),
     MapRenderer.painter => const PainterMapSurface(),
   };
+}
+
+
+/// Shows [scene] fullscreen in a dialog using [surface].
+Future<void> showFullscreenMap(
+  BuildContext context,
+  MapScene scene,
+  MapSurface surface,
+) async {
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      insetPadding: const EdgeInsets.all(8),
+      child: SizedBox.expand(
+        child: surface.build(ctx, scene, fullscreen: false),
+      ),
+    ),
+  );
 }
