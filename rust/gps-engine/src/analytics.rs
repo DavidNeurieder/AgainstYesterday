@@ -170,6 +170,8 @@ impl TrackAnalytics {
     }
 
     /// Serializes the analytics as JSON for the FFI boundary.
+    /// Renders the statistics as a JSON object for the FFI boundary.
+    #[must_use]
     pub fn to_json(&self) -> String {
         let pace = self
             .pace_samples
@@ -295,7 +297,6 @@ fn elevation_samples(track: &Track) -> Vec<(f64, f64)> {
     out
 }
 
-
 fn smoothed_pace_samples(track: &Track, window: usize) -> Vec<(f64, u64)> {
     // Moving average over instantaneous per-segment pace, sampled every ~100 m.
     let pts = track.points();
@@ -310,7 +311,10 @@ fn smoothed_pace_samples(track: &Track, window: usize) -> Vec<(f64, u64)> {
         if seg < 1.0 {
             continue;
         }
-        let dt = pts[i].timestamp().elapsed_since(pts[i - 1].timestamp()).as_secs();
+        let dt = pts[i]
+            .timestamp()
+            .elapsed_since(pts[i - 1].timestamp())
+            .as_secs();
         if dt <= 0.0 {
             continue;
         }
@@ -333,8 +337,8 @@ fn smoothed_pace_samples(track: &Track, window: usize) -> Vec<(f64, u64)> {
             continue;
         }
         let mut sum = 0.0;
-        for j in (i + 1 - window)..=i {
-            sum += seg_paces[j].1;
+        for &(_, pace) in &seg_paces[i + 1 - window..=i] {
+            sum += pace;
         }
         let avg = sum / window as f64;
         out.push((dist, avg as u64));
@@ -366,17 +370,29 @@ fn elevation_range(track: &Track) -> (Option<f64>, Option<f64>) {
 /// Route-level statistics derived from a route's personal best and its timed
 /// attempts. Mirrors `RouteStats` in the Flutter client so both sides agree.
 pub struct RouteStats {
+    /// Best time ever, in seconds.
     pub pb_seconds: Option<f64>,
+    /// Mean attempt time, in seconds.
     pub average_seconds: Option<f64>,
+    /// Median attempt time, in seconds.
     pub median_seconds: Option<f64>,
+    /// Most recent attempt time, in seconds.
     pub last_seconds: Option<f64>,
+    /// Lifetime run count (seed count or attempt count, whichever is larger).
     pub runs: u32,
+    /// Fastest attempt time, in seconds.
     pub fastest_seconds: Option<f64>,
+    /// Slowest attempt time, in seconds.
     pub slowest_seconds: Option<f64>,
+    /// Population standard deviation of attempt times, in seconds.
     pub std_dev_seconds: Option<f64>,
+    /// Slowest minus fastest attempt time, in seconds.
     pub range_seconds: Option<f64>,
+    /// Linear trend of attempt times over chronological order, seconds per run.
     pub trend_seconds_per_run: Option<f64>,
+    /// Mean of the newest (up to five) attempt times, in seconds.
     pub recent_average_seconds: Option<f64>,
+    /// `improving`, `slowing` or `steady` when a recent average exists.
     pub verdict: Option<String>,
 }
 
@@ -384,8 +400,11 @@ pub struct RouteStats {
 pub type Attempt = (i64, f64);
 
 impl RouteStats {
+    /// Derives the statistics from the route's seeded PB/run count and its
+    /// timed attempts.
+    #[must_use]
     pub fn compute(pb_seconds: Option<f64>, attempt_count: u32, attempts: &[Attempt]) -> Self {
-        let mut durations: Vec<f64> = attempts.iter().map(|a| a.1).filter(|d| *d > 0.0).collect();
+        let mut durations: Vec<f64> = attempts.iter().map(|a| a.1).collect();
         durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let fastest = durations.first().copied();
@@ -415,7 +434,8 @@ impl RouteStats {
             None
         } else {
             let avg = average.unwrap();
-            let var = durations.iter().map(|d| (d - avg).powi(2)).sum::<f64>() / durations.len() as f64;
+            let var =
+                durations.iter().map(|d| (d - avg).powi(2)).sum::<f64>() / durations.len() as f64;
             Some(var.sqrt())
         };
 
@@ -430,12 +450,7 @@ impl RouteStats {
         // recent average: newest up to 5
         let mut sorted_by_time: Vec<&Attempt> = attempts.iter().collect();
         sorted_by_time.sort_by(|a, b| b.0.cmp(&a.0));
-        let recent: Vec<f64> = sorted_by_time
-            .iter()
-            .filter(|a| a.1 > 0.0)
-            .take(5)
-            .map(|a| a.1)
-            .collect();
+        let recent: Vec<f64> = sorted_by_time.iter().take(5).map(|a| a.1).collect();
         let recent_average = if recent.is_empty() {
             None
         } else {
@@ -454,7 +469,7 @@ impl RouteStats {
         } else {
             let mut by_time = attempts.to_vec();
             by_time.sort_by(|a, b| b.0.cmp(&a.0));
-            by_time.first().map(|a| a.1).filter(|d| *d > 0.0)
+            by_time.first().map(|a| a.1)
         };
 
         let runs = if attempts.is_empty() {
@@ -479,6 +494,8 @@ impl RouteStats {
         }
     }
 
+    /// Renders the statistics as a JSON object for the FFI boundary.
+    #[must_use]
     pub fn to_json(&self) -> String {
         fn opt(v: Option<f64>) -> String {
             match v {
@@ -511,7 +528,7 @@ impl RouteStats {
 }
 
 fn trend_seconds_per_run(attempts: &[Attempt]) -> Option<f64> {
-    let mut timed: Vec<&Attempt> = attempts.iter().filter(|a| a.1 > 0.0).collect();
+    let mut timed: Vec<&Attempt> = attempts.iter().collect();
     if timed.len() < 2 {
         return None;
     }
@@ -527,9 +544,53 @@ fn trend_seconds_per_run(attempts: &[Attempt]) -> Option<f64> {
         num += (xs[i] - mean_x) * (ys[i] - mean_y);
         den += (xs[i] - mean_x) * (xs[i] - mean_x);
     }
-    if den == 0.0 {
-        None
-    } else {
-        Some(num / den)
+    if den == 0.0 { None } else { Some(num / den) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attempts(items: &[(i64, f64)]) -> Vec<Attempt> {
+        items.to_vec()
+    }
+
+    #[test]
+    fn empty_history_keeps_the_seed() {
+        let stats = RouteStats::compute(Some(1470.0), 12, &[]);
+        assert_eq!(stats.pb_seconds, Some(1470.0));
+        assert_eq!(stats.runs, 12);
+        assert_eq!(stats.average_seconds, None);
+        assert_eq!(stats.last_seconds, None);
+    }
+
+    #[test]
+    fn history_beats_the_seed_by_fastest_and_tracks_last_chronologically() {
+        let a = attempts(&[(1_000, 1600.0), (3_000, 1500.0), (2_000, 1440.0)]);
+        let stats = RouteStats::compute(Some(1470.0), 12, &a);
+        assert_eq!(stats.pb_seconds, Some(1440.0));
+        assert_eq!(stats.last_seconds, Some(1500.0));
+        assert_eq!(stats.fastest_seconds, Some(1440.0));
+        assert_eq!(stats.slowest_seconds, Some(1600.0));
+        assert_eq!(stats.median_seconds, Some(1500.0));
+        assert_eq!(stats.range_seconds, Some(160.0));
+        assert_eq!(stats.runs, 12);
+    }
+
+    #[test]
+    fn zero_duration_attempts_are_included() {
+        let a = attempts(&[(1_000, 0.0), (2_000, 1500.0)]);
+        let stats = RouteStats::compute(Some(1470.0), 12, &a);
+        assert_eq!(stats.pb_seconds, Some(0.0));
+        assert_eq!(stats.average_seconds, Some(750.0));
+    }
+
+    #[test]
+    fn trend_is_negative_when_runs_get_faster() {
+        let a = attempts(&[(1_000, 400.0), (2_000, 300.0), (3_000, 200.0)]);
+        let stats = RouteStats::compute(None, 0, &a);
+        assert!(stats.trend_seconds_per_run.unwrap() < 0.0);
+        assert_eq!(stats.runs, 3);
+        assert_eq!(stats.pb_seconds, Some(200.0));
     }
 }

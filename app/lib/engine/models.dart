@@ -841,3 +841,35 @@ double polylineMeters(List<GeoPoint> points) {
 }
 
 double _rad(double degrees) => degrees * (3.141592653589793 / 180.0);
+
+/// Route-level statistics (M12, §23). Mirrors the Rust `RouteStats` so fake
+/// and native engines agree.
+class RouteStats {
+  const RouteStats({
+    required this.pb,
+    required this.average,
+    required this.last,
+    required this.runs,
+    this.median,
+    this.fastest,
+    this.slowest,
+    this.stdDev,
+    this.range,
+    this.trendSecondsPerRun,
+    this.recentAverage,
+    this.verdict,
+  });
+
+  final Elapsed? pb;
+  final Elapsed? average;
+  final Elapsed? last;
+  final int runs;
+  final Elapsed? median;
+  final Elapsed? fastest;
+  final Elapsed? slowest;
+  final Elapsed? stdDev;
+  final Elapsed? range;
+  final double? trendSecondsPerRun;
+  final Elapsed? recentAverage;
+  final String? verdict;
+}

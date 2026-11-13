@@ -30,6 +30,7 @@ import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/example_routes.dart';
 import '../application/route_stats.dart';
+import '../application/route_stats_provider.dart';
 import '../../../widgets/route_map.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -53,7 +54,8 @@ class RouteDetailScreen extends ConsumerWidget {
       for (final a in activities)
         if (a.routeId == route.id && a.duration != null) a,
     ];
-    final stats = computeRouteStats(route: route, attempts: attempts);
+    final stats = statsFor(ref.watch(routeStatsIndexProvider), route.id) ??
+        fallbackRouteStats(route);
 
     return Scaffold(
       appBar: AppBar(

@@ -14,6 +14,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../persistence/persistence.dart';
 import 'package:go_router/go_router.dart';
 import '../../routes/application/route_stats.dart';
+import '../../routes/application/route_stats_provider.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 
@@ -158,11 +159,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
 
     int pbCount = 0;
     for (final r in routes) {
-      final attempts = [
-        for (final a in filtered) if (a.routeId == r.id && a.duration != null) a,
-      ];
-      final stats = computeRouteStats(route: r, attempts: attempts);
-      if (stats.pb != null) pbCount++;
+      // The engine's PB is the faster of the route's seed and the period's
+      // attempts, so a PB exists when either does.
+      final hasAttempt = filtered.any(
+        (a) => a.routeId == r.id && a.duration != null,
+      );
+      if (r.personalBest != null || hasAttempt) pbCount++;
     }
 
     return Scaffold(
@@ -236,12 +238,12 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
             const SizedBox(height: AppSpacing.lg),
             Text('Route insights', style: textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
-            _RouteInsights(routes: routes, activities: activities),
+            _RouteInsights(routes: routes),
             const SizedBox(height: AppSpacing.lg),
             Text('Routes', style: textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             for (final r in routes) ...[
-              _RouteStatCard(route: r, activities: activities, units: units),
+              _RouteStatCard(route: r, units: units),
               const SizedBox(height: AppSpacing.sm),
             ],
           ],
@@ -453,34 +455,37 @@ class _ConsistencyCalendar extends StatelessWidget {
 }
 
 
-class _RouteInsights extends StatelessWidget {
-  const _RouteInsights({required this.routes, required this.activities});
+class _RouteInsights extends ConsumerWidget {
+  const _RouteInsights({required this.routes});
 
   final List<Route> routes;
-  final List<Activity> activities;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
     if (routes.isEmpty) return const SizedBox.shrink();
 
-    final statsByRoute = {
-      for (final r in routes)
-        r: computeRouteStats(
-          route: r,
-          attempts: [
-            for (final a in activities)
-              if (a.routeId == r.id && a.duration != null) a,
-          ],
-        ),
-    };
+    final index =
+        ref.watch(routeStatsIndexProvider).asData?.value ?? const {};
+    final statsByRoute = <Route, RouteStats>{};
+    for (final r in routes) {
+      final stats = index[r.id];
+      if (stats != null) statsByRoute[r] = stats;
+    }
+    if (statsByRoute.isEmpty) {
+      return Text(
+        'Not enough data yet.',
+        style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+      );
+    }
 
     // Most completed.
-    final byRuns = [...routes]..sort((a, b) =>
-        statsByRoute[b]!.runs.compareTo(statsByRoute[a]!.runs));
+    final byRuns = routes.where((r) => statsByRoute.containsKey(r)).toList()
+      ..sort((a, b) => (statsByRoute[b]?.runs ?? 0)
+          .compareTo(statsByRoute[a]?.runs ?? 0));
     // Most improved (most negative trend first).
     final improved = routes
-        .where((r) => statsByRoute[r]!.trendSecondsPerRun != null)
+        .where((r) => statsByRoute[r]?.trendSecondsPerRun != null)
         .toList()
       ..sort((a, b) => statsByRoute[a]!
           .trendSecondsPerRun!
@@ -556,21 +561,17 @@ class _RouteInsights extends StatelessWidget {
 class _RouteStatCard extends ConsumerWidget {
   const _RouteStatCard({
     required this.route,
-    required this.activities,
     required this.units,
   });
 
   final Route route;
-  final List<Activity> activities;
   final Units units;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
-    final attempts = [
-      for (final a in activities) if (a.routeId == route.id && a.duration != null) a,
-    ];
-    final stats = computeRouteStats(route: route, attempts: attempts);
+    final stats = statsFor(ref.watch(routeStatsIndexProvider), route.id) ??
+        fallbackRouteStats(route);
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),

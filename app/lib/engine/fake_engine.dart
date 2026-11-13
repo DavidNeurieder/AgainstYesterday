@@ -295,6 +295,114 @@ class FakeEngineService implements EngineService {
   }
 
   @override
+  Future<RouteStats> computeRouteStats({
+    required Route route,
+    required List<Activity> attempts,
+  }) async {
+    final durations = <Elapsed>[
+      for (final a in attempts)
+        if (a.duration != null) a.duration!,
+    ];
+    durations.sort((a, b) => a.seconds.compareTo(b.seconds));
+
+    final fastest = durations.isNotEmpty ? durations.first : null;
+    final slowest = durations.isNotEmpty ? durations.last : null;
+    Elapsed? pb;
+    if (route.personalBest == null) {
+      pb = fastest;
+    } else if (fastest == null) {
+      pb = route.personalBest;
+    } else {
+      pb = route.personalBest!.seconds <= fastest.seconds
+          ? route.personalBest
+          : fastest;
+    }
+
+    final average = durations.isEmpty
+        ? null
+        : Elapsed.seconds(
+            durations.fold<num>(0, (sum, e) => sum + e.seconds) /
+                durations.length);
+
+    final median = durations.isEmpty
+        ? null
+        : durations.length.isOdd
+            ? durations[durations.length ~/ 2]
+            : Elapsed.seconds(
+                (durations[durations.length ~/ 2 - 1].seconds +
+                        durations[durations.length ~/ 2].seconds) /
+                    2,
+              );
+
+    Elapsed? stdDev;
+    if (durations.length >= 2) {
+      final avg = average!;
+      stdDev = Elapsed.seconds(
+        math.sqrt(
+          durations.fold<double>(
+                0,
+                (sum, e) => sum + math.pow(e.seconds - avg.seconds, 2),
+              ) /
+              durations.length,
+        ),
+      );
+    }
+
+    final range = (fastest == null || slowest == null)
+        ? null
+        : Elapsed.seconds(slowest.seconds - fastest.seconds);
+
+    final trend = _routeTrend(attempts);
+
+    final recentSorted = [...attempts]..sort(
+        (a, b) => b.startedAt.compareTo(a.startedAt),
+      );
+    final recentTimed = [
+      for (final a in recentSorted)
+        if (a.duration != null) a.duration!,
+    ].take(5).toList();
+    final recentAverage = recentTimed.isEmpty
+        ? null
+        : Elapsed.seconds(
+            recentTimed.fold<num>(0, (s, e) => s + e.seconds) /
+                recentTimed.length,
+          );
+
+    String? verdict;
+    if (recentAverage != null && average != null) {
+      verdict = recentAverage.seconds < average.seconds
+          ? 'improving'
+          : (recentAverage.seconds > average.seconds ? 'slowing' : 'steady');
+    }
+
+    final recentAttempts = [...attempts]..sort(
+        (a, b) => b.startedAt.compareTo(a.startedAt),
+      );
+    final last = recentAttempts.isNotEmpty && recentAttempts.first.duration != null
+        ? recentAttempts.first.duration
+        : null;
+
+    final runs = attempts.isEmpty
+        ? route.attemptCount
+        : math.max(route.attemptCount, attempts.length);
+
+    return RouteStats(
+      pb: pb,
+      average: average,
+      last: last,
+      runs: runs,
+      median: median,
+      fastest: fastest,
+      slowest: slowest,
+      stdDev: stdDev,
+      range: range,
+      trendSecondsPerRun: trend,
+      recentAverage: recentAverage,
+      verdict: verdict,
+    );
+  }
+
+  @override
   Future<LiveRunHandle> createLiveRun({
     List<GeoPoint>? route,
     List<AttemptSample>? ghostSamples,
@@ -1228,4 +1336,32 @@ class _FakeReplayRun implements ReplayHandle {
 
   @override
   void dispose() {}
+}
+
+/// Slope (seconds per run) of attempt durations over chronological order,
+/// or null with fewer than two timed attempts. Negative means improving.
+/// Mirrors the Rust engine's `trend_seconds_per_run`.
+double? _routeTrend(List<Activity> attempts) {
+  final timed = [
+    for (final a in attempts)
+      if (a.duration != null) a,
+  ]..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+  if (timed.length < 2) {
+    return null;
+  }
+  final n = timed.length;
+  final xs = List<double>.generate(n, (i) => i.toDouble());
+  final ys = [for (final a in timed) a.duration!.seconds];
+  final meanX = xs.reduce((a, b) => a + b) / n;
+  final meanY = ys.reduce((a, b) => a + b) / n;
+  var num = 0.0;
+  var den = 0.0;
+  for (var i = 0; i < n; i++) {
+    num += (xs[i] - meanX) * (ys[i] - meanY);
+    den += (xs[i] - meanX) * (xs[i] - meanX);
+  }
+  if (den == 0) {
+    return null;
+  }
+  return num / den;
 }

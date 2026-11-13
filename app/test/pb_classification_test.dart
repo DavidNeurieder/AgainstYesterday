@@ -15,7 +15,6 @@ import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/history/application/history_grouping.dart';
-import 'package:against_yesterday/features/routes/application/route_stats.dart';
 import 'package:against_yesterday/persistence/serialization.dart';
 
 const _routeId = FakeEngineService.riverLoopId;
@@ -44,9 +43,11 @@ Activity _attempt({
 );
 
 void main() {
+  final engine = FakeEngineService();
+
   group('tie-breaking', () {
-    test('an equally fast run does not replace the standing PB', () {
-      final stats = computeRouteStats(
+    test('an equally fast run does not replace the standing PB', () async {
+      final stats = await engine.computeRouteStats(
         route: _route(pb: const Elapsed.seconds(1470)),
         attempts: [
           _attempt(id: 'equal', seconds: 1470, started: DateTime.utc(2026, 1, 1)),
@@ -57,8 +58,8 @@ void main() {
       expect(stats.pb?.seconds, 1470);
     });
 
-    test('history decides the PB by the fastest attempt, not the latest', () {
-      final stats = computeRouteStats(
+    test('history decides the PB by the fastest attempt, not the latest', () async {
+      final stats = await engine.computeRouteStats(
         route: _route(pb: const Elapsed.seconds(1470)),
         attempts: [
           _attempt(id: 'slow', seconds: 1600, started: DateTime.utc(2026, 1, 2)),
@@ -104,7 +105,7 @@ void main() {
   });
 
   group('round-trip consistency', () {
-    test('distance, duration and performance survive the codec unchanged', () {
+    test('distance, duration and performance survive the codec unchanged', () async {
       final written = [
         _attempt(
           id: 'saved',
@@ -117,8 +118,8 @@ void main() {
       final reloaded = parseActivityList(activityListToJson(written));
       expect(reloaded, hasLength(1));
 
-      final before = computeRouteStats(route: _route(), attempts: written);
-      final after = computeRouteStats(route: _route(), attempts: reloaded);
+      final before = await engine.computeRouteStats(route: _route(), attempts: written);
+      final after = await engine.computeRouteStats(route: _route(), attempts: reloaded);
 
       // The classification is identical before and after the round trip — a
       // silently truncated field would show up here.
@@ -135,7 +136,7 @@ void main() {
       expect(reloadedAttempt.startedAt, DateTime.utc(2026, 2, 14, 9, 30));
     });
 
-    test('a sub-second duration keeps its fraction through the codec', () {
+    test('a sub-second duration keeps its fraction through the codec', () async {
       // The codec stores seconds as a double; a run under one second must not
       // round to zero and vanish from the PB axis.
       final written = [
@@ -149,7 +150,7 @@ void main() {
       final reloaded = parseActivityList(activityListToJson(written));
       expect(reloaded.single.duration!.seconds, closeTo(0.4, 1e-9));
 
-      final stats = computeRouteStats(route: _route(), attempts: reloaded);
+      final stats = await engine.computeRouteStats(route: _route(), attempts: reloaded);
       expect(stats.pb?.seconds, closeTo(0.4, 1e-9));
     });
 

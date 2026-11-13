@@ -14,7 +14,6 @@ import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/history/application/history_grouping.dart';
-import 'package:against_yesterday/features/routes/application/route_stats.dart';
 
 Route _route({Elapsed? pb}) => Route(
   id: FakeEngineService.riverLoopId,
@@ -39,13 +38,15 @@ Activity _attempt({
 );
 
 void main() {
+  final engine = FakeEngineService();
+
   group('zero-distance attempts', () {
     test('a 0 s smartphone-in-pocket attempt becomes the PB but moves no '
-        'distance', () {
+        'distance', () async {
       // The statistics treat duration as the PB axis, whatever the distance:
       // a 0 s attempt sorts first. Pinning the behaviour makes the surprise
       // explicit rather than leaving it to be discovered in production.
-      final stats = computeRouteStats(
+      final stats = await engine.computeRouteStats(
         route: _route(pb: const Elapsed.seconds(1470)),
         attempts: [
           _attempt(
@@ -62,8 +63,8 @@ void main() {
       expect(stats.runs, 12);
     });
 
-    test('a zero-duration attempt does not corrupt the average', () {
-      final stats = computeRouteStats(
+    test('a zero-duration attempt does not corrupt the average', () async {
+      final stats = await engine.computeRouteStats(
         route: _route(pb: const Elapsed.seconds(1470)),
         attempts: [
           _attempt(
@@ -104,8 +105,8 @@ void main() {
       expect(history.pbSetters, contains('standstill'));
     });
 
-    test('an activity with no duration is skipped, not treated as zero', () {
-      final stats = computeRouteStats(
+    test('an activity with no duration is skipped, not treated as zero', () async {
+      final stats = await engine.computeRouteStats(
         route: _route(pb: const Elapsed.seconds(1470)),
         attempts: [
           Activity(

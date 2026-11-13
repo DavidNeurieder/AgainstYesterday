@@ -17,7 +17,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
-import '../application/route_stats.dart';
 
 /// The complete statistics block for one route.
 ///

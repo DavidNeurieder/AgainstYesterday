@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
-import 'package:against_yesterday/features/routes/application/route_stats.dart';
 
 Route _route({Elapsed? pb}) => Route(
       id: FakeEngineService.riverLoopId,
@@ -30,8 +29,10 @@ Activity _attempt({
     );
 
 void main() {
-  test('empty history falls back to the route seed', () {
-    final stats = computeRouteStats(
+  final engine = FakeEngineService();
+
+  test('empty history falls back to the route seed', () async {
+    final stats = await engine.computeRouteStats(
       route: _route(pb: const Elapsed.seconds(1470)),
       attempts: const [],
     );
@@ -41,8 +42,8 @@ void main() {
     expect(stats.last, isNull);
   });
 
-  test('history wins over the seed for runs; PB stays the best time', () {
-    final stats = computeRouteStats(
+  test('history wins over the seed for runs; PB stays the best time', () async {
+    final stats = await engine.computeRouteStats(
       route: _route(pb: const Elapsed.seconds(1470)),
       attempts: [
         _attempt(
@@ -65,7 +66,7 @@ void main() {
     expect(stats.last?.seconds, 1588);
   });
 
-  test('a route with no seed counter grows with each attempt', () {
+  test('a route with no seed counter grows with each attempt', () async {
     final route = Route(
       id: 'x',
       name: 'New route',
@@ -73,7 +74,7 @@ void main() {
       geometry: FakeEngineService.riverLoop,
       attemptCount: 0,
     );
-    final stats = computeRouteStats(
+    final stats = await engine.computeRouteStats(
       route: route,
       attempts: [
         _attempt(id: 'a1', seconds: 1502, started: DateTime.utc(2026, 1, 1)),
@@ -84,8 +85,8 @@ void main() {
     expect(stats.pb?.seconds, 1502);
   });
 
-  test('history PB beats the seed when it is faster', () {
-    final stats = computeRouteStats(
+  test('history PB beats the seed when it is faster', () async {
+    final stats = await engine.computeRouteStats(
       route: _route(pb: const Elapsed.seconds(1470)),
       attempts: [
         _attempt(
@@ -100,8 +101,8 @@ void main() {
     expect(stats.last?.seconds, 1455);
   });
 
-  test('median and spread are computed from attempt times', () {
-    final stats = computeRouteStats(
+  test('median and spread are computed from attempt times', () async {
+    final stats = await engine.computeRouteStats(
       route: Route(
         id: 'x',
         name: 'New route',
@@ -123,8 +124,8 @@ void main() {
     expect(stats.stdDev?.seconds, closeTo(111.8, 0.2));
   });
 
-  test('trend is negative when runs get faster', () {
-    final stats = computeRouteStats(
+  test('trend is negative when runs get faster', () async {
+    final stats = await engine.computeRouteStats(
       route: Route(
         id: 'x',
         name: 'New route',

@@ -24,6 +24,7 @@ import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/example_routes.dart';
 import '../application/route_stats.dart';
+import '../application/route_stats_provider.dart';
 
 class RoutesScreen extends ConsumerWidget {
   const RoutesScreen({super.key});
@@ -31,7 +32,6 @@ class RoutesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final routes = ref.watch(routeRepositoryProvider);
-    final activities = ref.watch(activityRepositoryProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Routes')),
@@ -68,10 +68,6 @@ class RoutesScreen extends ConsumerWidget {
           for (final route in routes) ...[
             _RouteCourseCard(
               route: route,
-              stats: computeRouteStats(
-                route: route,
-                attempts: _attemptsFor(route, activities),
-              ),
               onTap: () {
                 AppHaptics.light(ref);
                 context.push('/route/${route.id}');
@@ -89,8 +85,6 @@ class RoutesScreen extends ConsumerWidget {
     );
   }
 
-  List<Activity> _attemptsFor(Route route, List<Activity> activities) =>
-      [for (final a in activities) if (a.routeId == route.id) a];
 }
 
 /// The first-run read of the library: what a route is, what the ghost is and
@@ -204,13 +198,11 @@ class _WelcomeCardState extends ConsumerState<_WelcomeCard> {
 class _RouteCourseCard extends ConsumerWidget {
   const _RouteCourseCard({
     required this.route,
-    required this.stats,
     required this.onTap,
     required this.onRace,
   });
 
   final Route route;
-  final RouteStats stats;
   final VoidCallback onTap;
   final VoidCallback onRace;
 
@@ -218,6 +210,10 @@ class _RouteCourseCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final textTheme = Theme.of(context).textTheme;
     final units = ref.watch(displayUnitProvider);
+    // Stats are computed by the engine; until the future resolves the card
+    // shows the route's seeded run count and PB so nothing flickers.
+    final stats = statsFor(ref.watch(routeStatsIndexProvider), route.id) ??
+        fallbackRouteStats(route);
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(20),

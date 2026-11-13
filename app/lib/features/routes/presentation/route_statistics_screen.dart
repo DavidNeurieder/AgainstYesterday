@@ -25,6 +25,7 @@ import '../../../widgets/route_silhouette.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/route_stats.dart';
+import '../application/route_stats_provider.dart';
 import 'pb_progression.dart';
 import 'route_segment_comparison.dart';
 import 'route_stats_view.dart';
@@ -68,7 +69,9 @@ class RouteStatisticsScreen extends ConsumerWidget {
     }
 
     final attempts = _timedAttempts(ref, route);
-    final stats = computeRouteStats(route: route, attempts: attempts);
+    final stats =
+        statsFor(ref.watch(routeStatsIndexProvider), routeId) ??
+        fallbackRouteStats(route);
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
@@ -174,7 +177,9 @@ class RouteStatisticsSectionScreen extends ConsumerWidget {
     }
 
     final attempts = _timedAttempts(ref, route);
-    final stats = computeRouteStats(route: route, attempts: attempts);
+    final stats =
+        statsFor(ref.watch(routeStatsIndexProvider), route.id) ??
+        fallbackRouteStats(route);
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
@@ -203,7 +208,8 @@ class RouteStatisticsSectionScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
             PbProgressionSection(route: route, attempts: attempts),
           ],
-          if (section == RouteStatsSection.performance && attempts.length >= 2) ...[
+          if (section == RouteStatsSection.performance &&
+              attempts.length >= 2) ...[
             const SizedBox(height: AppSpacing.lg),
             HeadToHeadSection(route: route, attempts: attempts),
           ],

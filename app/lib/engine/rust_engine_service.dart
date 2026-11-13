@@ -217,6 +217,39 @@ final class RustEngineService implements EngineService {
   }
 
   @override
+  Future<RouteStats> computeRouteStats({
+    required Route route,
+    required List<Activity> attempts,
+  }) async {
+    final req = _W();
+    final pb = route.personalBest;
+    req.i64(pb == null ? -1 : (pb.seconds * 1000).round());
+    req.u32(route.attemptCount);
+    req.u32(attempts.length);
+    for (final a in attempts) {
+      req.i64(a.startedAt.millisecondsSinceEpoch);
+      req.f64(a.duration?.seconds ?? 0.0);
+    }
+    final bytes = _ffi.routeStats(req.takeBytes());
+    final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+    Elapsed? el(dynamic v) =>
+        v == null ? null : Elapsed.seconds((v as num).toDouble());
+    return RouteStats(
+      pb: el(json['pb_seconds']),
+      average: el(json['average_seconds']),
+      median: el(json['median_seconds']),
+      last: el(json['last_seconds']),
+      runs: (json['runs'] as num).toInt(),
+      fastest: el(json['fastest_seconds']),
+      slowest: el(json['slowest_seconds']),
+      stdDev: el(json['std_dev_seconds']),
+      range: el(json['range_seconds']),
+      trendSecondsPerRun: (json['trend_seconds_per_run'] as num?)?.toDouble(),
+      recentAverage: el(json['recent_average_seconds']),
+      verdict: json['verdict'] as String?,
+    );
+  }
+  @override
   Future<LiveRunHandle> createLiveRun({
     List<GeoPoint>? route,
     List<AttemptSample>? ghostSamples,

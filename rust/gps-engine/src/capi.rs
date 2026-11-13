@@ -1375,6 +1375,39 @@ pub extern "C" fn gps_analyze_track(
     })
 }
 
+/// Computes route statistics and returns a JSON document.
+#[unsafe(no_mangle)]
+pub extern "C" fn gps_route_stats(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    use crate::analytics::RouteStats;
+
+    dispatch(input, input_len, output, output_len, |data| {
+        let mut rd = Rd::new(data);
+        // pb seconds as i64 ms; -1 means None.
+        let pb_raw = rd.i64()?;
+        let pb = if pb_raw < 0 {
+            None
+        } else {
+            Some(pb_raw as f64 / 1000.0)
+        };
+        let attempt_count = rd.u32()?;
+        let n = rd.u32()? as usize;
+        let mut attempts = Vec::with_capacity(n);
+        for _ in 0..n {
+            let started = rd.i64()?;
+            let dur = rd.f64()?;
+            attempts.push((started, dur));
+        }
+        rd.done("route_stats")?;
+        let stats = RouteStats::compute(pb, attempt_count, &attempts);
+        Ok(stats.to_json().into_bytes())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1395,33 +1428,4 @@ mod tests {
         );
         assert_eq!(status, ST_ERROR);
     }
-}
-
-/// Computes route statistics and returns a JSON document.
-#[unsafe(no_mangle)]
-pub extern "C" fn gps_route_stats(
-    input: *const u8,
-    input_len: usize,
-    output: *mut *mut u8,
-    output_len: *mut usize,
-) -> c_int {
-    use crate::analytics::RouteStats;
-
-    dispatch(input, input_len, output, output_len, |data| {
-        let mut rd = Rd::new(data);
-        // pb seconds as i64 ms; -1 means None.
-        let pb_raw = rd.i64()?;
-        let pb = if pb_raw < 0 { None } else { Some(pb_raw as f64 / 1000.0) };
-        let attempt_count = rd.u32()?;
-        let n = rd.u32()? as usize;
-        let mut attempts = Vec::with_capacity(n);
-        for _ in 0..n {
-            let started = rd.i64()?;
-            let dur = rd.f64()?;
-            attempts.push((started, dur));
-        }
-        rd.done("route_stats")?;
-        let stats = RouteStats::compute(pb, attempt_count, &attempts);
-        Ok(stats.to_json().into_bytes())
-    })
 }

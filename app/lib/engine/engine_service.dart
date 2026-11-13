@@ -50,6 +50,13 @@ abstract class EngineService {
     required List<TrackPoint> points,
   });
 
+  /// Route-level statistics for [route] from its timed [attempts], computed
+  /// by the engine.
+  Future<RouteStats> computeRouteStats({
+    required Route route,
+    required List<Activity> attempts,
+  });
+
   /// Creates a stateful live recorder owned by the engine.
   ///
   /// Pass [route] to follow a recognised course (coverage/progress/off-route

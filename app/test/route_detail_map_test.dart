@@ -39,8 +39,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(surface.scenes, hasLength(1));
-    final scene = surface.scenes.single;
+    // The screen rebuilds once the engine-backed stats resolve, so the map
+    // surface may receive the same scene more than once; the latest is the
+    // settled one.
+    expect(surface.scenes, isNotEmpty);
+    final scene = surface.scenes.last;
     expect(scene.geometry, riverLoopRoute.geometry);
     expect(scene.you, riverLoopRoute.geometry.first);
     expect(scene.youProgress, 0);
