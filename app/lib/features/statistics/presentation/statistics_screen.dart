@@ -40,6 +40,20 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
     }
   }
 
+  List<double> _weeklyBuckets(List<Activity> acts, double Function(Activity) value) {
+    final now = DateTime.now();
+    final buckets = List<double>.filled(8, 0);
+    final counts = List<int>.filled(8, 0);
+    for (final a in acts) {
+      final weeksAgo = now.difference(a.startedAt).inDays ~/ 7;
+      if (weeksAgo < 0 || weeksAgo >= 8) continue;
+      final idx = 7 - weeksAgo;
+      buckets[idx] += value(a);
+      counts[idx] += 1;
+    }
+    return buckets;
+  }
+
   @override
   Widget build(BuildContext context) {
     final routes = ref.watch(routeRepositoryProvider);
@@ -121,6 +135,24 @@ class _StatisticsScreenState extends ConsumerState<StatisticsScreen> {
                 ),
               ),
             const SizedBox(height: AppSpacing.lg),
+            Text('Distance trend', style: textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            _WeeklyBarChart(
+              buckets: _weeklyBuckets(filtered, (a) => a.distance?.meters ?? 0),
+              unit: 'm',
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text('Pace trend', style: textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            _WeeklyBarChart(
+              buckets: _weeklyBuckets(
+                filtered.where((a) => a.duration != null && a.distance != null && a.distance!.meters > 0).toList(),
+                (a) => (a.duration!.seconds / (a.distance!.meters / 1000.0)),
+              ),
+              unit: 'min/km',
+              lowerIsBetter: true,
+            ),
+            const SizedBox(height: AppSpacing.lg),
             Text('Routes', style: textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             for (final r in routes) ...[
@@ -188,6 +220,59 @@ class _SummaryGrid extends StatelessWidget {
         SizedBox(width: 160, child: card('Timed runs', '$runs')),
         SizedBox(width: 160, child: card('Personal bests', '$pbCount')),
       ],
+    );
+  }
+}
+
+
+class _WeeklyBarChart extends StatelessWidget {
+  const _WeeklyBarChart({
+    required this.buckets,
+    required this.unit,
+    this.lowerIsBetter = false,
+  });
+
+  final List<double> buckets;
+  final String unit;
+  final bool lowerIsBetter;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxV = buckets.isEmpty
+        ? 1.0
+        : buckets.reduce((a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+    return SizedBox(
+      height: 120,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          for (final v in buckets)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      height: (v / maxV * 90).clamp(2.0, 90.0),
+                      decoration: BoxDecoration(
+                        color: AppColors.you,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      v == 0 ? '' : v.toStringAsFixed(unit == 'm' ? 0 : 1),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColors.textMuted,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
