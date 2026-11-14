@@ -9,8 +9,6 @@ name: nightly
 # already cross-compiles the native engine and runs it on device.
 
 on:
-  schedule:
-    - cron: '17 3 * * *'
   workflow_dispatch:
 
 jobs:
