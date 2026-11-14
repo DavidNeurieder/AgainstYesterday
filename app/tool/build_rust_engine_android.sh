@@ -68,7 +68,12 @@ host_tag() {
 # version through ANDROID_NDK_HOME or ANDROID_NDK_VERSION; if unset, prefer the
 # project's pinned NDK when present, otherwise accept a single unambiguous
 # install (directory order never decides the winner).
-PINNED_NDK_VERSION="${PINNED_NDK_VERSION:-28.2.13676358}"
+# Default NDK version: read from build.gradle.kts so there is a single source
+# of truth; fall back to the known value if the file is unavailable.
+if [ -z "${PINNED_NDK_VERSION:-}" ]; then
+  GRADLE_NDK="$(sed -n 's/.*ndkVersion *= *"\([^"]*\)".*/\1/p' "$REPO_ROOT/app/android/app/build.gradle.kts" | head -n1)"
+  PINNED_NDK_VERSION="${GRADLE_NDK:-28.2.13676358}"
+fi
 resolve_ndk() {
   if [ -n "${ANDROID_NDK_HOME:-}" ]; then
     printf '%s\n' "$ANDROID_NDK_HOME"

@@ -1,0 +1,13 @@
+# Pinned toolchain versions for Against Yesterday (app.against_yesterday).
+#
+# Single source of truth for versions used across the build (Makefile,
+# CI, and F-Droid recipe). Update here when bumping a toolchain.
+
+flutter: "3.41.2"
+rust: "stable"
+rust-toolchain: "stable"
+ndk: "28.2.13676358"
+jdk: "21"
+android-min-sdk: "24"
+android-target-abi: "arm64-v8a"
+cargo-target: "aarch64-linux-android"

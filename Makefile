@@ -28,7 +28,7 @@ endif
 .PHONY: build build-release install run run-linux run-cli test test-rust-engine lint tz-test \
         connected-test connected-test-engine connected-test-gps \
         engine-build engine-test engine-lint engine-fmt engine-doc \
-        engine-android maplibre-fdroid-clean full-test full-test-device ci-test check clean \
+        engine-android maplibre-fdroid-clean full-test full-test-device ci-test check check-versions clean \
         build-linux-release build-cli-release release-all repro-check repro-compare \
         stale-android-apks-debug stale-android-apks-release stale-android-jnilibs
 
@@ -207,6 +207,15 @@ check:
 	cd app && flutter analyze
 	cargo fmt --all --check
 	cargo clippy --all-targets --all-features -- -D warnings
+
+check-versions: ## Verify toolchain versions are consistent across sources
+	@echo "== Toolchain versions =="
+	@echo "Rust toolchain: $$(cat .rust-toolchain.toml | grep channel | sed 's/.*= *\"//;s/\".*//')"
+	@echo "Flutter (CI):   $$(grep 'flutter-version:' .github/workflows/ci.yml | head -1 | sed -E "s/.*flutter-version: *'([^']+)'.*/\1/")"
+	@echo "NDK (gradle):   $$(grep ndkVersion app/android/app/build.gradle.kts | sed -E 's/.*ndkVersion *= *"([^"]+)".*/\1/')" 
+	@echo "NDK (script):   (resolved from build.gradle.kts at build time)"
+	@echo "versions.yml:"
+	@cat versions.yml | grep -v '^#' | grep -v '^$$'
 
 test:
 	cd app && flutter test
