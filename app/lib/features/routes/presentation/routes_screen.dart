@@ -25,6 +25,7 @@ import '../../settings/application/settings_controller.dart';
 import '../application/example_routes.dart';
 import '../application/route_stats.dart';
 import '../application/route_stats_provider.dart';
+import '../../recording/application/recording_controller.dart';
 
 class RoutesScreen extends ConsumerWidget {
   const RoutesScreen({super.key});
@@ -32,12 +33,53 @@ class RoutesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final routes = ref.watch(routeRepositoryProvider);
+    final recordingState = ref.watch(recordingControllerProvider);
+    final isRecording = recordingState != null &&
+        (recordingState.status == RunStatus.running ||
+            recordingState.status == RunStatus.paused);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Routes')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
+          if (isRecording) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.md),
+              child: Material(
+                color: AppColors.you.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    AppHaptics.selection(ref);
+                    context.push('/record-route');
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      children: [
+                        Icon(Icons.fiber_manual_record,
+                            color: AppColors.you, size: 16),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            recordingState.status == RunStatus.paused
+                                ? 'Recording paused — tap to resume'
+                                : 'Recording in progress — tap to return',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
           // Record-a-route entry (§6): a brand-new course can be captured
           // whenever, catalog or not.
           Padding(
