@@ -232,6 +232,25 @@ class LiveMatchStatusCode {
   static const int reacquiring = 5;
 }
 
+/// Typed live route-matching status for UI/diagnostics consumers.
+enum RouteMatchStatus {
+  none,
+  initializing,
+  matched,
+  uncertain,
+  offRoute,
+  reacquiring,
+}
+
+RouteMatchStatus routeMatchStatusFromCode(int code) => switch (code) {
+  LiveMatchStatusCode.initializing => RouteMatchStatus.initializing,
+  LiveMatchStatusCode.matched => RouteMatchStatus.matched,
+  LiveMatchStatusCode.uncertain => RouteMatchStatus.uncertain,
+  LiveMatchStatusCode.offRoute => RouteMatchStatus.offRoute,
+  LiveMatchStatusCode.reacquiring => RouteMatchStatus.reacquiring,
+  _ => RouteMatchStatus.none,
+};
+
 class LiveEngineSnapshot {
   const LiveEngineSnapshot({
     required this.distanceMeters,
@@ -629,6 +648,9 @@ class LiveRunState {
 
   /// Confidence of the current route match, 0..1.
   final double matchConfidence;
+
+  /// Typed view of [matchStatus].
+  RouteMatchStatus get routeMatchStatus => routeMatchStatusFromCode(matchStatus);
 }
 
 /// Position along a polyline at [distanceMeters] from its start (linear
