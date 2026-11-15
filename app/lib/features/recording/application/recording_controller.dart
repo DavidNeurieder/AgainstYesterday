@@ -572,7 +572,10 @@ class RecordingController extends Notifier<LiveRunState?> {
       String? routeId = session.route?.id;
       if (routeId == null) {
         try {
-          routeId = await _recognizeRoute(track);
+          routeId = await _recognizeRoute(
+            track,
+            distanceMeters: snap?.distanceMeters,
+          );
         } catch (e) {
           progress.report('route match failed: $e');
         }
@@ -677,32 +680,56 @@ class RecordingController extends Notifier<LiveRunState?> {
 
   /// Minimum track length (in points) for a route match to be attempted.
   /// Shorter tracks are too noisy to classify reliably.
-  static const _minTrackPoints = 5;
+  static const _minTrackPoints = 10;
 
   /// Minimum overall score for a route to be considered a match.
-  static const _minMatchScore = 0.5;
+  static const _minMatchScore = 0.55;
 
-  Future<String?> _recognizeRoute(List<TrackPoint> track) async {
+  /// Minimum margin over the runner-up score to avoid ambiguous assignments.
+  static const _minMatchMargin = 0.08;
+
+  /// Minimum distance (meters) before attempting route classification.
+  static const _minClassifyDistanceM = 200.0;
+
+  Future<String?> _recognizeRoute(
+    List<TrackPoint> track, {
+    double? distanceMeters,
+  }) async {
     if (track.length < _minTrackPoints) return null;
+    if (distanceMeters != null && distanceMeters < _minClassifyDistanceM) {
+      return null;
+    }
     final engine = ref.read(engineServiceProvider);
     final routes = ref.read(routeRepositoryProvider);
     if (routes.isEmpty) return null;
 
-    // Score every candidate and pick the best match above the threshold.
-    // This avoids committing to the first route that happens to match
-    // when multiple routes share geometry (e.g. out-and-backs).
+    // Score every candidate and pick the best confident, unambiguous match.
     String? bestRouteId;
     double bestScore = _minMatchScore;
+    double runnerUpScore = 0;
     for (final route in routes) {
       if (route.geometry.length < 2) continue;
-      final result = await engine.matchRoutes(
-        a: track,
-        b: _geometryTrack(route.geometry),
-      );
-      if (result.sameRoute && result.score.overallScore > bestScore) {
-        bestScore = result.score.overallScore;
-        bestRouteId = route.id;
+      try {
+        final result = await engine.matchRoutes(
+          a: track,
+          b: _geometryTrack(route.geometry),
+        );
+        final score = result.score.overallScore;
+        if (!result.sameRoute || score <= _minMatchScore) continue;
+        if (score > bestScore) {
+          runnerUpScore = bestScore == _minMatchScore ? runnerUpScore : bestScore;
+          bestScore = score;
+          bestRouteId = route.id;
+        } else if (score > runnerUpScore) {
+          runnerUpScore = score;
+        }
+      } catch (_) {
+        // A single bad candidate must not prevent classifying others.
       }
+    }
+    if (bestRouteId == null) return null;
+    if (runnerUpScore > 0 && (bestScore - runnerUpScore) < _minMatchMargin) {
+      return null; // Ambiguous: keep activity unclassified.
     }
     return bestRouteId;
   }
