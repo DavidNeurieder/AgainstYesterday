@@ -33,7 +33,7 @@ import 'ghost_profile.dart';
 import 'run_foreground_lifespan.dart';
 
 final recordingControllerProvider =
-    NotifierProvider.autoDispose<RecordingController, LiveRunState?>(
+    NotifierProvider<RecordingController, LiveRunState?>(
       RecordingController.new,
     );
 
