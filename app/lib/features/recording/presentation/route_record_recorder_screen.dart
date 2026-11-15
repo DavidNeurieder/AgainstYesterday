@@ -81,6 +81,11 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _Metric(
+                    label: 'PACE',
+                    value: state.pace.formatPaceWith(units),
+                  ),
+                  const SizedBox(width: AppSpacing.xl),
+                  _Metric(
                     label: 'DISTANCE',
                     value: state.distance.formatWith(units),
                   ),
