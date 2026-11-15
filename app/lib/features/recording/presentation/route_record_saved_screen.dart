@@ -26,7 +26,13 @@ class RouteRecordSavedScreen extends ConsumerWidget {
     final textTheme = Theme.of(context).textTheme;
     final units = ref.watch(displayUnitProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Route saved')),
+      appBar: AppBar(
+        title: const Text('Route saved'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.go('/'),
+        ),
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.lg),

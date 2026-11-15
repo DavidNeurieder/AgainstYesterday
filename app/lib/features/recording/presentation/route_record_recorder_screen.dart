@@ -38,6 +38,10 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Record Route'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: AppSpacing.md),
