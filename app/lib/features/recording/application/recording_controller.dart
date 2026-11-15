@@ -665,17 +665,36 @@ class RecordingController extends Notifier<LiveRunState?> {
     return track;
   }
 
+  /// Minimum track length (in points) for a route match to be attempted.
+  /// Shorter tracks are too noisy to classify reliably.
+  static const _minTrackPoints = 5;
+
+  /// Minimum overall score for a route to be considered a match.
+  static const _minMatchScore = 0.5;
+
   Future<String?> _recognizeRoute(List<TrackPoint> track) async {
-    if (track.length < 2) return null;
+    if (track.length < _minTrackPoints) return null;
     final engine = ref.read(engineServiceProvider);
-    for (final route in ref.read(routeRepositoryProvider)) {
+    final routes = ref.read(routeRepositoryProvider);
+    if (routes.isEmpty) return null;
+
+    // Score every candidate and pick the best match above the threshold.
+    // This avoids committing to the first route that happens to match
+    // when multiple routes share geometry (e.g. out-and-backs).
+    String? bestRouteId;
+    double bestScore = _minMatchScore;
+    for (final route in routes) {
+      if (route.geometry.length < 2) continue;
       final result = await engine.matchRoutes(
         a: track,
         b: _geometryTrack(route.geometry),
       );
-      if (result.sameRoute) return route.id;
+      if (result.sameRoute && result.score.overallScore > bestScore) {
+        bestScore = result.score.overallScore;
+        bestRouteId = route.id;
+      }
     }
-    return null;
+    return bestRouteId;
   }
 
   List<TrackPoint> _geometryTrack(List<GeoPoint> geometry) => [
