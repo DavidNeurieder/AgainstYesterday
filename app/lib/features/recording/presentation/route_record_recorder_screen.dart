@@ -1,9 +1,8 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-/// Recording phase (§8 Step 2) — deliberately simpler than the race screen:
-/// there is no ghost yet, so the loop is just distance + a wall-clock
-/// stopwatch and the pause/finish controls. No gap, no map, no split stats.
+/// Recording phase (§8 Step 2) — mirrors the live run screen: a map of the
+/// travelled track with distance/time readouts and pause/finish controls.
 library;
 
 import 'package:flutter/material.dart';
@@ -12,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../engine/models.dart';
+import '../../map/map_surface.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/recording_controller.dart';
@@ -26,7 +26,14 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
     final paused = state.status == RunStatus.paused;
     final textTheme = Theme.of(context).textTheme;
     final units = ref.watch(displayUnitProvider);
+    final mapSurface = ref.watch(mapSurfaceProvider);
     final controller = ref.read(recordingControllerProvider.notifier);
+
+    final track = state.track;
+    final you = state.currentPosition ??
+        (track.isNotEmpty
+            ? track.last
+            : const GeoPoint(latitude: 51.96, longitude: 7.63));
 
     return Scaffold(
       appBar: AppBar(
@@ -44,24 +51,18 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                transitionBuilder: (child, animation) =>
-                    FadeTransition(opacity: animation, child: child),
-                child: paused
-                    ? Center(
-                        key: const ValueKey('paused'),
-                        child: Text(
-                          'PAUSED',
-                          style: textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.gpsWarning,
-                          ),
-                        ),
-                      )
-                    : const SizedBox(key: ValueKey('recording')),
-              ),
-              const SizedBox(height: AppSpacing.xl),
+              if (paused) ...[
+                Center(
+                  child: Text(
+                    'PAUSED',
+                    style: textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.gpsWarning,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
               Text(
                 state.distance.formatWith(units),
                 key: const ValueKey('record-distance'),
@@ -88,7 +89,26 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
                   ),
                 ],
               ),
-              const Spacer(),
+              const SizedBox(height: AppSpacing.md),
+              Expanded(
+                child: Container(
+                  // Green background shows through when tiles can't load
+                  // (offline or no network), so the map never looks blank.
+                  color: AppColors.ahead,
+                  child: mapSurface.build(
+                    context,
+                    MapScene(
+                      geometry: track,
+                      you: you,
+                      youProgress: 1.0,
+                      track: track,
+                      name: 'Recording',
+                      courseColor: AppColors.you,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Expanded(
@@ -210,9 +230,9 @@ class _ActionButton extends StatelessWidget {
       style: FilledButton.styleFrom(
         foregroundColor: foreground,
         backgroundColor: background,
-        minimumSize: const Size.fromHeight(56),
+        minimumSize: const Size.fromHeight(48),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
     );
