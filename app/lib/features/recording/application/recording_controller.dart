@@ -773,7 +773,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     unawaited(() async {
       try {
         final routeId = await _recognizeRoute(track, distanceMeters: distanceM);
-        if (!mountedSession(session) || routeId == null) return;
+        if (!_mountedSession(session) || routeId == null) return;
         // Still running and still free.
         if (_session != session || session.route != null) return;
         if (state?.status != RunStatus.running &&
@@ -792,7 +792,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     }());
   }
 
-  bool mountedSession(_RecSession session) => identical(_session, session);
+  bool _mountedSession(_RecSession session) => identical(_session, session);
 
   Future<void> _attachRecognizedRoute(_RecSession session, Route route) async {
     session.route = route;
