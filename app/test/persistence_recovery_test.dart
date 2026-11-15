@@ -110,6 +110,43 @@ void main() {
       });
     });
 
+    test('snapshot raw fixes round-trip and are restored on resume', () {
+      fakeAsync((async) {
+        final c = container(async, MemoryPersistenceStore());
+        final ctrl = c.read(recordingControllerProvider.notifier);
+        final fixes = [
+          GpsFix(
+            timestamp: DateTime.utc(2026, 1, 1, 10, 0, 0),
+            latitude: 51.9601,
+            longitude: 7.6301,
+            accuracyMeters: 5,
+          ),
+          GpsFix(
+            timestamp: DateTime.utc(2026, 1, 1, 10, 0, 1),
+            latitude: 51.9602,
+            longitude: 7.6302,
+            accuracyMeters: 5,
+          ),
+        ];
+        final snapshot = RunSnapshot(
+          status: RunStatus.running,
+          startedAt: DateTime.utc(2026, 1, 1, 10),
+          movingSeconds: 1,
+          distanceMeters: 12,
+          loopMeters: 4760,
+          rawFixes: fixes,
+        );
+        final restored = parseRunSnapshot(runSnapshotToJson(snapshot));
+        expect(restored.rawFixes, hasLength(2));
+        expect(restored.rawFixes.first.latitude, closeTo(51.9601, 1e-9));
+
+        ctrl.resumeFromSnapshot(restored);
+        async.flushMicrotasks();
+        expect(ctrl.currentFixes(), isNotNull);
+        expect(ctrl.currentFixes()!.length, greaterThanOrEqualTo(2));
+      });
+    });
+
     test('a far-along snapshot never breaches the loop length', () {
       fakeAsync((async) {
         final c = container(async, MemoryPersistenceStore());

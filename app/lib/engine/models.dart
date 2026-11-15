@@ -474,6 +474,7 @@ class RunSnapshot {
     required this.distanceMeters,
     required this.loopMeters,
     this.routeId,
+    this.rawFixes = const [],
   });
 
   /// `running` or `paused` when the app left the foreground.
@@ -488,6 +489,10 @@ class RunSnapshot {
   final double distanceMeters;
   final double loopMeters;
   final String? routeId;
+
+  /// Raw GPS fixes captured so far, so recovery can restore the recorded
+  /// trace and rebuild derived state without losing observations.
+  final List<GpsFix> rawFixes;
 }
 
 /// Why a run failed to start (M14), rendered on the error screen.

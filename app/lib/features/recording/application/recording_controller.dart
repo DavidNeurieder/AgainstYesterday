@@ -470,6 +470,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       distanceMeters: snap.distanceMeters,
       loopMeters: session.loopLength,
       routeId: session.route?.id,
+      rawFixes: List.unmodifiable(session.rawFixes),
     );
     ref.read(runSnapshotProvider.notifier).save(snapshot);
     return snapshot;
@@ -487,37 +488,46 @@ class RecordingController extends Notifier<LiveRunState?> {
       clockSeconds: snapshot.clockSeconds,
       loopLength: snapshot.loopMeters,
     );
+    final session = _requireSession();
+    session.rawFixes.addAll(snapshot.rawFixes);
     _gpsSource = ref.read(deviceGpsProvider);
     _scenarioDistanceM = snapshot.distanceMeters;
     try {
       await _prepareSession();
-      _session?.handle?.seed(
-        distanceMeters: snapshot.distanceMeters,
-        movingSeconds: snapshot.movingSeconds,
-      );
-      // Anchor the scenario chain at the resumed position so the first
-      // tick after resume accrues distance instead of only re-anchoring.
-      if (_gpsSource == null) {
-        final anchorPos = pointAlongPolyline(
-          _session!.geometry,
-          snapshot.distanceMeters,
+      // Replay persisted raw fixes through the fresh handle so derived
+      // progress/match/ghost state is rebuilt from the recorded trace.
+      for (final fix in session.rawFixes) {
+        session.handle?.push(fix);
+      }
+      if (session.rawFixes.isEmpty) {
+        session.handle?.seed(
+          distanceMeters: snapshot.distanceMeters,
+          movingSeconds: snapshot.movingSeconds,
         );
-        if (anchorPos != null) {
-          final now = clock.now();
-          _session!.handle?.push(
-            GpsFix(
-              timestamp: now.toUtc(),
-              latitude: anchorPos.latitude,
-              longitude: anchorPos.longitude,
-              accuracyMeters: 5.0,
-              altitudeMeters: 60.0,
-              speedMetersPerSecond: _baseSpeedMps,
-              bearingDegrees: _bearingAt(
-                _session!.geometry,
-                snapshot.distanceMeters,
-              ),
-            ),
+        // Anchor the scenario chain at the resumed position so the first
+        // tick after resume accrues distance instead of only re-anchoring.
+        if (_gpsSource == null) {
+          final anchorPos = pointAlongPolyline(
+            session.geometry,
+            snapshot.distanceMeters,
           );
+          if (anchorPos != null) {
+            final now = clock.now();
+            session.handle?.push(
+              GpsFix(
+                timestamp: now.toUtc(),
+                latitude: anchorPos.latitude,
+                longitude: anchorPos.longitude,
+                accuracyMeters: 5.0,
+                altitudeMeters: 60.0,
+                speedMetersPerSecond: _baseSpeedMps,
+                bearingDegrees: _bearingAt(
+                  session.geometry,
+                  snapshot.distanceMeters,
+                ),
+              ),
+            );
+          }
         }
       }
     } catch (e, st) {

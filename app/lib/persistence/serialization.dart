@@ -162,6 +162,8 @@ String runSnapshotToJson(RunSnapshot snapshot) => const JsonEncoder().convert({
   'distance_m': snapshot.distanceMeters,
   'loop_m': snapshot.loopMeters,
   'route_id': ?snapshot.routeId,
+  if (snapshot.rawFixes.isNotEmpty)
+    'raw_fixes': [for (final fix in snapshot.rawFixes) _fixJson(fix)],
 });
 
 /// Parses a run snapshot previously written by [runSnapshotToJson].
@@ -178,5 +180,9 @@ RunSnapshot parseRunSnapshot(String json) {
     distanceMeters: (map['distance_m']! as num).toDouble(),
     loopMeters: (map['loop_m']! as num).toDouble(),
     routeId: map['route_id'] as String?,
+    rawFixes: [
+      for (final fix in (map['raw_fixes'] as List?)?.cast<Object?>() ?? const [])
+        _fixFrom((fix as Map).cast<String, Object?>()),
+    ],
   );
 }
