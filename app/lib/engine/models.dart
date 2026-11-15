@@ -555,6 +555,8 @@ class LiveRunState {
     this.rawFixCount = 0,
     this.backgroundProtection = BackgroundProtection.inactive,
     this.track = const [],
+    this.matchStatus = 0,
+    this.matchConfidence = 0.0,
   });
 
   final RunStatus status;
@@ -615,6 +617,13 @@ class LiveRunState {
   /// The actual recorded GPS path so far, so a run that diverges from the
   /// planned course is still visible on the map.
   final List<GeoPoint> track;
+
+  /// Live route-match status code (0=none, 1=initializing, 2=matched,
+  /// 3=uncertain, 4=off-route, 5=reacquiring).
+  final int matchStatus;
+
+  /// Confidence of the current route match, 0..1.
+  final double matchConfidence;
 }
 
 /// Position along a polyline at [distanceMeters] from its start (linear

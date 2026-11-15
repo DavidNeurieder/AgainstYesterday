@@ -853,6 +853,8 @@ class RecordingController extends Notifier<LiveRunState?> {
         for (final f in session.rawFixes)
           GeoPoint(latitude: f.latitude, longitude: f.longitude),
       ],
+      matchStatus: snap?.matchStatus ?? 0,
+      matchConfidence: snap?.matchConfidence ?? 0.0,
     );
   }
 

@@ -50,6 +50,8 @@ class DiagnosticsSnapshot {
     required this.routeProgress,
     required this.routeGeometryPoints,
     required this.ghostGap,
+    required this.matchStatus,
+    required this.matchConfidence,
     required this.recovery,
     required this.exportData,
   });
@@ -85,6 +87,11 @@ class DiagnosticsSnapshot {
   final int routeGeometryPoints;
 
   final GhostState? ghostGap;
+
+  /// Live route-match state (initializing/matched/uncertain/off-route/
+  /// reacquiring) surfaced by the engine.
+  final String matchStatus;
+  final double matchConfidence;
 
   /// The recoverable in-progress run snapshot, when one exists.
   final RunSnapshot? recovery;
@@ -143,6 +150,8 @@ final diagnosticsSnapshotProvider = Provider.autoDispose<DiagnosticsSnapshot>((
     routeProgress: live?.routeProgress ?? 0,
     routeGeometryPoints: live?.route?.geometry.length ?? 0,
     ghostGap: live?.ghostGap,
+    matchStatus: _matchStatusName(live?.matchStatus ?? 0),
+    matchConfidence: live?.matchConfidence ?? 0,
     recovery: recovery,
     exportData: snapshot.exportData,
   );
@@ -181,4 +190,17 @@ class _ExportSource {
   }
 
   late final ExportData exportData;
+}
+
+/// Converts a match-status code to a human-readable name.
+String _matchStatusName(int code) {
+  return switch (code) {
+    0 => 'none',
+    1 => 'initializing',
+    2 => 'matched',
+    3 => 'uncertain',
+    4 => 'off-route',
+    5 => 'reacquiring',
+    _ => 'unknown',
+  };
 }
