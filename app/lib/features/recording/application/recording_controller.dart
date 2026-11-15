@@ -56,6 +56,10 @@ class RecordingController extends Notifier<LiveRunState?> {
 
   static const Duration _snapshotEvery = Duration(seconds: 5);
 
+  /// Throttle live route recognition attempts for free runs.
+  static const Duration _liveRecognizeEvery = Duration(seconds: 8);
+  static const double _liveRecognizeMinDistanceM = 250.0;
+
   Timer? _timer;
   _RecSession? _session;
   GpsSource? _gpsSource;
@@ -65,6 +69,9 @@ class RecordingController extends Notifier<LiveRunState?> {
   RunForegroundLifespan? _foregroundLifespan;
   BackgroundProtection _protection = BackgroundProtection.inactive;
   Activity? _lastFinishedActivity;
+  bool _recognizingRoute = false;
+  DateTime _lastRecognizeAt = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  double _lastRecognizeDistanceM = 0;
 
   /// Wall-clock anchor for the scenario tick.
   DateTime _lastTick = clock.now();
@@ -92,6 +99,9 @@ class RecordingController extends Notifier<LiveRunState?> {
 
   void ensureSession(List<Route> preferredRoutes, {Activity? ghostActivity}) {
     if (_session != null) return;
+    _recognizingRoute = false;
+    _lastRecognizeAt = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    _lastRecognizeDistanceM = 0;
     _session = _RecSession(
       preferredRoutes.isNotEmpty ? preferredRoutes.first : null,
       ghostActivity: ghostActivity,
@@ -352,6 +362,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     session.handle?.push(fix);
     _emit(status: RunStatus.running);
     _snapshotThrottled();
+    _maybeRecognizeLiveRoute();
   }
 
   void _recordDeviceFix(GpsFix fix) {
@@ -410,6 +421,7 @@ class RecordingController extends Notifier<LiveRunState?> {
     session.handle?.push(fix);
     _emit(status: RunStatus.running);
     _snapshotThrottled();
+    _maybeRecognizeLiveRoute();
   }
 
   double? _bearingAt(List<GeoPoint> geometry, double distanceM) {
@@ -732,6 +744,90 @@ class RecordingController extends Notifier<LiveRunState?> {
       return null; // Ambiguous: keep activity unclassified.
     }
     return bestRouteId;
+  }
+
+  void _maybeRecognizeLiveRoute() {
+    final session = _session;
+    final live = state;
+    if (session == null || live == null) return;
+    if (live.status != RunStatus.running) return;
+    // Only provisional recognition for route-less free runs.
+    if (session.route != null) return;
+    if (_recognizingRoute) return;
+    final routes = ref.read(routeRepositoryProvider);
+    if (routes.isEmpty) return;
+
+    final distanceM = live.distance.meters;
+    final now = clock.now();
+    if (distanceM < _liveRecognizeMinDistanceM) return;
+    if (distanceM - _lastRecognizeDistanceM < 50 &&
+        now.difference(_lastRecognizeAt) < _liveRecognizeEvery) {
+      return;
+    }
+
+    _recognizingRoute = true;
+    _lastRecognizeAt = now;
+    _lastRecognizeDistanceM = distanceM;
+
+    final track = _synthesizeTrack(session, distanceM);
+    unawaited(() async {
+      try {
+        final routeId = await _recognizeRoute(track, distanceMeters: distanceM);
+        if (!mountedSession(session) || routeId == null) return;
+        // Still running and still free.
+        if (_session != session || session.route != null) return;
+        if (state?.status != RunStatus.running &&
+            state?.status != RunStatus.paused) {
+          return;
+        }
+        final route = ref
+            .read(routeRepositoryProvider)
+            .where((r) => r.id == routeId)
+            .firstOrNull;
+        if (route == null) return;
+        await _attachRecognizedRoute(session, route);
+      } finally {
+        _recognizingRoute = false;
+      }
+    }());
+  }
+
+  bool mountedSession(_RecSession session) => identical(_session, session);
+
+  Future<void> _attachRecognizedRoute(_RecSession session, Route route) async {
+    session.route = route;
+    session.ghostActivity = _fastestActivityFor(route.id);
+    session.geometry = route.geometry;
+    session.loopLength = polylineMeters(route.geometry);
+    final engine = ref.read(engineServiceProvider);
+    final ghostPb = session.ghostActivity?.duration ?? route.personalBest;
+    if (ghostPb != null) {
+      try {
+        session.ghostSamples = await _buildGhostSamples(
+          engine,
+          route,
+          ghostPb,
+          fastestActivity: session.ghostActivity,
+        );
+      } catch (_) {
+        session.ghostSamples = null;
+      }
+    } else {
+      session.ghostSamples = null;
+    }
+
+    // Recreate a route-aware handle and rebuild derived state from the
+    // recorded trace so progress/ghost align with the recognized course.
+    final fixes = List<GpsFix>.of(session.rawFixes);
+    _disposeHandle();
+    session.handle = await engine.createLiveRun(
+      route: session.geometry,
+      ghostSamples: session.ghostSamples,
+    );
+    for (final fix in fixes) {
+      session.handle?.push(fix);
+    }
+    _emit(status: state?.status ?? RunStatus.running, keepPace: true);
   }
 
   List<TrackPoint> _geometryTrack(List<GeoPoint> geometry) => [
