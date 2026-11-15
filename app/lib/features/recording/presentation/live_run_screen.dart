@@ -96,6 +96,34 @@ class LiveRunScreen extends ConsumerWidget {
                 routeProgress: state.routeProgress,
               ),
               const SizedBox(height: AppSpacing.md),
+              // Subtle route-recognition indicator (§8): shows the matched
+              // route and ghost status without distracting from the gap.
+              if (state.route != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: Text(
+                    state.ghostGap != null
+                        ? '${state.route!.name} · Ghost active'
+                        : state.route!.name,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: textTheme.labelSmall?.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+              ] else ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: Text(
+                    'No route matched — recording only',
+                    textAlign: TextAlign.center,
+                    style: textTheme.labelSmall?.copyWith(
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+              ],
               Expanded(
                 child: Stack(
                   fit: StackFit.expand,
