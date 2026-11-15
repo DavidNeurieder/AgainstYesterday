@@ -196,6 +196,12 @@ class RouteRepository extends Notifier<List<Route>> {
     await _persist();
   }
 
+  /// Removes the route with [id] from the catalog and persists the change.
+  Future<void> deleteRoute(String id) async {
+    state = [for (final r in state) if (r.id != id) r];
+    await _persist();
+  }
+
   /// Drops every route from the catalog (Settings → Delete all data, M21).
   void clear() => state = const [];
 

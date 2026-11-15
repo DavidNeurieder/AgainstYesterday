@@ -101,6 +101,15 @@ class RouteDetailScreen extends ConsumerWidget {
               context.push('/route/${route.id}/statistics');
             },
           ),
+          IconButton(
+            key: const ValueKey('delete-route'),
+            tooltip: 'Delete route',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () {
+              AppHaptics.selection(ref);
+              deleteRoute(context, ref, route);
+            },
+          ),
         ],
       ),
       body: ListView(
@@ -587,6 +596,54 @@ Future<void> renameRoute(
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Renamed to $newName.')),
     );
+  }
+}
+
+Future<void> deleteRoute(
+  BuildContext context,
+  WidgetRef ref,
+  Route route,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      key: const ValueKey('delete-route-dialog'),
+      title: const Text('Delete route'),
+      content: Text(
+        'Delete "${route.name}" and all its runs? This cannot be undone.',
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('delete-route-cancel'),
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('delete-route-confirm'),
+          onPressed: () => Navigator.of(context).pop(true),
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.behind,
+          ),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  await Future<void>.delayed(Duration.zero);
+  if (confirmed != true || !context.mounted) return;
+  // Delete all activities belonging to this route.
+  final activities = ref.read(activityRepositoryProvider);
+  for (final activity in activities) {
+    if (activity.routeId == route.id) {
+      await ref.read(activityRepositoryProvider.notifier).deleteActivity(activity.id);
+    }
+  }
+  await ref.read(routeRepositoryProvider.notifier).deleteRoute(route.id);
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Deleted ${route.name}.')),
+    );
+    context.go('/');
   }
 }
 
