@@ -68,34 +68,31 @@ class HistoryPb {
 
 /// Derives [HistoryPb] from the activity history and the route catalog.
 ///
-/// A run earns a trophy when it beat everything that came before it — its
-/// seeded route PB included — so an early run keeps its badge even when a
-/// later run takes the overall best.
+/// A run earns a trophy when it strictly beat everything that came before it —
+/// its seeded route PB included — so an early run keeps its badge even when a
+/// later run takes the overall best. Example routes/activities do not
+/// contribute to personal PBs.
 HistoryPb computeHistoryPb(List<Activity> activities, List<Route> routes) {
+  final routesById = {for (final r in routes) r.id: r};
   final seed = <String, double>{
     for (final route in routes)
       if (!route.isExample)
         if (route.personalBest case final pb?) route.id: pb.seconds,
   };
 
-  // The current best per route: the faster of the seed and all attempts.
   final best = <String, double>{...seed};
   final attemptsByRoute = <String, List<Activity>>{};
   for (final activity in activities) {
     if (activity.isExample) continue;
     final routeId = activity.routeId;
     final duration = activity.duration;
-    if (routeId == null || duration == null) {
-      continue;
-    }
-    // Example routes never contribute to personal PBs.
-    if (routes.any((r) => r.id == routeId && r.isExample)) continue;
+    if (routeId == null || duration == null) continue;
+    final route = routesById[routeId];
+    if (route == null || route.isExample) continue;
     (attemptsByRoute[routeId] ??= []).add(activity);
     final seconds = duration.seconds;
     if (best[routeId] case final current?) {
-      if (seconds < current) {
-        best[routeId] = seconds;
-      }
+      if (seconds < current) best[routeId] = seconds;
     } else {
       best[routeId] = seconds;
     }

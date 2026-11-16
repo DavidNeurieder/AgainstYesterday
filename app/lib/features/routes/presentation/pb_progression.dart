@@ -12,6 +12,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
+import '../application/route_attempts.dart';
 
 class PbProgressionSection extends StatelessWidget {
   const PbProgressionSection({
@@ -26,18 +27,10 @@ class PbProgressionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final timed = [
-      for (final a in attempts) if (a.duration != null) a,
-    ]..sort((a, b) => a.startedAt.compareTo(b.startedAt));
-
-    final events = <({Activity activity, Elapsed? previous})>[];
-    Elapsed? best;
-    for (final a in timed) {
-      if (best == null || a.duration!.seconds < best.seconds) {
-        events.add((activity: a, previous: best));
-        best = a.duration;
-      }
-    }
+    final events = computePbProgression(
+      attempts,
+      seedBestSeconds: route.isExample ? null : route.personalBest?.seconds,
+    );
 
     if (events.isEmpty) {
       return Text(

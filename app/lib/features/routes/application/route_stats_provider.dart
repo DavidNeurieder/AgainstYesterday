@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/dependencies.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import 'route_attempts.dart';
 
 /// Stats for every route in the catalog, keyed by route id.
 final routeStatsIndexProvider = FutureProvider<Map<String, RouteStats>>((
@@ -23,10 +24,7 @@ final routeStatsIndexProvider = FutureProvider<Map<String, RouteStats>>((
   final engine = ref.read(engineServiceProvider);
   final out = <String, RouteStats>{};
   for (final route in routes) {
-    final attempts = <Activity>[
-      for (final a in activities)
-        if (a.routeId == route.id && a.duration != null) a,
-    ];
+    final attempts = eligibleAttemptsForRoute(activities, route);
     out[route.id] = await engine.computeRouteStats(
       route: route,
       attempts: attempts,

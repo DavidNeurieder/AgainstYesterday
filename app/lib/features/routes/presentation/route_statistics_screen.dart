@@ -22,6 +22,7 @@ import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
 import '../../../app/dependencies.dart';
+import '../application/route_attempts.dart';
 import '../../../widgets/route_silhouette.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
@@ -230,11 +231,9 @@ class RouteStatisticsSectionScreen extends ConsumerWidget {
   }
 }
 
-/// Timed runs recorded on [route], the only attempts statistics may read.
-List<Activity> _timedAttempts(WidgetRef ref, Route route) => [
-  for (final a in ref.watch(activityRepositoryProvider))
-    if (a.routeId == route.id && a.duration != null) a,
-];
+/// Timed, eligible runs recorded on [route] for statistics presentation.
+List<Activity> _timedAttempts(WidgetRef ref, Route route) =>
+    eligibleAttemptsForRoute(ref.watch(activityRepositoryProvider), route);
 
 void _openSection(
   BuildContext context,

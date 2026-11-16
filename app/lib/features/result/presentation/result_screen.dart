@@ -7,7 +7,7 @@
 /// Pushed from [RunCompleteScreen] via `/record/result`.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -25,6 +25,7 @@ import '../../recording/application/recording_controller.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/pace_analysis_provider.dart';
+import '../../routes/application/route_attempts.dart';
 import 'gap_chart.dart';
 
 /// Base stagger step between the result stats' entrance (§30).
@@ -57,8 +58,8 @@ class ResultScreen extends ConsumerWidget {
     final splits = pace.splits;
     final gapCurve = pace.gapCurve;
 
-    // Ranking: how many saved runs on this route are faster.
-    final rank = _rank(route?.id, live.elapsed, activities);
+    // Ranking: how many saved eligible runs on this route are faster.
+    final rank = _rank(route, activities);
 
     return Scaffold(
       body: SafeArea(
@@ -218,29 +219,16 @@ class ResultScreen extends ConsumerWidget {
   }
 }
 
-String? _rank(String? routeId, Elapsed elapsed, List<Activity> history) {
-  if (routeId == null) {
-    return null;
-  }
-  final onRoute = history
-      .where((a) => a.routeId == routeId && a.duration != null)
-      .toList()
-    ..sort((a, b) => a.duration!.seconds.compareTo(b.duration!.seconds));
-  final index = onRoute.indexWhere(
-    (a) => a.id == history.first.id,
+String? _rank(Route? route, List<Activity> history) {
+  if (route == null || history.isEmpty) return null;
+  // The most recently saved activity for this completion is expected to be
+  // present in history; rank that activity against eligible route attempts.
+  final latest = history.first;
+  return routeAttemptRankLabel(
+    activities: history,
+    route: route,
+    activityId: latest.id,
   );
-  if (index < 0) {
-    return null;
-  }
-  final n = index + 1;
-  final suffix = n == 1
-      ? 'st'
-      : n == 2
-          ? 'nd'
-          : n == 3
-              ? 'rd'
-              : 'th';
-  return 'Your $n$suffix fastest run on this route';
 }
 
 class _EmptyResult extends StatelessWidget {
