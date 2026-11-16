@@ -16,6 +16,7 @@ import '../features/history/presentation/history_screen.dart';
 import '../features/recording/presentation/record_flow_screen.dart';
 import '../features/recording/presentation/route_record_flow_screen.dart';
 import '../features/result/presentation/result_screen.dart';
+import '../features/routes/presentation/route_comparison_screen.dart';
 import '../features/routes/presentation/route_detail_screen.dart';
 import '../features/routes/presentation/route_statistics_screen.dart';
 import '../features/routes/presentation/routes_screen.dart';
@@ -94,6 +95,10 @@ GoRouter buildRouter() {
       GoRoute(
         path: '/statistics',
         builder: (context, state) => const StatisticsScreen(),
+      ),
+      GoRoute(
+        path: '/routes/compare',
+        builder: (context, state) => const RouteComparisonScreen(),
       ),
       // Developer diagnostics (M15 Phase 10). Gated in the router as well as
       // in the shell: with dev tools off, a deep link or manual push lands

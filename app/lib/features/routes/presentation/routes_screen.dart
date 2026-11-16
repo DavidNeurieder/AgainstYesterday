@@ -39,7 +39,20 @@ class RoutesScreen extends ConsumerWidget {
             recordingState.status == RunStatus.paused);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Routes')),
+      appBar: AppBar(
+        title: const Text('Routes'),
+        actions: [
+          if (routes.where((r) => !r.isExample).length >= 2)
+            IconButton(
+              tooltip: 'Compare routes',
+              icon: const Icon(Icons.compare_arrows),
+              onPressed: () {
+                AppHaptics.selection(ref);
+                context.push('/routes/compare');
+              },
+            ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
