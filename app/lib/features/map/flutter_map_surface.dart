@@ -196,6 +196,28 @@ class _FlutterMapRouteMapState extends State<FlutterMapRouteMap> {
                   ? null
                   : CachedRasterTileProvider(cacheRoot: widget.cacheRoot!),
             ),
+            if (geometry.length >= 2)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: geometry,
+                    strokeWidth: 4,
+                    color: scene.courseColor ??
+                        AppColors.ghost.withValues(alpha: 0.35),
+                  ),
+                ],
+              ),
+            for (final overlay in scene.overlays)
+              if (overlay.points.length >= 2)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: overlay.points.map(_toLatLng).toList(),
+                      strokeWidth: overlay.width,
+                      color: overlay.color,
+                    ),
+                  ],
+                ),
             if (scene.track.length >= 2)
               PolylineLayer(
                 polylines: [
@@ -213,17 +235,6 @@ class _FlutterMapRouteMapState extends State<FlutterMapRouteMap> {
                     points: traveled,
                     strokeWidth: 4,
                     color: AppColors.track,
-                  ),
-                ],
-              ),
-            if (geometry.length >= 2)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: geometry,
-                    strokeWidth: 4,
-                    color: scene.courseColor ??
-                        AppColors.ghost.withValues(alpha: 0.35),
                   ),
                 ],
               ),

@@ -23,6 +23,10 @@ class PainterMapSurface implements MapSurface {
       geometry: scene.geometry,
       track: scene.track,
       trackColors: scene.trackColors,
+      overlays: [
+        for (final o in scene.overlays)
+          RouteMapOverlay(points: o.points, color: o.color, width: o.width),
+      ],
       you: scene.you,
       youProgress: scene.youProgress,
       ghost: scene.ghost,

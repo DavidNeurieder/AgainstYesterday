@@ -143,6 +143,7 @@ class RouteDetailScreen extends ConsumerWidget {
                         onTap: () => _showExpandedMap(
                           context,
                           route,
+                          attempts,
                           ref.watch(mapSurfaceProvider),
                         ),
                         splashColor: Colors.white10,
@@ -158,6 +159,7 @@ class RouteDetailScreen extends ConsumerWidget {
                       onPressed: () => _showExpandedMap(
                         context,
                         route,
+                        attempts,
                         ref.watch(mapSurfaceProvider),
                       ),
                       child: const Icon(Icons.fullscreen),
@@ -685,11 +687,24 @@ class _NotFoundScreen extends StatelessWidget {
 Future<void> _showExpandedMap(
   BuildContext context,
   Route route,
+  List<Activity> attempts,
   MapSurface surface,
 ) async {
   final you = route.geometry.isNotEmpty
       ? route.geometry.first
       : const GeoPoint(latitude: 0, longitude: 0);
+
+  final overlayAttempts = <({Activity activity, List<GeoPoint> points, Color color})>[];
+  for (final attempt in attempts) {
+    final track = attempt.track;
+    if (track == null || track.length < 2) continue;
+    overlayAttempts.add((
+      activity: attempt,
+      points: [for (final t in track) t.position],
+      color: _attemptColor(overlayAttempts.length),
+    ));
+  }
+
   await showDialog<void>(
     context: context,
     builder: (context) {
@@ -702,7 +717,7 @@ Future<void> _showExpandedMap(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  route.name,
+                  '${route.name} — attempts',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -713,12 +728,40 @@ Future<void> _showExpandedMap(
                       context,
                       MapScene(
                         geometry: route.geometry,
+                        overlays: [
+                          for (final o in overlayAttempts)
+                            MapTrackOverlay(points: o.points, color: o.color),
+                        ],
                         you: you,
                         youProgress: 0,
                         name: route.name,
                         staticView: true,
                       ),
                       fullscreen: false,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text('Legend', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: AppSpacing.xs),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 160),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _LegendRow(
+                          color: AppColors.ghost.withValues(alpha: 0.6),
+                          label: 'Route',
+                        ),
+                        for (final o in overlayAttempts)
+                          _LegendRow(
+                            color: o.color,
+                            label:
+                                '${dateLabelFor(o.activity.startedAt.toLocal())}'
+                                ' · ${o.activity.duration?.format() ?? '—'}',
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -738,3 +781,41 @@ Future<void> _showExpandedMap(
     },
   );
 }
+
+class _LegendRow extends StatelessWidget {
+  const _LegendRow({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(child: Text(label)),
+        ],
+      ),
+    );
+  }
+}
+
+const List<Color> _kAttemptColors = [
+  Color(0xFF4FC3F7),
+  Color(0xFFFFB74D),
+  Color(0xFF81C784),
+  Color(0xFFBA68C8),
+  Color(0xFFE57373),
+  Color(0xFFFFF176),
+  Color(0xFF4DB6AC),
+  Color(0xFFFF8A65),
+];
+
+Color _attemptColor(int index) => _kAttemptColors[index % _kAttemptColors.length];

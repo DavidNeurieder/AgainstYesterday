@@ -18,12 +18,26 @@ import '../engine/models.dart';
 /// Map padding inside the viewport, in logical pixels.
 const double _kMapPadding = 22;
 
+/// An additional colored polyline overlay (e.g. a past attempt track).
+class RouteMapOverlay {
+  const RouteMapOverlay({
+    required this.points,
+    required this.color,
+    this.width = 3,
+  });
+
+  final List<GeoPoint> points;
+  final Color color;
+  final double width;
+}
+
 class RouteMap extends StatefulWidget {
   const RouteMap({
     super.key,
     required this.geometry,
     this.track = const [],
     this.trackColors,
+    this.overlays = const [],
     required this.you,
     required this.youProgress,
     this.ghost,
@@ -41,6 +55,9 @@ class RouteMap extends StatefulWidget {
   /// When present, the track is drawn segment-by-segment in these colours
   /// (pace colouring); otherwise a single colour is used.
   final List<Color>? trackColors;
+
+  /// Additional colored tracks rendered above the base course/track.
+  final List<RouteMapOverlay> overlays;
 
   /// Current live position (YOU).
   final GeoPoint you;
@@ -106,6 +123,7 @@ class _RouteMapState extends State<RouteMap> {
                 geometry: widget.geometry,
                 track: widget.track,
                 trackColors: widget.trackColors,
+                overlays: widget.overlays,
                 youProgress: widget.youProgress,
                 courseColor: widget.courseColor,
               ),
@@ -134,6 +152,7 @@ class _RouteMapState extends State<RouteMap> {
                     followAt: widget.you,
                     geometry: widget.geometry,
                     track: widget.track,
+                    overlays: widget.overlays,
                     youProgress: widget.youProgress,
                     courseColor: widget.courseColor,
                   ),
@@ -417,6 +436,7 @@ class _MapPainter extends CustomPainter {
     required this.geometry,
     this.track = const [],
     this.trackColors,
+    this.overlays = const [],
     required this.youProgress,
     this.courseColor,
   });
@@ -428,6 +448,7 @@ class _MapPainter extends CustomPainter {
   final List<GeoPoint> geometry;
   final List<GeoPoint> track;
   final List<Color>? trackColors;
+  final List<RouteMapOverlay> overlays;
   final double youProgress;
   final Color? courseColor;
 
@@ -447,8 +468,32 @@ class _MapPainter extends CustomPainter {
         world.project(g, shift: shift, follow: follow, followAt: followAt),
     ];
 
-    // Draw the recorded track first (green) so it shows where the run
-    // actually went, including detours off the course.
+    // The planned course backdrop.
+    final trace = Paint()
+      ..color = courseColor ?? AppColors.ghost.withValues(alpha: 0.35)
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(_path(full), trace);
+
+    // Additional comparison overlays (e.g. past attempts).
+    for (final overlay in overlays) {
+      if (overlay.points.length < 2) continue;
+      final pts = <Offset>[
+        for (final g in overlay.points)
+          world.project(g, shift: shift, follow: follow, followAt: followAt),
+      ];
+      final paint = Paint()
+        ..color = overlay.color
+        ..strokeWidth = overlay.width
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      canvas.drawPath(_path(pts), paint);
+    }
+
+    // Draw the recorded track (green) so it shows where the run actually went.
     if (track.length >= 2) {
       final trackPoints = <Offset>[
         for (final g in track)
@@ -488,16 +533,6 @@ class _MapPainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round;
       canvas.drawPath(_path(traveled), youLine);
     }
-
-    // The planned course is painted last (blue) so it stays visible on top
-    // of the track where the two overlap, while divergent parts stay green.
-    final trace = Paint()
-      ..color = courseColor ?? AppColors.ghost.withValues(alpha: 0.35)
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(_path(full), trace);
   }
 
   Path _path(List<Offset> points) {

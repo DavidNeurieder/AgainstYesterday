@@ -63,6 +63,20 @@ MapRenderer mapRendererFromDefine(String raw) =>
 /// The renderer this build selected.
 MapRenderer get selectedMapRenderer => mapRendererFromDefine(kMapViewDefine);
 
+/// A colored polyline overlay rendered on top of the base scene (e.g. past
+/// attempt tracks on a route map).
+class MapTrackOverlay {
+  const MapTrackOverlay({
+    required this.points,
+    required this.color,
+    this.width = 3,
+  });
+
+  final List<GeoPoint> points;
+  final Color color;
+  final double width;
+}
+
 /// Everything a [MapSurface] needs to draw one scene. A plain value object so
 /// the same scene can be driven through either renderer.
 class MapScene {
@@ -70,6 +84,7 @@ class MapScene {
     required this.geometry,
     this.track = const [],
     this.trackColors,
+    this.overlays = const [],
     required this.you,
     required this.youProgress,
     this.ghost,
@@ -91,6 +106,10 @@ class MapScene {
   /// Used for pace colouring; renderers that cannot honour it fall back to a
   /// single colour.
   final List<Color>? trackColors;
+
+  /// Additional colored tracks rendered above the base course/track (e.g.
+  /// multiple past attempts). Static comparison overlays.
+  final List<MapTrackOverlay> overlays;
 
   /// Current live position (YOU).
   final GeoPoint you;

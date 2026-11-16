@@ -266,7 +266,8 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
         scene.youProgress == previous.youProgress &&
         scene.staticView == previous.staticView &&
         listEquals(scene.geometry, previous.geometry) &&
-        listEquals(scene.track, previous.track)) {
+        listEquals(scene.track, previous.track) &&
+        _sameOverlays(scene.overlays, previous.overlays)) {
       return;
     }
     _scheduleSync();
@@ -395,6 +396,29 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
         lineCap: 'round',
       ),
     );
+    // Static comparison overlays (e.g. attempt tracks).
+    for (var i = 0; i < widget.scene.overlays.length; i++) {
+      final overlay = widget.scene.overlays[i];
+      if (overlay.points.length < 2) continue;
+      final sourceId = 'against-yesterday-overlay-$i';
+      final layerId = 'against-yesterday-overlay-line-$i';
+      await controller.addGeoJsonSource(
+        sourceId,
+        lineStringFeatureCollection(overlay.points),
+      );
+      await controller.addLineLayer(
+        sourceId,
+        layerId,
+        LineLayerProperties(
+          lineColor: _cssHex(overlay.color),
+          lineWidth: overlay.width,
+          lineJoin: 'round',
+          lineCap: 'round',
+          lineOpacity: 1.0,
+        ),
+      );
+    }
+
     // Scene updates may only start once the style is fully prepared: an
     // `addGeoJsonSource`/`setGeoJsonSource` pair racing on the channel is a
     // native error. Frames that arrived meanwhile are picked up by `_sync`.
@@ -403,6 +427,16 @@ class _MaplibreRouteMapState extends State<MaplibreRouteMap> {
     await _settleFirstCamera();
     _watchFirstCamera();
     widget.onReady?.call();
+  }
+
+  bool _sameOverlays(List<MapTrackOverlay> a, List<MapTrackOverlay> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].color != b[i].color || a[i].width != b[i].width) return false;
+      if (!listEquals(a[i].points, b[i].points)) return false;
+    }
+    return true;
   }
 
   /// Number of times the first camera application is checked/retried.
