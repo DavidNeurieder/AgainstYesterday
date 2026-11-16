@@ -31,10 +31,6 @@ import '../../settings/application/settings_controller.dart';
 import '../application/example_routes.dart';
 import '../application/route_stats.dart';
 import '../application/route_stats_provider.dart';
-import '../../../widgets/route_map.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
-
 class RouteDetailScreen extends ConsumerWidget {
   const RouteDetailScreen({super.key, required this.routeId});
 
@@ -144,7 +140,11 @@ class RouteDetailScreen extends ConsumerWidget {
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () => _showExpandedMap(context, route, attempts),
+                        onTap: () => _showExpandedMap(
+                          context,
+                          route,
+                          ref.watch(mapSurfaceProvider),
+                        ),
                         splashColor: Colors.white10,
                         highlightColor: Colors.white10,
                       ),
@@ -155,7 +155,11 @@ class RouteDetailScreen extends ConsumerWidget {
                     bottom: 8,
                     child: FloatingActionButton.small(
                       heroTag: null,
-                      onPressed: () => _showExpandedMap(context, route, attempts),
+                      onPressed: () => _showExpandedMap(
+                        context,
+                        route,
+                        ref.watch(mapSurfaceProvider),
+                      ),
                       child: const Icon(Icons.fullscreen),
                     ),
                   ),
@@ -681,116 +685,40 @@ class _NotFoundScreen extends StatelessWidget {
 Future<void> _showExpandedMap(
   BuildContext context,
   Route route,
-  List<Activity> attempts,
+  MapSurface surface,
 ) async {
-  final tracks = <List<GeoPoint>>[
-    for (final a in attempts)
-      if (a.track != null && a.track!.length >= 2)
-        [for (final t in a.track!) t.position],
-  ];
+  final you = route.geometry.isNotEmpty
+      ? route.geometry.first
+      : const GeoPoint(latitude: 0, longitude: 0);
   await showDialog<void>(
     context: context,
     builder: (context) {
-      final size = MediaQuery.of(context).size;
       return Dialog(
         insetPadding: EdgeInsets.zero,
-        child: SizedBox(
-          width: size.width,
-          height: size.height,
+        child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  '${route.name} — attempts',
+                  route.name,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Expanded(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter:
-                            tracks.isNotEmpty && tracks.first.isNotEmpty
-                            ? LatLng(
-                                tracks.first.first.latitude,
-                                tracks.first.first.longitude,
-                              )
-                            : (route.geometry.isNotEmpty
-                                  ? LatLng(
-                                      route.geometry.first.latitude,
-                                      route.geometry.first.longitude,
-                                    )
-                                  : const LatLng(0, 0)),
-                        initialZoom: 14,
+                    child: surface.build(
+                      context,
+                      MapScene(
+                        geometry: route.geometry,
+                        you: you,
+                        youProgress: 0,
+                        name: route.name,
+                        staticView: true,
                       ),
-                      children: [
-                        TileLayer(
-                          urlTemplate:
-                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          userAgentPackageName:
-                              'app.against_yesterday',
-                        ),
-                        PolylineLayer(
-                          polylines: [
-                            Polyline(
-                              points: [
-                                for (final p in route.geometry)
-                                  LatLng(p.latitude, p.longitude),
-                              ],
-                              strokeWidth: 3,
-                              color: AppColors.ghost.withValues(alpha: 0.45),
-                            ),
-                          ],
-                        ),
-                        for (var i = 0; i < tracks.length; i++)
-                          PolylineLayer(
-                            polylines: [
-                              Polyline(
-                                points: [
-                                  for (final p in tracks[i])
-                                    LatLng(p.latitude, p.longitude),
-                                ],
-                                strokeWidth: 3,
-                                color: attemptColor(i),
-                              ),
-                            ],
-                          ),
-                        const SimpleAttributionWidget(
-                          source: Text('© OpenStreetMap contributors'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text('Legend', style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: AppSpacing.xs),
-                Expanded(
-                  flex: 0,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 160),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _LegendRow(
-                            color: AppColors.ghost.withValues(alpha: 0.6),
-                            label: 'Route',
-                          ),
-                          for (var i = 0; i < attempts.length; i++)
-                            if (attempts[i].track != null &&
-                                attempts[i].track!.length >= 2)
-                              _LegendRow(
-                                color: attemptColor(i),
-                                label:
-                                    '${dateLabelFor(attempts[i].startedAt.toLocal())}'
-                                    ' · ${attempts[i].duration?.format() ?? '—'}',
-                              ),
-                        ],
-                      ),
+                      fullscreen: false,
                     ),
                   ),
                 ),
@@ -809,29 +737,4 @@ Future<void> _showExpandedMap(
       );
     },
   );
-}
-
-class _LegendRow extends StatelessWidget {
-  const _LegendRow({required this.color, required this.label});
-
-  final Color color;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(child: Text(label)),
-        ],
-      ),
-    );
-  }
 }
