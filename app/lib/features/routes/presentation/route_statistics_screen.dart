@@ -487,65 +487,82 @@ class _ElevationSummarySection extends ConsumerStatefulWidget {
 
 class _ElevationSummarySectionState
     extends ConsumerState<_ElevationSummarySection> {
-  Future<TrackAnalytics?>? _future;
-  String? _activityId;
+  Future<_ElevationAggregate?>? _future;
+  String _key = '';
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _refresh();
   }
 
   @override
   void didUpdateWidget(covariant _ElevationSummarySection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final id = _representative()?.id;
-    if (id != _activityId) {
-      _future = _load();
-    }
+    _refresh();
   }
 
-  Activity? _representative() {
+  void _refresh() {
+    final ids = widget.attempts.map((a) => a.id).join(',');
+    if (ids == _key) return;
+    _key = ids;
+    _future = _load();
+  }
+
+  Future<_ElevationAggregate?> _load() async {
     final withTrack = [
       for (final a in widget.attempts)
         if (a.track != null && a.track!.length >= 2) a,
     ];
     if (withTrack.isEmpty) return null;
-    withTrack.sort((a, b) {
-      final da = a.duration?.seconds ?? double.infinity;
-      final db = b.duration?.seconds ?? double.infinity;
-      final cmp = da.compareTo(db);
-      if (cmp != 0) return cmp;
-      return b.startedAt.compareTo(a.startedAt);
-    });
-    return withTrack.first;
-  }
-
-  Future<TrackAnalytics?> _load() async {
-    final rep = _representative();
-    _activityId = rep?.id;
-    if (rep?.track == null) return null;
-    try {
-      return await ref
-          .read(engineServiceProvider)
-          .analyzeTrack(points: rep!.track!);
-    } catch (_) {
-      return null;
+    final engine = ref.read(engineServiceProvider);
+    final samples = <TrackAnalytics>[];
+    for (final a in withTrack.take(8)) {
+      try {
+        final analytics = await engine.analyzeTrack(points: a.track!);
+        if (analytics.quality.hasElevationData) samples.add(analytics);
+      } catch (_) {}
     }
+    if (samples.isEmpty) return null;
+    double? minV;
+    double? maxV;
+    var gainSum = 0.0;
+    var lossSum = 0.0;
+    var gainCount = 0;
+    var lossCount = 0;
+    for (final s in samples) {
+      if (s.elevationMinMeters case final v?) {
+        minV = minV == null ? v : (v < minV ? v : minV);
+      }
+      if (s.elevationMaxMeters case final v?) {
+        maxV = maxV == null ? v : (v > maxV ? v : maxV);
+      }
+      if (s.elevationGainMeters case final v?) {
+        gainSum += v;
+        gainCount++;
+      }
+      if (s.elevationLossMeters case final v?) {
+        lossSum += v;
+        lossCount++;
+      }
+    }
+    return _ElevationAggregate(
+      attempts: samples.length,
+      avgGain: gainCount == 0 ? null : gainSum / gainCount,
+      avgLoss: lossCount == 0 ? null : lossSum / lossCount,
+      minElevation: minV,
+      maxElevation: maxV,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final rep = _representative();
-    if (rep == null) return const SizedBox.shrink();
     final textTheme = Theme.of(context).textTheme;
-    return FutureBuilder<TrackAnalytics?>(
+    return FutureBuilder<_ElevationAggregate?>(
       future: _future,
       builder: (context, snapshot) {
-        final analytics = snapshot.data;
-        if (analytics == null || !analytics.quality.hasElevationData) {
-          return const SizedBox.shrink();
-        }
+        final agg = snapshot.data;
+        if (agg == null) return const SizedBox.shrink();
         String fmt(double? v) =>
             v == null ? '—' : '${v.toStringAsFixed(0)} m';
         return Column(
@@ -553,12 +570,12 @@ class _ElevationSummarySectionState
           children: [
             const SectionHeader(title: 'Elevation'),
             const SizedBox(height: AppSpacing.sm),
-            _ElevationRow(label: 'Ascent', value: fmt(analytics.elevationGainMeters)),
-            _ElevationRow(label: 'Descent', value: fmt(analytics.elevationLossMeters)),
-            _ElevationRow(label: 'Min elevation', value: fmt(analytics.elevationMinMeters)),
-            _ElevationRow(label: 'Max elevation', value: fmt(analytics.elevationMaxMeters)),
+            _ElevationRow(label: 'Avg ascent', value: fmt(agg.avgGain)),
+            _ElevationRow(label: 'Avg descent', value: fmt(agg.avgLoss)),
+            _ElevationRow(label: 'Min elevation', value: fmt(agg.minElevation)),
+            _ElevationRow(label: 'Max elevation', value: fmt(agg.maxElevation)),
             Text(
-              'From fastest recorded attempt with elevation data.',
+              'Aggregated from ${agg.attempts} attempt(s) with elevation data (engine-analyzed).',
               style: textTheme.bodySmall?.copyWith(
                 color: AppColors.textMuted,
               ),
@@ -568,6 +585,21 @@ class _ElevationSummarySectionState
       },
     );
   }
+}
+
+class _ElevationAggregate {
+  const _ElevationAggregate({
+    required this.attempts,
+    required this.avgGain,
+    required this.avgLoss,
+    required this.minElevation,
+    required this.maxElevation,
+  });
+  final int attempts;
+  final double? avgGain;
+  final double? avgLoss;
+  final double? minElevation;
+  final double? maxElevation;
 }
 
 class _ElevationRow extends StatelessWidget {
