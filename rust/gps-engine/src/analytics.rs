@@ -924,6 +924,24 @@ mod tests {
         assert_eq!(stats.improvement_seconds, Some(-100.0));
     }
 
+    #[test]
+    fn pb_progression_marks_strict_chronological_improvers() {
+        let a = attempts(&[(1_000, 1500.0), (2_000, 1400.0), (3_000, 1450.0)]);
+        let events = pb_progression(&a, Some(1470.0));
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].index, 1);
+        assert_eq!(events[0].previous_seconds, Some(1470.0));
+    }
+
+    #[test]
+    fn attempt_rank_excludes_ineligible_and_is_deterministic() {
+        let a = attempts(&[(1_000, 1500.0), (2_000, 0.0), (3_000, 1400.0), (4_000, 1400.0)]);
+        assert_eq!(attempt_rank(&a, 2), Some(1));
+        assert_eq!(attempt_rank(&a, 3), Some(2));
+        assert_eq!(attempt_rank(&a, 0), Some(3));
+        assert_eq!(attempt_rank(&a, 1), None);
+    }
+
     fn flat_track(meters: f64, seconds: f64) -> Vec<TrackPoint> {
         let mut points = Vec::new();
         let mut d = 0.0;
