@@ -1449,6 +1449,95 @@ pub extern "C" fn gps_pace_analysis(
     })
 }
 
+/// Computes PB progression events for route attempts.
+///
+/// In: `i64 seed_best_ms (-1 none), u32 n, n*(i64 started_ms, f64 duration_s)`.
+/// Out: `u32 m, m*(u32 index, u8 has_previous, f64 previous_s)`.
+#[unsafe(no_mangle)]
+pub extern "C" fn gps_route_progression(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    use crate::analytics::{pb_progression, Attempt};
+
+    dispatch(input, input_len, output, output_len, |data| {
+        let mut rd = Rd::new(data);
+        let seed_raw = rd.i64()?;
+        let seed = if seed_raw < 0 {
+            None
+        } else {
+            Some(seed_raw as f64 / 1000.0)
+        };
+        let n = rd.u32()? as usize;
+        let mut attempts: Vec<Attempt> = Vec::with_capacity(n);
+        for _ in 0..n {
+            let started = rd.i64()?;
+            let dur = rd.f64()?;
+            attempts.push((started, dur, f64::NAN));
+        }
+        rd.done("route_progression")?;
+        let events = pb_progression(&attempts, seed);
+        let mut w = Wr::default();
+        w.u32(events.len() as u32);
+        for e in events {
+            w.u32(e.index as u32);
+            match e.previous_seconds {
+                Some(p) => {
+                    w.u8(1);
+                    w.f64(p);
+                }
+                None => {
+                    w.u8(0);
+                    w.f64(0.0);
+                }
+            }
+        }
+        Ok(w.data)
+    })
+}
+
+/// Computes 1-based rank of a target attempt among attempts ordered by
+/// fastest duration.
+///
+/// In: `u32 target_index, u32 n, n*(i64 started_ms, f64 duration_s)`.
+/// Out: `u8 has_rank, u32 rank`.
+#[unsafe(no_mangle)]
+pub extern "C" fn gps_route_rank(
+    input: *const u8,
+    input_len: usize,
+    output: *mut *mut u8,
+    output_len: *mut usize,
+) -> c_int {
+    use crate::analytics::{attempt_rank, Attempt};
+
+    dispatch(input, input_len, output, output_len, |data| {
+        let mut rd = Rd::new(data);
+        let target = rd.u32()? as usize;
+        let n = rd.u32()? as usize;
+        let mut attempts: Vec<Attempt> = Vec::with_capacity(n);
+        for _ in 0..n {
+            let started = rd.i64()?;
+            let dur = rd.f64()?;
+            attempts.push((started, dur, f64::NAN));
+        }
+        rd.done("route_rank")?;
+        let mut w = Wr::default();
+        match attempt_rank(&attempts, target) {
+            Some(rank) => {
+                w.u8(1);
+                w.u32(rank);
+            }
+            None => {
+                w.u8(0);
+                w.u32(0);
+            }
+        }
+        Ok(w.data)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

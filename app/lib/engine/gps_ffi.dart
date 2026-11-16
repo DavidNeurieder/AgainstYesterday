@@ -60,6 +60,8 @@ final class GpsEngineFfi {
   late final _DartFn _routeInfo = _bind('gps_route_info');
   late final _DartFn _analyzeTrack = _bind('gps_analyze_track');
   late final _DartFn _routeStats = _bind('gps_route_stats');
+  late final _DartFn _routeProgression = _bind('gps_route_progression');
+  late final _DartFn _routeRank = _bind('gps_route_rank');
   late final _DartFn _paceAnalysis = _bind('gps_pace_analysis');
   late final _DartFn _liveNew = _bind('gps_live_new');
   late final _DartFn _livePush = _bind('gps_live_push');
@@ -124,6 +126,10 @@ final class GpsEngineFfi {
       _invoke(_analyzeTrack, request, 'analyze_track');
   Uint8List routeStats(Uint8List request) =>
       _invoke(_routeStats, request, 'route_stats');
+  Uint8List routeProgression(Uint8List request) =>
+      _invoke(_routeProgression, request, 'route_progression');
+  Uint8List routeRank(Uint8List request) =>
+      _invoke(_routeRank, request, 'route_rank');
   Uint8List paceAnalysis(Uint8List request) =>
       _invoke(_paceAnalysis, request, 'pace_analysis');
   Uint8List liveNew(Uint8List request) =>

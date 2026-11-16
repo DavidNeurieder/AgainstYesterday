@@ -25,7 +25,7 @@ import '../../recording/application/recording_controller.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/pace_analysis_provider.dart';
-import '../../routes/application/route_attempts.dart';
+import '../../../app/dependencies.dart';
 import 'gap_chart.dart';
 
 /// Base stagger step between the result stats' entrance (§30).
@@ -58,8 +58,26 @@ class ResultScreen extends ConsumerWidget {
     final splits = pace.splits;
     final gapCurve = pace.gapCurve;
 
-    // Ranking: how many saved eligible runs on this route are faster.
-    final rank = _rank(route, activities);
+    final rankFuture = () async {
+      if (route == null || activities.isEmpty) return null;
+      final attempts = [
+        for (final a in activities)
+          if (a.routeId == route.id && a.duration != null && !a.isExample) a,
+      ];
+      if (attempts.isEmpty || route.isExample) return null;
+      final latest = activities.first;
+      final rank = await ref.read(engineServiceProvider).computeRouteAttemptRank(
+            route: route,
+            attempts: attempts,
+            activityId: latest.id,
+          );
+      if (rank == null) return null;
+      final suffix = switch (rank % 100) {
+        11 || 12 || 13 => 'th',
+        _ => switch (rank % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' },
+      };
+      return 'Your $rank$suffix fastest run on this route';
+    }();
 
     return Scaffold(
       body: SafeArea(
@@ -157,19 +175,28 @@ class ResultScreen extends ConsumerWidget {
                 child: SplitRow(split: entry.value),
               ),
           ],
-          if (rank != null) ...[
-            const SizedBox(height: AppSpacing.xl),
-            StaggeredIn(
-              delay: const Duration(milliseconds: 540),
-              child: Text(
-                rank,
-                textAlign: TextAlign.center,
-                style: textTheme.bodyLarge?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          ],
+          FutureBuilder<String?>(
+            future: rankFuture,
+            builder: (context, snapshot) {
+              final rank = snapshot.data;
+              if (rank == null) return const SizedBox.shrink();
+              return Column(
+                children: [
+                  const SizedBox(height: AppSpacing.xl),
+                  StaggeredIn(
+                    delay: const Duration(milliseconds: 540),
+                    child: Text(
+                      rank,
+                      textAlign: TextAlign.center,
+                      style: textTheme.bodyLarge?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
           const SizedBox(height: AppSpacing.xl),
           // M20 §29: after a route race, RACE AGAIN drops back into that
           // route's pre-race (fresh session + the 3-2-1-GO countdown); DONE
@@ -219,17 +246,7 @@ class ResultScreen extends ConsumerWidget {
   }
 }
 
-String? _rank(Route? route, List<Activity> history) {
-  if (route == null || history.isEmpty) return null;
-  // The most recently saved activity for this completion is expected to be
-  // present in history; rank that activity against eligible route attempts.
-  final latest = history.first;
-  return routeAttemptRankLabel(
-    activities: history,
-    route: route,
-    activityId: latest.id,
-  );
-}
+// ranking computed via engine in build.
 
 class _EmptyResult extends StatelessWidget {
   const _EmptyResult();

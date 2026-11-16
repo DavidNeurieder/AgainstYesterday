@@ -442,6 +442,59 @@ class FakeEngineService implements EngineService {
   }
 
   @override
+  Future<List<RouteProgressionEvent>> computeRouteProgression({
+    required Route route,
+    required List<Activity> attempts,
+  }) async {
+    final indexed = [for (var i = 0; i < attempts.length; i++) (i, attempts[i])];
+    indexed.sort((a, b) => a.$2.startedAt.compareTo(b.$2.startedAt));
+    var standing = route.isExample ? double.infinity : (route.personalBest?.seconds ?? double.infinity);
+    Elapsed? standingElapsed = route.isExample ? null : route.personalBest;
+    final events = <RouteProgressionEvent>[];
+    for (final e in indexed) {
+      final a = e.$2;
+      final d = a.duration;
+      if (d == null) continue;
+      if (d.seconds < standing) {
+        events.add(RouteProgressionEvent(activity: a, previous: standingElapsed));
+        standing = d.seconds;
+        standingElapsed = d;
+      }
+    }
+    return events;
+  }
+
+  @override
+  Future<int?> computeRouteAttemptRank({
+    required Route route,
+    required List<Activity> attempts,
+    required String activityId,
+  }) async {
+    var target = -1;
+    for (var i = 0; i < attempts.length; i++) {
+      if (attempts[i].id == activityId) {
+        target = i;
+        break;
+      }
+    }
+    if (target < 0) return null;
+    final ranked = [for (var i = 0; i < attempts.length; i++) (i, attempts[i])]
+      ..sort((a, b) {
+        final da = a.$2.duration?.seconds ?? double.infinity;
+        final db = b.$2.duration?.seconds ?? double.infinity;
+        final cmp = da.compareTo(db);
+        if (cmp != 0) return cmp;
+        final t = a.$2.startedAt.compareTo(b.$2.startedAt);
+        if (t != 0) return t;
+        return a.$1.compareTo(b.$1);
+      });
+    for (var i = 0; i < ranked.length; i++) {
+      if (ranked[i].$1 == target) return i + 1;
+    }
+    return null;
+  }
+
+  @override
   Future<PaceAnalysis> computePaceAnalysis({
     required Activity activity,
     required Route route,

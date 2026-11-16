@@ -413,6 +413,65 @@ pub struct RouteStats {
 /// A timed attempt: (started_at_ms, duration_seconds, distance_meters or NaN).
 pub type Attempt = (i64, f64, f64);
 
+/// One PB progression event derived from ordered attempts.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ProgressionEvent {
+    /// Index of the improving attempt in the original attempt slice.
+    pub index: usize,
+    /// Previous best duration in seconds, or `None` for the first improver.
+    pub previous_seconds: Option<f64>,
+}
+
+/// Computes PB progression events for [attempts], preserving original indices.
+/// Only attempts that strictly improve the standing best (seed included) emit
+/// an event.
+#[must_use]
+pub fn pb_progression(attempts: &[Attempt], seed_best_seconds: Option<f64>) -> Vec<ProgressionEvent> {
+    let mut ordered: Vec<(usize, &Attempt)> = attempts.iter().enumerate().collect();
+    ordered.sort_by_key(|(_, a)| a.0);
+    let mut standing = seed_best_seconds.unwrap_or(f64::INFINITY);
+    let mut events = Vec::new();
+    for (index, a) in ordered {
+        let seconds = a.1;
+        if seconds < standing {
+            let previous = if standing.is_finite() {
+                Some(standing)
+            } else {
+                None
+            };
+            events.push(ProgressionEvent {
+                index,
+                previous_seconds: previous,
+            });
+            standing = seconds;
+        }
+    }
+    events
+}
+
+/// 1-based rank of attempt at [target_index] among [attempts] ordered by
+/// fastest duration first (deterministic tiebreak: earlier start, then lower
+/// index), or `None` if out of range.
+#[must_use]
+pub fn attempt_rank(attempts: &[Attempt], target_index: usize) -> Option<u32> {
+    if target_index >= attempts.len() {
+        return None;
+    }
+    let mut ranked: Vec<(usize, &Attempt)> = attempts.iter().enumerate().collect();
+    ranked.sort_by(|(ia, a), (ib, b)| {
+        a.1.partial_cmp(&b.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+            .then_with(|| ia.cmp(ib))
+    });
+    for (rank, (index, _)) in ranked.into_iter().enumerate() {
+        if index == target_index {
+            return Some(rank as u32 + 1);
+        }
+    }
+    None
+}
+
 impl RouteStats {
     /// Derives the statistics from the route's seeded PB/run count and its
     /// timed attempts.

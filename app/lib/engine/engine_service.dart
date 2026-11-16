@@ -100,6 +100,20 @@ abstract class EngineService {
     required double loopLengthM,
   });
 
+  /// Computes PB progression events for eligible [attempts] on [route].
+  Future<List<RouteProgressionEvent>> computeRouteProgression({
+    required Route route,
+    required List<Activity> attempts,
+  });
+
+  /// 1-based fastest-run rank of [activityId] among eligible [attempts], or
+  /// null when the activity is not ranked.
+  Future<int?> computeRouteAttemptRank({
+    required Route route,
+    required List<Activity> attempts,
+    required String activityId,
+  });
+
   /// Compares attempts section-by-section along a canonical route.
   Future<List<RouteSegmentComparison>> compareRouteSegments({
     required List<Attempt> attempts,

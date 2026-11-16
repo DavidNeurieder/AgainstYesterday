@@ -978,3 +978,12 @@ class PaceAnalysis {
   /// Gap-to-PB curve, sampled every 100 m.
   final List<GapPoint> gapCurve;
 }
+
+/// One PB progression event: [activity] set a new best, improving on
+/// [previous] (null for the first recorded best).
+class RouteProgressionEvent {
+  const RouteProgressionEvent({required this.activity, this.previous});
+
+  final Activity activity;
+  final Elapsed? previous;
+}

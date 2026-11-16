@@ -259,6 +259,64 @@ final class RustEngineService implements EngineService {
     );
   }
   @override
+  Future<List<RouteProgressionEvent>> computeRouteProgression({
+    required Route route,
+    required List<Activity> attempts,
+  }) async {
+    final seed = route.isExample ? null : route.personalBest;
+    final req = _W();
+    req.i64(seed == null ? -1 : (seed.seconds * 1000).round());
+    req.u32(attempts.length);
+    for (final a in attempts) {
+      req.i64(a.startedAt.millisecondsSinceEpoch);
+      req.f64(a.duration?.seconds ?? 0.0);
+    }
+    final r = _R(_ffi.routeProgression(req.takeBytes()));
+    final count = r.u32();
+    final events = <RouteProgressionEvent>[];
+    for (var i = 0; i < count; i++) {
+      final index = r.u32();
+      final hasPrev = r.u8() == 1;
+      final prev = r.f64();
+      if (index >= attempts.length) continue;
+      events.add(
+        RouteProgressionEvent(
+          activity: attempts[index],
+          previous: hasPrev ? Elapsed.seconds(prev) : null,
+        ),
+      );
+    }
+    return events;
+  }
+
+  @override
+  Future<int?> computeRouteAttemptRank({
+    required Route route,
+    required List<Activity> attempts,
+    required String activityId,
+  }) async {
+    var target = -1;
+    for (var i = 0; i < attempts.length; i++) {
+      if (attempts[i].id == activityId) {
+        target = i;
+        break;
+      }
+    }
+    if (target < 0) return null;
+    final req = _W();
+    req.u32(target);
+    req.u32(attempts.length);
+    for (final a in attempts) {
+      req.i64(a.startedAt.millisecondsSinceEpoch);
+      req.f64(a.duration?.seconds ?? 0.0);
+    }
+    final r = _R(_ffi.routeRank(req.takeBytes()));
+    final hasRank = r.u8() == 1;
+    final rank = r.u32();
+    return hasRank ? rank : null;
+  }
+
+  @override
   Future<PaceAnalysis> computePaceAnalysis({
     required Activity activity,
     required Route route,
