@@ -119,6 +119,13 @@ void main() {
     expect(find.text('Personal Best'), findsOneWidget);
     expect(find.text('Average'), findsOneWidget);
     expect(find.text('Park 5K'), findsNothing);
+    // The overview names its performance basis and eligible-attempt count
+    // instead of presenting aggregate numbers with an implicit time basis.
+    expect(
+      find.textContaining('Performance time basis: duration'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('eligible attempt(s)'), findsOneWidget);
     await tester.pageBack();
     await tester.pumpAndSettle();
 

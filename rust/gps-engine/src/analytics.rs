@@ -908,6 +908,10 @@ mod tests {
         assert_eq!(stats.pb_seconds, Some(1470.0));
         assert_eq!(stats.average_seconds, Some(1500.0));
         assert_eq!(stats.last_seconds, Some(1500.0));
+        // The eligibility metadata must name the basis and only count the
+        // attempts that actually fed the aggregates.
+        assert_eq!(stats.eligible_attempt_count, 1);
+        assert_eq!(stats.time_basis, "duration");
     }
 
     #[test]

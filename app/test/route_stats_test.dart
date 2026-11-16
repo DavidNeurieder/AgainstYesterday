@@ -40,6 +40,10 @@ void main() {
     expect(stats.pb?.seconds, 1470);
     expect(stats.average, isNull);
     expect(stats.last, isNull);
+    // Even an empty history names the performance basis and reports zero
+    // eligible attempts instead of leaving the metadata implicit.
+    expect(stats.eligibleAttemptCount, 0);
+    expect(stats.timeBasis, 'duration');
   });
 
   test('history wins over the seed for runs; PB stays the best time', () async {
@@ -99,6 +103,8 @@ void main() {
     expect(stats.pb?.seconds, 1455);
     expect(stats.average?.seconds, 1455);
     expect(stats.last?.seconds, 1455);
+    expect(stats.eligibleAttemptCount, 1);
+    expect(stats.timeBasis, 'duration');
   });
 
   test('median and spread are computed from attempt times', () async {

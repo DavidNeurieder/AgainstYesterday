@@ -77,24 +77,11 @@ class ResultScreen extends ConsumerWidget {
             attempts: attempts,
             activityId: latest.id,
           );
-      if (rank == null) {
-        // Fallback for ineligible/edge cases: rank among timed attempts.
-        final ranked = [...attempts]..sort((a, b) {
-            final da = a.duration?.seconds ?? double.infinity;
-            final db = b.duration?.seconds ?? double.infinity;
-            final cmp = da.compareTo(db);
-            if (cmp != 0) return cmp;
-            return b.startedAt.compareTo(a.startedAt);
-          });
-        final idx = ranked.indexWhere((a) => a.id == latest.id);
-        if (idx < 0) return null;
-        final n = idx + 1;
-        final suffix = switch (n % 100) {
-          11 || 12 || 13 => 'th',
-          _ => switch (n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' },
-        };
-        return 'Your $n$suffix fastest run on this route';
-      }
+      // The engine owns eligibility and tie-breaking. `null` means the attempt
+      // is not rankable (no positive duration, or filtered out); rendering a
+      // Dart-side fallback ranking here would duplicate that math with a
+      // different order and present an ineligible run as ranked.
+      if (rank == null) return null;
       final suffix = switch (rank % 100) {
         11 || 12 || 13 => 'th',
         _ => switch (rank % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' },

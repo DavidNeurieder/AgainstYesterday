@@ -1,24 +1,40 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/app/dependencies.dart';
+import 'package:against_yesterday/engine/engine_service.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
+import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
 import 'package:against_yesterday/widgets/performance_gap.dart';
 
 import 'test_catalog.dart';
 
+/// An engine whose ranking refuses the attempt, for the honesty test below.
+class _UnrankedEngine extends FakeEngineService {
+  @override
+  Future<int?> computeRouteAttemptRank({
+    required Route route,
+    required List<Activity> attempts,
+    required String activityId,
+  }) async =>
+      null;
+}
+
 void main() {
   /// The app behind a seeded catalog, so the record flow has a route to
   /// race — the app ships with an empty catalog.
-  Widget pumpedApp() => ProviderScope(
+  Widget pumpedApp({EngineService? engine}) => ProviderScope(
         overrides: [
           persistenceStoreProvider.overrideWithValue(
             seededStore(routes: [riverLoopRoute]),
           ),
+          if (engine != null) engineServiceProvider.overrideWithValue(engine),
         ],
         child: const AgainstYesterdayApp(),
       );
@@ -125,6 +141,11 @@ void main() {
     await tester.tap(find.text('VIEW RESULT'));
     await tester.pumpAndSettle();
     await waitReady(tester); // no GPS frame needed at the result screen
+    // The ranking sits with the performance summary, not after the splits:
+    // it must be built without scrolling on a normal viewport, even when the
+    // result also carries a gap chart and per-km splits.
+    expect(find.byKey(const ValueKey('result-rank')), findsOneWidget);
+    expect(find.textContaining('fastest run'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Splits'), 200);
     expect(find.text('Splits'), findsOneWidget);
 
@@ -152,5 +173,34 @@ void main() {
     // first screen, so bring it into view like the splits above.
     await tester.scrollUntilVisible(find.textContaining('Run on'), 200);
     expect(find.textContaining('Run on'), findsOneWidget);
+  });
+
+  testWidgets('an unrankable attempt shows no ranking label', (tester) async {
+    // The engine owns eligibility and tie-breaking: when it declines to rank
+    // the attempt (e.g. no positive duration), the result must not invent a
+    // Dart-side rank that disagrees with the engine's ordering.
+    await tester.pumpWidget(pumpedApp(engine: _UnrankedEngine()));
+    await tester.pumpAndSettle();
+
+    await raceFromLibrary(tester);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await waitReady(tester);
+    await tester.tap(find.text('START'));
+    await countdown(tester);
+    await tester.pump(const Duration(seconds: 2));
+
+    await tester.tap(find.text('FINISH'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('confirm-finish')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('VIEW RESULT'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PERFORMANCE'), findsOneWidget);
+    expect(find.byKey(const ValueKey('result-rank')), findsNothing);
+    expect(find.textContaining('fastest run'), findsNothing);
   });
 }
