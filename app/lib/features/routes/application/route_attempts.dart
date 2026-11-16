@@ -13,13 +13,14 @@ import '../../../engine/models.dart';
 
 /// Whether [activity] is an eligible timed attempt on [routeId].
 ///
-/// Personal aggregates exclude example/demo activities and require a recorded
-/// duration. Distance/quality gates can be tightened later without scattering
-/// the predicate.
+/// Personal aggregates exclude example/demo activities and require a positive
+/// recorded duration. Distance/quality gates can be tightened later without
+/// scattering the predicate.
 bool isEligibleRouteAttempt(Activity activity, String routeId) {
   if (activity.isExample) return false;
   if (activity.routeId != routeId) return false;
-  return activity.duration != null;
+  final duration = activity.duration;
+  return duration != null && duration.seconds > 0;
 }
 
 /// Eligible timed attempts for [route], unordered.
@@ -49,14 +50,15 @@ List<Activity> chronologicalEligibleAttemptsForRoute(
 typedef PbProgressionEvent = ({Activity activity, Elapsed? previous});
 
 /// Computes PB progression events from [attempts] (any order), using each
-/// attempt's duration as the performance time. Only attempts that strictly
-/// improve the standing best emit an event.
+/// attempt's duration as the performance time. Only attempts with positive
+/// duration that strictly improve the standing best emit an event.
 List<PbProgressionEvent> computePbProgression(
   Iterable<Activity> attempts, {
   double? seedBestSeconds,
 }) {
   final timed = [
-    for (final a in attempts) if (a.duration != null) a,
+    for (final a in attempts)
+      if (a.duration != null && a.duration!.seconds > 0) a,
   ]..sort((a, b) => a.startedAt.compareTo(b.startedAt));
 
   final events = <PbProgressionEvent>[];

@@ -70,8 +70,8 @@ class HistoryPb {
 ///
 /// A run earns a trophy when it strictly beat everything that came before it —
 /// its seeded route PB included — so an early run keeps its badge even when a
-/// later run takes the overall best. Example routes/activities do not
-/// contribute to personal PBs.
+/// later run takes the overall best. Example routes/activities and attempts
+/// without a positive duration do not contribute to personal PBs.
 HistoryPb computeHistoryPb(List<Activity> activities, List<Route> routes) {
   final routesById = {for (final r in routes) r.id: r};
   final seed = <String, double>{
@@ -86,7 +86,7 @@ HistoryPb computeHistoryPb(List<Activity> activities, List<Route> routes) {
     if (activity.isExample) continue;
     final routeId = activity.routeId;
     final duration = activity.duration;
-    if (routeId == null || duration == null) continue;
+    if (routeId == null || duration == null || duration.seconds <= 0) continue;
     final route = routesById[routeId];
     if (route == null || route.isExample) continue;
     (attemptsByRoute[routeId] ??= []).add(activity);

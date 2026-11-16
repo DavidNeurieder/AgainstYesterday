@@ -40,12 +40,8 @@ Activity _attempt({
 void main() {
   final engine = FakeEngineService();
 
-  group('zero-distance attempts', () {
-    test('a 0 s smartphone-in-pocket attempt becomes the PB but moves no '
-        'distance', () async {
-      // The statistics treat duration as the PB axis, whatever the distance:
-      // a 0 s attempt sorts first. Pinning the behaviour makes the surprise
-      // explicit rather than leaving it to be discovered in production.
+  group('degenerate attempts', () {
+    test('a 0 s smartphone-in-pocket attempt is excluded from aggregates', () async {
       final stats = await engine.computeRouteStats(
         route: _route(pb: const Elapsed.seconds(1470)),
         attempts: [
@@ -58,8 +54,9 @@ void main() {
         ],
       );
 
-      expect(stats.pb?.seconds, 0);
-      expect(stats.last?.seconds, 0);
+      expect(stats.pb?.seconds, 1470);
+      expect(stats.last, isNull);
+      expect(stats.average, isNull);
       expect(stats.runs, 12);
     });
 
@@ -82,13 +79,12 @@ void main() {
         ],
       );
 
-      expect(stats.average?.seconds, closeTo(750, 1e-9));
+      expect(stats.average?.seconds, closeTo(1500, 1e-9));
+      expect(stats.pb?.seconds, 1470);
+      expect(stats.last?.seconds, 1500);
     });
 
-    test('a zero-duration attempt is not a history trophy', () {
-      // The trophy marks a *chronological improver*. A 0 s attempt is
-      // "fastest" by the numbers, so the grouping must not silently drop it —
-      // but it also must not invent a second improver behind it.
+    test('a zero-duration attempt earns no history trophy', () {
       final history = computeHistoryPb(
         [
           _attempt(
@@ -101,8 +97,9 @@ void main() {
         [_route(pb: const Elapsed.seconds(1470))],
       );
 
-      expect(history.bestSeconds[FakeEngineService.riverLoopId], 0);
-      expect(history.pbSetters, contains('standstill'));
+      expect(history.bestSeconds[FakeEngineService.riverLoopId], 1470);
+      expect(history.pbSetters, isNot(contains('standstill')));
+      expect(history.pbSetters, isEmpty);
     });
 
     test('an activity with no duration is skipped, not treated as zero', () async {
@@ -119,8 +116,6 @@ void main() {
         ],
       );
 
-      // No duration means no time axis: the seed PB stands and the average
-      // ignores the attempt entirely (rather than averaging in a 0).
       expect(stats.pb?.seconds, 1470);
       expect(stats.average, isNull);
       expect(stats.last, isNull);

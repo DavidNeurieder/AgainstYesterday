@@ -299,11 +299,13 @@ class FakeEngineService implements EngineService {
     required Route route,
     required List<Activity> attempts,
   }) async {
-    final durations = <Elapsed>[
+    final eligibleAttempts = [
       for (final a in attempts)
-        if (a.duration != null) a.duration!,
+        if (a.duration != null && a.duration!.seconds > 0) a,
     ];
-    durations.sort((a, b) => a.seconds.compareTo(b.seconds));
+    final durations = <Elapsed>[
+      for (final a in eligibleAttempts) a.duration!,
+    ]..sort((a, b) => a.seconds.compareTo(b.seconds));
 
     final fastest = durations.isNotEmpty ? durations.first : null;
     final slowest = durations.isNotEmpty ? durations.last : null;
@@ -352,15 +354,14 @@ class FakeEngineService implements EngineService {
         ? null
         : Elapsed.seconds(slowest.seconds - fastest.seconds);
 
-    final trend = _routeTrend(attempts);
+    final trend = _routeTrend(eligibleAttempts);
 
-    final recentSorted = [...attempts]..sort(
+    final recentSorted = [...eligibleAttempts]..sort(
         (a, b) => b.startedAt.compareTo(a.startedAt),
       );
     final recentTimed = [
-      for (final a in recentSorted)
-        if (a.duration != null) a.duration!,
-    ].take(5).toList();
+      for (final a in recentSorted.take(5)) a.duration!,
+    ];
     final recentAverage = recentTimed.isEmpty
         ? null
         : Elapsed.seconds(
@@ -375,33 +376,31 @@ class FakeEngineService implements EngineService {
           : (recentAverage.seconds > average.seconds ? 'slowing' : 'steady');
     }
 
-    final recentAttempts = [...attempts]..sort(
+    final recentAttempts = [...eligibleAttempts]..sort(
         (a, b) => b.startedAt.compareTo(a.startedAt),
       );
-    final last = recentAttempts.isNotEmpty && recentAttempts.first.duration != null
+    final last = recentAttempts.isNotEmpty
         ? recentAttempts.first.duration
         : null;
 
-    final runs = attempts.isEmpty
+    final runs = eligibleAttempts.isEmpty
         ? route.attemptCount
-        : math.max(route.attemptCount, attempts.length);
+        : math.max(route.attemptCount, eligibleAttempts.length);
 
     var totalDistanceMeters = 0.0;
     var totalTimeSeconds = 0.0;
     var paceDistanceMeters = 0.0;
     double? bestPaceSecondsPerKm;
-    for (final a in attempts) {
-      final dur = a.duration?.seconds;
-      if (dur != null) totalTimeSeconds += dur;
+    for (final a in eligibleAttempts) {
+      final dur = a.duration!.seconds;
+      totalTimeSeconds += dur;
       final dist = a.distance?.meters;
       if (dist != null && dist > 0) {
         totalDistanceMeters += dist;
         paceDistanceMeters += dist;
-        if (dur != null && dur > 0) {
-          final pace = dur / (dist / 1000.0);
-          if (bestPaceSecondsPerKm == null || pace < bestPaceSecondsPerKm) {
-            bestPaceSecondsPerKm = pace;
-          }
+        final pace = dur / (dist / 1000.0);
+        if (bestPaceSecondsPerKm == null || pace < bestPaceSecondsPerKm) {
+          bestPaceSecondsPerKm = pace;
         }
       }
     }
@@ -410,14 +409,11 @@ class FakeEngineService implements EngineService {
             ? totalTimeSeconds / (paceDistanceMeters / 1000.0)
             : null;
     double? improvementSeconds;
-    final chronological = [...attempts]
+    final chronological = [...eligibleAttempts]
       ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
     if (chronological.length >= 2) {
-      final first = chronological.first.duration?.seconds;
-      final latest = chronological.last.duration?.seconds;
-      if (first != null && latest != null) {
-        improvementSeconds = first - latest;
-      }
+      improvementSeconds =
+          chronological.first.duration!.seconds - chronological.last.duration!.seconds;
     }
 
     return RouteStats(
@@ -454,7 +450,7 @@ class FakeEngineService implements EngineService {
     for (final e in indexed) {
       final a = e.$2;
       final d = a.duration;
-      if (d == null) continue;
+      if (d == null || d.seconds <= 0) continue;
       if (d.seconds < standing) {
         events.add(RouteProgressionEvent(activity: a, previous: standingElapsed));
         standing = d.seconds;
@@ -478,11 +474,14 @@ class FakeEngineService implements EngineService {
       }
     }
     if (target < 0) return null;
-    final ranked = [for (var i = 0; i < attempts.length; i++) (i, attempts[i])]
-      ..sort((a, b) {
-        final da = a.$2.duration?.seconds ?? double.infinity;
-        final db = b.$2.duration?.seconds ?? double.infinity;
-        final cmp = da.compareTo(db);
+    final targetDur = attempts[target].duration?.seconds;
+    if (targetDur == null || targetDur <= 0) return null;
+    final ranked = [
+      for (var i = 0; i < attempts.length; i++)
+        if (attempts[i].duration != null && attempts[i].duration!.seconds > 0)
+          (i, attempts[i]),
+    ]..sort((a, b) {
+        final cmp = a.$2.duration!.seconds.compareTo(b.$2.duration!.seconds);
         if (cmp != 0) return cmp;
         final t = a.$2.startedAt.compareTo(b.$2.startedAt);
         if (t != 0) return t;

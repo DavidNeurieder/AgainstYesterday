@@ -423,16 +423,22 @@ pub struct ProgressionEvent {
 }
 
 /// Computes PB progression events for [attempts], preserving original indices.
-/// Only attempts that strictly improve the standing best (seed included) emit
-/// an event.
+/// Only attempts with positive duration that strictly improve the standing best
+/// (seed included) emit an event.
 #[must_use]
-pub fn pb_progression(attempts: &[Attempt], seed_best_seconds: Option<f64>) -> Vec<ProgressionEvent> {
+pub fn pb_progression(
+    attempts: &[Attempt],
+    seed_best_seconds: Option<f64>,
+) -> Vec<ProgressionEvent> {
     let mut ordered: Vec<(usize, &Attempt)> = attempts.iter().enumerate().collect();
     ordered.sort_by_key(|(_, a)| a.0);
     let mut standing = seed_best_seconds.unwrap_or(f64::INFINITY);
     let mut events = Vec::new();
     for (index, a) in ordered {
         let seconds = a.1;
+        if !seconds.is_finite() || seconds <= 0.0 {
+            continue;
+        }
         if seconds < standing {
             let previous = if standing.is_finite() {
                 Some(standing)
@@ -449,15 +455,22 @@ pub fn pb_progression(attempts: &[Attempt], seed_best_seconds: Option<f64>) -> V
     events
 }
 
-/// 1-based rank of attempt at [target_index] among [attempts] ordered by
-/// fastest duration first (deterministic tiebreak: earlier start, then lower
-/// index), or `None` if out of range.
+/// 1-based rank of attempt at [target_index] among eligible attempts (positive
+/// duration) ordered by fastest duration first (deterministic tiebreak: earlier
+/// start, then lower index), or `None` if out of range/ineligible.
 #[must_use]
 pub fn attempt_rank(attempts: &[Attempt], target_index: usize) -> Option<u32> {
     if target_index >= attempts.len() {
         return None;
     }
-    let mut ranked: Vec<(usize, &Attempt)> = attempts.iter().enumerate().collect();
+    if !(attempts[target_index].1.is_finite() && attempts[target_index].1 > 0.0) {
+        return None;
+    }
+    let mut ranked: Vec<(usize, &Attempt)> = attempts
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| a.1.is_finite() && a.1 > 0.0)
+        .collect();
     ranked.sort_by(|(ia, a), (ib, b)| {
         a.1.partial_cmp(&b.1)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -474,10 +487,17 @@ pub fn attempt_rank(attempts: &[Attempt], target_index: usize) -> Option<u32> {
 
 impl RouteStats {
     /// Derives the statistics from the route's seeded PB/run count and its
-    /// timed attempts.
+    /// timed attempts. Attempts with non-positive duration are excluded from
+    /// performance aggregates.
     #[must_use]
     pub fn compute(pb_seconds: Option<f64>, attempt_count: u32, attempts: &[Attempt]) -> Self {
-        let mut durations: Vec<f64> = attempts.iter().map(|a| a.1).collect();
+        let eligible: Vec<Attempt> = attempts
+            .iter()
+            .copied()
+            .filter(|a| a.1.is_finite() && a.1 > 0.0)
+            .collect();
+
+        let mut durations: Vec<f64> = eligible.iter().map(|a| a.1).collect();
         durations.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let fastest = durations.first().copied();
@@ -517,11 +537,9 @@ impl RouteStats {
             _ => None,
         };
 
-        // trend: slope over chronological order
-        let trend = trend_seconds_per_run(attempts);
+        let trend = trend_seconds_per_run(&eligible);
 
-        // recent average: newest up to 5
-        let mut sorted_by_time: Vec<&Attempt> = attempts.iter().collect();
+        let mut sorted_by_time: Vec<&Attempt> = eligible.iter().collect();
         sorted_by_time.sort_by_key(|a| std::cmp::Reverse(a.0));
         let recent: Vec<f64> = sorted_by_time.iter().take(5).map(|a| a.1).collect();
         let recent_average = if recent.is_empty() {
@@ -537,25 +555,25 @@ impl RouteStats {
             _ => None,
         };
 
-        let last = if attempts.is_empty() {
+        let last = if eligible.is_empty() {
             None
         } else {
-            let mut by_time = attempts.to_vec();
+            let mut by_time = eligible.clone();
             by_time.sort_by_key(|a| std::cmp::Reverse(a.0));
             by_time.first().map(|a| a.1)
         };
 
-        let runs = if attempts.is_empty() {
+        let runs = if eligible.is_empty() {
             attempt_count
         } else {
-            attempt_count.max(attempts.len() as u32)
+            attempt_count.max(eligible.len() as u32)
         };
 
         let mut total_distance_meters = 0.0;
         let mut total_time_seconds = 0.0;
         let mut pace_distance_meters = 0.0;
         let mut best_pace_seconds_per_km: Option<f64> = None;
-        for a in attempts {
+        for a in &eligible {
             total_time_seconds += a.1;
             if a.2.is_finite() && a.2 > 0.0 {
                 total_distance_meters += a.2;
@@ -576,8 +594,8 @@ impl RouteStats {
             None
         };
 
-        let improvement_seconds = if attempts.len() >= 2 {
-            let mut chronological = attempts.to_vec();
+        let improvement_seconds = if eligible.len() >= 2 {
+            let mut chronological = eligible.clone();
             chronological.sort_by_key(|a| a.0);
             let first = chronological.first().map(|a| a.1);
             let latest = chronological.last().map(|a| a.1);
@@ -875,11 +893,12 @@ mod tests {
     }
 
     #[test]
-    fn zero_duration_attempts_are_included() {
+    fn zero_duration_attempts_are_excluded_from_aggregates() {
         let a = attempts(&[(1_000, 0.0), (2_000, 1500.0)]);
         let stats = RouteStats::compute(Some(1470.0), 12, &a);
-        assert_eq!(stats.pb_seconds, Some(0.0));
-        assert_eq!(stats.average_seconds, Some(750.0));
+        assert_eq!(stats.pb_seconds, Some(1470.0));
+        assert_eq!(stats.average_seconds, Some(1500.0));
+        assert_eq!(stats.last_seconds, Some(1500.0));
     }
 
     #[test]
