@@ -9,7 +9,7 @@
 /// and when it happened — taps open the activity detail.
 library;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -21,6 +21,8 @@ import '../../../core/ui/app_states.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import '../../../app/dependencies.dart';
+import '../../routes/application/route_stats_provider.dart';
 import '../../settings/application/gpx_export.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
@@ -49,81 +51,122 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         if (!a.isExample) a,
     ];
     final routes = ref.watch(routeRepositoryProvider);
-    final pb = computeHistoryPb(activities, routes);
+    final statsIndex = ref.watch(routeStatsIndexProvider);
+    return FutureBuilder<HistoryPb>(
+      future: _computeHistoryPb(ref, activities, routes, statsIndex),
+      builder: (context, snapshot) {
+        final pb = snapshot.data ??
+            const HistoryPb(pbSetters: <String>{}, bestSeconds: <String, double>{});
 
-    final filtered = <Activity>[
-      for (final activity in activities)
-        if ((_routeFilter == null || activity.routeId == _routeFilter) &&
-            (!_pbOnly || pb.pbSetters.contains(activity.id)))
-          activity,
-    ];
-    final groups = groupByMonth(filtered);
+        final filtered = <Activity>[
+          for (final activity in activities)
+            if ((_routeFilter == null || activity.routeId == _routeFilter) &&
+                (!_pbOnly || pb.pbSetters.contains(activity.id)))
+              activity,
+        ];
+        final groups = groupByMonth(filtered);
 
-    // Route chips only for routes that actually have history; unknown-route
-    // runs stay reachable through "All".
-    final routeNames = <String, String>{
-      for (final route in routes) route.id: route.name,
-    };
-    final chipRouteIds = <String>{
-      for (final activity in activities)
-        if (activity.routeId case final id?)
-          if (routeNames.containsKey(id)) id,
-    };
+        // Route chips only for routes that actually have history; unknown-route
+        // runs stay reachable through "All".
+        final routeNames = <String, String>{
+          for (final route in routes) route.id: route.name,
+        };
+        final chipRouteIds = <String>{
+          for (final activity in activities)
+            if (activity.routeId case final id?)
+              if (routeNames.containsKey(id)) id,
+        };
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('History')),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (activities.isNotEmpty)
-            _FilterBar(
-              routeIds: chipRouteIds.toList(),
-              routeNames: routeNames,
-              selectedRouteId: _routeFilter,
-              pbOnly: _pbOnly,
-              onRouteSelected: (id) =>
-                  setState(() => _routeFilter = id),
-              onPbOnly: (value) => setState(() => _pbOnly = value),
-            ),
-          Expanded(
-            child: activities.isEmpty
-                ? const EmptyState(
-                    icon: Icons.history,
-                    message: 'No races yet. Choose a route and start racing.',
-                  )
-                : filtered.isEmpty
+        return Scaffold(
+          appBar: AppBar(title: const Text('History')),
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (activities.isNotEmpty)
+                _FilterBar(
+                  routeIds: chipRouteIds.toList(),
+                  routeNames: routeNames,
+                  selectedRouteId: _routeFilter,
+                  pbOnly: _pbOnly,
+                  onRouteSelected: (id) =>
+                      setState(() => _routeFilter = id),
+                  onPbOnly: (value) => setState(() => _pbOnly = value),
+                ),
+              Expanded(
+                child: activities.isEmpty
                     ? const EmptyState(
-                        compact: true,
-                        icon: Icons.filter_alt_off,
-                        message: 'No runs match this filter.',
+                        icon: Icons.history,
+                        message: 'No races yet. Choose a route and start racing.',
                       )
-                    : ListView(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        children: [
-                          for (final group in groups) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(
-                                top: AppSpacing.md,
-                                bottom: AppSpacing.sm,
-                              ),
-                              child: SectionHeader(title: group.label),
-                            ),
-                            for (final activity in group.activities) ...[
-                              _ActivityRow(
-                                key: ValueKey(activity.id),
-                                activity: activity,
-                                pb: pb,
-                              ),
-                              const SizedBox(height: AppSpacing.sm),
+                    : filtered.isEmpty
+                        ? const EmptyState(
+                            compact: true,
+                            icon: Icons.filter_alt_off,
+                            message: 'No runs match this filter.',
+                          )
+                        : ListView(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            children: [
+                              for (final group in groups) ...[
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    top: AppSpacing.md,
+                                    bottom: AppSpacing.sm,
+                                  ),
+                                  child: SectionHeader(title: group.label),
+                                ),
+                                for (final activity in group.activities) ...[
+                                  _ActivityRow(
+                                    key: ValueKey(activity.id),
+                                    activity: activity,
+                                    pb: pb,
+                                  ),
+                                  const SizedBox(height: AppSpacing.sm),
+                                ],
+                              ],
                             ],
-                          ],
-                        ],
-                      ),
+                          ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
+}
+
+Future<HistoryPb> _computeHistoryPb(
+  WidgetRef ref,
+  List<Activity> activities,
+  List<Route> routes,
+  AsyncValue<Map<String, RouteStats>> statsIndex,
+) async {
+  final engine = ref.read(engineServiceProvider);
+  final setters = <String>{};
+  final bestSeconds = <String, double>{};
+  final routesById = {for (final r in routes) r.id: r};
+  final attemptsByRoute = <String, List<Activity>>{};
+  for (final activity in activities) {
+    if (activity.isExample) continue;
+    final routeId = activity.routeId;
+    if (routeId == null || activity.duration == null) continue;
+    final route = routesById[routeId];
+    if (route == null || route.isExample) continue;
+    (attemptsByRoute[routeId] ??= []).add(activity);
+  }
+  for (final route in routes) {
+    if (route.isExample) continue;
+    final attempts = attemptsByRoute[route.id] ?? const <Activity>[];
+    final stats = statsIndex.asData?.value[route.id];
+    final pb = stats?.pb?.seconds ?? route.personalBest?.seconds;
+    if (pb != null) bestSeconds[route.id] = pb;
+    if (attempts.isEmpty) continue;
+    final events = await engine.computeRouteProgression(route: route, attempts: attempts);
+    for (final e in events) {
+      setters.add(e.activity.id);
+    }
+  }
+  return HistoryPb(pbSetters: setters, bestSeconds: bestSeconds);
 }
 
 /// Horizontal chip row: All / per-route / PBs only (§25).
