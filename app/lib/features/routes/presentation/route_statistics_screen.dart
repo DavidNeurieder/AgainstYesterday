@@ -347,65 +347,120 @@ class _StatsCard extends StatelessWidget {
   }
 }
 
+enum _PerformanceRange { all, days7, days30, days90, last5, last10 }
+
 /// Performance page: the chart plus its timed runs in chronological order.
-class _PerformanceSection extends StatelessWidget {
+class _PerformanceSection extends StatefulWidget {
   const _PerformanceSection({required this.attempts, this.pb});
 
   final List<Activity> attempts;
   final Elapsed? pb;
 
   @override
+  State<_PerformanceSection> createState() => _PerformanceSectionState();
+}
+
+class _PerformanceSectionState extends State<_PerformanceSection> {
+  _PerformanceRange _range = _PerformanceRange.all;
+
+  List<Activity> get _filtered {
+    final chronological = [...widget.attempts]
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    final now = DateTime.now().toUtc();
+    return switch (_range) {
+      _PerformanceRange.all => chronological,
+      _PerformanceRange.days7 =>
+        chronological.where((a) => now.difference(a.startedAt).inDays < 7).toList(),
+      _PerformanceRange.days30 =>
+        chronological.where((a) => now.difference(a.startedAt).inDays < 30).toList(),
+      _PerformanceRange.days90 =>
+        chronological.where((a) => now.difference(a.startedAt).inDays < 90).toList(),
+      _PerformanceRange.last5 => chronological.length <= 5
+          ? chronological
+          : chronological.sublist(chronological.length - 5),
+      _PerformanceRange.last10 => chronological.length <= 10
+          ? chronological
+          : chronological.sublist(chronological.length - 10),
+    };
+  }
+
+  @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    if (attempts.isEmpty) {
+    if (widget.attempts.isEmpty) {
       return const SizedBox.shrink();
     }
-    final chronological = [...attempts]
-      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
-
+    final chronological = _filtered;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        PerformanceChart(attempts: attempts, pb: pb),
-        const SizedBox(height: AppSpacing.lg),
-        SectionHeader(title: 'Runs'),
-        const SizedBox(height: AppSpacing.sm),
-        for (final run in chronological)
-          Padding(
-            key: ValueKey('performance-run-${run.id}'),
-            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    dateLabelFor(run.startedAt.toLocal()),
-                    style: textTheme.bodyMedium,
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final entry in const [
+              (_PerformanceRange.all, 'All'),
+              (_PerformanceRange.days30, '30 days'),
+              (_PerformanceRange.days90, '90 days'),
+              (_PerformanceRange.days7, '7 days'),
+              (_PerformanceRange.last5, 'Last 5'),
+              (_PerformanceRange.last10, 'Last 10'),
+            ])
+              ChoiceChip(
+                label: Text(entry.$2),
+                selected: _range == entry.$1,
+                onSelected: (_) => setState(() => _range = entry.$1),
+              ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        if (chronological.isEmpty)
+          Text(
+            'No runs in this range.',
+            style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          )
+        else ...[
+          PerformanceChart(attempts: chronological, pb: widget.pb),
+          const SizedBox(height: AppSpacing.lg),
+          SectionHeader(title: 'Runs'),
+          const SizedBox(height: AppSpacing.sm),
+          for (final run in chronological)
+            Padding(
+              key: ValueKey('performance-run-${run.id}'),
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      dateLabelFor(run.startedAt.toLocal()),
+                      style: textTheme.bodyMedium,
+                    ),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  run.duration!.format(),
-                  textAlign: TextAlign.right,
-                  style: textTheme.titleSmall?.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-                if (pb case final pb?) ...[
                   const SizedBox(width: AppSpacing.sm),
                   Text(
-                    _deltaLabel(run.duration!.seconds - pb.seconds),
+                    run.duration!.format(),
                     textAlign: TextAlign.right,
-                    style: textTheme.bodySmall?.copyWith(
-                      color: run.duration!.seconds <= pb.seconds
-                          ? AppColors.ahead
-                          : AppColors.behind,
+                    style: textTheme.titleSmall?.copyWith(
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
+                  if (widget.pb case final pb?) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    Text(
+                      _deltaLabel(run.duration!.seconds - pb.seconds),
+                      textAlign: TextAlign.right,
+                      style: textTheme.bodySmall?.copyWith(
+                        color: run.duration!.seconds <= pb.seconds
+                            ? AppColors.ahead
+                            : AppColors.behind,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
+        ],
       ],
     );
   }
