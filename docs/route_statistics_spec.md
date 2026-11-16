@@ -93,3 +93,11 @@ Candidates to migrate or consolidate behind engine/service APIs (avoid parallel 
 - Treatment of `isExample` in personal aggregates and route comparison.
 - Minimum sample sizes/thresholds for trend, consistency, and elevation display.
 - Full-attempt vs partial-association eligibility once route-matching classification exposes it.
+
+## 8. Implementation status (2026-11-16)
+
+- **S0:** Spec and migration baseline documented (`docs/route_statistics_spec.md`, plan revised in `ideas/statistics.txt`).
+- **S1:** `RouteStats` extended in Rust analytics/capi and Dart (models, Rust/fake engine services, UI) with total distance/time, aggregate/best pace (s/km), and first→latest improvement; route_stats FFI now carries per-attempt distance. Rust/Dart parity maintained for covered fields.
+- **S2:** Route overview shows elevation summary (ascent/descent/min/max) from engine `analyzeTrack` of the fastest recorded attempt with elevation data (quality-gated).
+- **S3:** Performance section adds range filtering (all, 7/30/90 days, last 5/10 runs) with filtered chart/run list and empty-range state.
+- **S4 (partial):** Parity preserved in updated stats path, existing reactive invalidation retained; broader regression matrix, deeper segment/elevation engine aggregates, time-basis/eligibility formalization, and profiling/caching remain follow-up work.
