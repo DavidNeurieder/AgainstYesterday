@@ -182,11 +182,11 @@ class _SegmentTable extends StatelessWidget {
       child: DataTable(
         columns: [
           const DataColumn(label: Text('Seg')),
-          const DataColumn(label: Text('Start')),
-          const DataColumn(label: Text('End')),
+          const DataColumn(label: Text('Range')),
           for (var i = 0; i < comparison.first.segments.length; i++)
             DataColumn(label: Text('Run ${i + 1}')),
           const DataColumn(label: Text('Best')),
+          const DataColumn(label: Text('Avg')),
           const DataColumn(label: Text('Spread')),
         ],
         rows: [
@@ -194,8 +194,8 @@ class _SegmentTable extends StatelessWidget {
             DataRow(
               cells: [
                 DataCell(Text('${c.index + 1}')),
-                DataCell(Text('${c.startDistanceM.toStringAsFixed(0)}m')),
-                DataCell(Text('${c.endDistanceM.toStringAsFixed(0)}m')),
+                DataCell(Text(
+                    '${c.startDistanceM.toStringAsFixed(0)}–${c.endDistanceM.toStringAsFixed(0)}m')),
                 for (final s in c.segments)
                   DataCell(
                     Text(
@@ -204,8 +204,9 @@ class _SegmentTable extends StatelessWidget {
                           : '—',
                     ),
                   ),
-                DataCell(Text((c.maxSpeedMps * 3.6).toStringAsFixed(1))),
-                DataCell(Text((c.speedSpreadMps * 3.6).toStringAsFixed(1))),
+                DataCell(Text('${(c.maxSpeedMps * 3.6).toStringAsFixed(1)} km/h')),
+                DataCell(Text('${(c.meanSpeedMps * 3.6).toStringAsFixed(1)} km/h')),
+                DataCell(Text('${(c.speedSpreadMps * 3.6).toStringAsFixed(1)} km/h')),
               ],
             ),
         ],
