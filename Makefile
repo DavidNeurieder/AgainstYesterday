@@ -164,20 +164,26 @@ lint:
 tz-test:
 	cd app && TZ=Europe/Berlin flutter test test/route_library_test.dart
 
+# Connected engine suites run on an emulator (x86_64) or a physical device
+# (arm64-v8a). Build only the ABI the attached device can load instead of
+# cross-compiling both every run; with no device yet (the harness boots one)
+# both are built so the library resolves either way. Override with
+# CONNECTED_ABIS when targeting a device that is not attached yet.
+CONNECTED_ABIS ?= $(shell adb $(if $(ANDROID_SERIAL),-s $(ANDROID_SERIAL),) shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')
+ifeq ($(strip $(CONNECTED_ABIS)),)
+CONNECTED_ABIS := arm64-v8a x86_64
+endif
+
 connected-test:
 	cd app && ./tool/android_integration_test.sh
 
-# Connected suites run on an emulator (x86_64) by default but may also run on
-# a physical device (arm64-v8a). Build the Rust engine for both ABIs so the
-# library resolves regardless of the target, instead of throwing
-# "USE_RUST_ENGINE=true is set but no Rust engine library could be loaded".
 connected-test-engine:
-	ABIS="arm64-v8a x86_64" ./app/tool/build_rust_engine_android.sh
+	ABIS="$(CONNECTED_ABIS)" ./app/tool/build_rust_engine_android.sh
 	cd app && ./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true
 
 # Real-receiver suite: fixes simulated through the emulator geo console.
 connected-test-gps:
-	ABIS="arm64-v8a x86_64" ./app/tool/build_rust_engine_android.sh
+	ABIS="$(CONNECTED_ABIS)" ./app/tool/build_rust_engine_android.sh
 	cd app && ./tool/android_integration_test.sh --device-gps --dart-define=USE_RUST_ENGINE=true
 
 engine-build:

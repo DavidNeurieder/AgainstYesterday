@@ -261,12 +261,16 @@ entry point, races a seeded route, `am force-stop`s it and relaunches it
 against the real on-disk store — `flutter test` cannot do this, since it
 uninstalls the package on exit), and `--smoke` narrows the demo suite to the
 record-and-save journey; see the script header for the environment knobs). CI
-runs the full journey, the real-receiver suite, the permission suite and
-process-death recovery on API 34, and the smoke on API 24 for every PR; the
-nightly workflow adds API 36 (including the broader permission matrix), a
-repeated run to catch flakes, and the map smoke. On a red run the harness
-preserves the app log, a screenshot, and the location/permission dumps under
-`app/build/integration-artifacts/<suite>/`. Release sign-off uses the gates in
+keeps the on-device job disabled while GitHub-hosted emulators and adb are
+flaky, so run the suites locally: `make connected-test` (fake engine) and
+`make connected-test-engine` (builds the Rust cdylib for the attached
+device's ABI, then runs the same journey with `USE_RUST_ENGINE=true`). The
+manual-dispatch nightly workflow repeats the journey, the real-receiver
+suite, the permission matrix, process-death recovery and the map smoke, and
+adds an `engine` suite that exercises the native cdylib on device. On a red
+run the harness preserves the app log, a screenshot, and the
+location/permission dumps under `app/build/integration-artifacts/<suite>/`.
+Release sign-off uses the gates in
 [docs/release_checklist.md](docs/release_checklist.md).
 
 ## Status

@@ -4,9 +4,11 @@ name: nightly
 # and a repeated full journey, to surface flakiness. Manual dispatch is
 # available for on-demand checks.
 #
-# These jobs exercise the deterministic fake engine (USE_RUST_ENGINE is left
-# unset, so the app falls back when no cdylib is present): the PR pipeline
-# already cross-compiles the native engine and runs it on device.
+# These jobs exercise the deterministic fake engine by default (USE_RUST_ENGINE
+# is left unset, so the app falls back when no cdylib is present). The `engine`
+# suite is the exception: it cross-compiles the cdylib and runs the same demo
+# journey against it, because the PR integration job is disabled and nothing
+# else exercises the native engine end to end on Android.
 
 on:
   workflow_dispatch:
@@ -37,6 +39,9 @@ jobs:
           # Newest API, genuine process-death recovery.
           - api-level: 36
             suite: process-death
+          # Reference API, the native Rust engine on device (see the header).
+          - api-level: 34
+            suite: engine
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -47,6 +52,26 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Install the Rust Android target
+        if: matrix.suite == 'engine'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-linux-android
+      - name: Install the pinned Android NDK
+        if: matrix.suite == 'engine'
+        env:
+          # Keep in sync with flutter.ndkVersion / ci.yml.
+          ANDROID_NDK_VERSION: '28.2.13676358'
+        run: |
+          set -euo pipefail
+          ndk="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          if [ ! -d "$ndk" ]; then
+            sdkmgr="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            (yes || true) | "$sdkmgr" --licenses > /dev/null
+            (yes || true) | "$sdkmgr" "ndk;$ANDROID_NDK_VERSION"
+          fi
+          test -d "$ndk" || { echo "::error::NDK missing after install: $ndk"; exit 1; }
+          echo "ANDROID_NDK_HOME=$ndk" >> "$GITHUB_ENV"
       - run: flutter pub get
         working-directory: app
       # The runner ships /dev/kvm, but the emulator only gets it when a udev
@@ -76,6 +101,11 @@ jobs:
               ./tool/android_integration_test.sh --permissions
             elif [ "${{ matrix.suite }}" = "process-death" ]; then
               ./tool/android_integration_test.sh --process-death
+            elif [ "${{ matrix.suite }}" = "engine" ]; then
+              # Builds the cdylib for the attached emulator's ABI (x86_64) and
+              # runs the demo journey with USE_RUST_ENGINE=true. Assertions in
+              # the suite also call the engine's analytics over FFI.
+              make -C .. connected-test-engine
             else
               ./tool/android_integration_test.sh --smoke
             fi
