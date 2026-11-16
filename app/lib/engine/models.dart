@@ -894,6 +894,11 @@ class RouteStats {
     this.trendSecondsPerRun,
     this.recentAverage,
     this.verdict,
+    this.totalDistanceMeters = 0.0,
+    this.totalTimeSeconds = 0.0,
+    this.averagePaceSecondsPerKm,
+    this.bestPaceSecondsPerKm,
+    this.improvementSeconds,
   });
 
   final Elapsed? pb;
@@ -908,6 +913,22 @@ class RouteStats {
   final double? trendSecondsPerRun;
   final Elapsed? recentAverage;
   final String? verdict;
+
+  /// Sum of known attempt distances (meters).
+  final double totalDistanceMeters;
+
+  /// Sum of attempt durations (seconds).
+  final double totalTimeSeconds;
+
+  /// Aggregate pace from total time / total distance (seconds per km).
+  final double? averagePaceSecondsPerKm;
+
+  /// Fastest per-attempt pace among attempts with known distance (s/km).
+  final double? bestPaceSecondsPerKm;
+
+  /// First comparable attempt time minus latest attempt time (seconds).
+  /// Positive means improvement (latest faster than first).
+  final double? improvementSeconds;
 }
 
 

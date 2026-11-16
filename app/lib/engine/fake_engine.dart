@@ -386,6 +386,40 @@ class FakeEngineService implements EngineService {
         ? route.attemptCount
         : math.max(route.attemptCount, attempts.length);
 
+    var totalDistanceMeters = 0.0;
+    var totalTimeSeconds = 0.0;
+    var paceDistanceMeters = 0.0;
+    double? bestPaceSecondsPerKm;
+    for (final a in attempts) {
+      final dur = a.duration?.seconds;
+      if (dur != null) totalTimeSeconds += dur;
+      final dist = a.distance?.meters;
+      if (dist != null && dist > 0) {
+        totalDistanceMeters += dist;
+        paceDistanceMeters += dist;
+        if (dur != null && dur > 0) {
+          final pace = dur / (dist / 1000.0);
+          if (bestPaceSecondsPerKm == null || pace < bestPaceSecondsPerKm) {
+            bestPaceSecondsPerKm = pace;
+          }
+        }
+      }
+    }
+    final averagePaceSecondsPerKm =
+        (paceDistanceMeters > 0 && totalTimeSeconds > 0)
+            ? totalTimeSeconds / (paceDistanceMeters / 1000.0)
+            : null;
+    double? improvementSeconds;
+    final chronological = [...attempts]
+      ..sort((a, b) => a.startedAt.compareTo(b.startedAt));
+    if (chronological.length >= 2) {
+      final first = chronological.first.duration?.seconds;
+      final latest = chronological.last.duration?.seconds;
+      if (first != null && latest != null) {
+        improvementSeconds = first - latest;
+      }
+    }
+
     return RouteStats(
       pb: pb,
       average: average,
@@ -399,6 +433,11 @@ class FakeEngineService implements EngineService {
       trendSecondsPerRun: trend,
       recentAverage: recentAverage,
       verdict: verdict,
+      totalDistanceMeters: totalDistanceMeters,
+      totalTimeSeconds: totalTimeSeconds,
+      averagePaceSecondsPerKm: averagePaceSecondsPerKm,
+      bestPaceSecondsPerKm: bestPaceSecondsPerKm,
+      improvementSeconds: improvementSeconds,
     );
   }
 

@@ -397,10 +397,21 @@ pub struct RouteStats {
     pub recent_average_seconds: Option<f64>,
     /// `improving`, `slowing` or `steady` when a recent average exists.
     pub verdict: Option<String>,
+    /// Sum of attempt distances with known distance, in meters.
+    pub total_distance_meters: f64,
+    /// Sum of attempt durations, in seconds.
+    pub total_time_seconds: f64,
+    /// Aggregate pace (seconds per km) from total time / total distance.
+    pub average_pace_seconds_per_km: Option<f64>,
+    /// Best (fastest) pace (seconds per km) among attempts with known distance.
+    pub best_pace_seconds_per_km: Option<f64>,
+    /// First comparable attempt time minus latest attempt time, in seconds.
+    /// Positive means the latest run is faster than the first.
+    pub improvement_seconds: Option<f64>,
 }
 
-/// A timed attempt: (started_at_ms, duration_seconds).
-pub type Attempt = (i64, f64);
+/// A timed attempt: (started_at_ms, duration_seconds, distance_meters or NaN).
+pub type Attempt = (i64, f64, f64);
 
 impl RouteStats {
     /// Derives the statistics from the route's seeded PB/run count and its
@@ -481,6 +492,44 @@ impl RouteStats {
             attempt_count.max(attempts.len() as u32)
         };
 
+        let mut total_distance_meters = 0.0;
+        let mut total_time_seconds = 0.0;
+        let mut pace_distance_meters = 0.0;
+        let mut best_pace_seconds_per_km: Option<f64> = None;
+        for a in attempts {
+            total_time_seconds += a.1;
+            if a.2.is_finite() && a.2 > 0.0 {
+                total_distance_meters += a.2;
+                pace_distance_meters += a.2;
+                if a.1 > 0.0 {
+                    let pace = a.1 / (a.2 / 1000.0);
+                    best_pace_seconds_per_km = Some(match best_pace_seconds_per_km {
+                        Some(b) => b.min(pace),
+                        None => pace,
+                    });
+                }
+            }
+        }
+        let average_pace_seconds_per_km = if pace_distance_meters > 0.0 && total_time_seconds > 0.0
+        {
+            Some(total_time_seconds / (pace_distance_meters / 1000.0))
+        } else {
+            None
+        };
+
+        let improvement_seconds = if attempts.len() >= 2 {
+            let mut chronological = attempts.to_vec();
+            chronological.sort_by_key(|a| a.0);
+            let first = chronological.first().map(|a| a.1);
+            let latest = chronological.last().map(|a| a.1);
+            match (first, latest) {
+                (Some(f), Some(l)) => Some(f - l),
+                _ => None,
+            }
+        } else {
+            None
+        };
+
         RouteStats {
             pb_seconds: pb,
             average_seconds: average,
@@ -494,6 +543,11 @@ impl RouteStats {
             trend_seconds_per_run: trend,
             recent_average_seconds: recent_average,
             verdict,
+            total_distance_meters,
+            total_time_seconds,
+            average_pace_seconds_per_km,
+            best_pace_seconds_per_km,
+            improvement_seconds,
         }
     }
 
@@ -513,7 +567,7 @@ impl RouteStats {
             }
         }
         format!(
-            r#"{{"pb_seconds":{pb},"average_seconds":{avg},"median_seconds":{med},"last_seconds":{last},"runs":{runs},"fastest_seconds":{fast},"slowest_seconds":{slow},"std_dev_seconds":{sd},"range_seconds":{rng},"trend_seconds_per_run":{tr},"recent_average_seconds":{ra},"verdict":{v}}}"#,
+            r#"{{"pb_seconds":{pb},"average_seconds":{avg},"median_seconds":{med},"last_seconds":{last},"runs":{runs},"fastest_seconds":{fast},"slowest_seconds":{slow},"std_dev_seconds":{sd},"range_seconds":{rng},"trend_seconds_per_run":{tr},"recent_average_seconds":{ra},"verdict":{v},"total_distance_meters":{td},"total_time_seconds":{tt},"average_pace_seconds_per_km":{ap},"best_pace_seconds_per_km":{bp},"improvement_seconds":{imp}}}"#,
             pb = opt(self.pb_seconds),
             avg = opt(self.average_seconds),
             med = opt(self.median_seconds),
@@ -526,6 +580,11 @@ impl RouteStats {
             tr = opt(self.trend_seconds_per_run),
             ra = opt(self.recent_average_seconds),
             v = opt_str(&self.verdict),
+            td = self.total_distance_meters,
+            tt = self.total_time_seconds,
+            ap = opt(self.average_pace_seconds_per_km),
+            bp = opt(self.best_pace_seconds_per_km),
+            imp = opt(self.improvement_seconds),
         )
     }
 }
@@ -731,7 +790,7 @@ mod tests {
     use super::*;
 
     fn attempts(items: &[(i64, f64)]) -> Vec<Attempt> {
-        items.to_vec()
+        items.iter().map(|&(t, d)| (t, d, f64::NAN)).collect()
     }
 
     #[test]
@@ -771,6 +830,20 @@ mod tests {
         assert!(stats.trend_seconds_per_run.unwrap() < 0.0);
         assert_eq!(stats.runs, 3);
         assert_eq!(stats.pb_seconds, Some(200.0));
+    }
+
+    #[test]
+    fn totals_and_pace_aggregates_are_computed() {
+        let a = vec![
+            (1_000i64, 600.0f64, 2000.0f64),
+            (2_000i64, 700.0f64, 2000.0f64),
+        ];
+        let stats = RouteStats::compute(None, 2, &a);
+        assert!((stats.total_distance_meters - 4000.0).abs() < 1e-6);
+        assert!((stats.total_time_seconds - 1300.0).abs() < 1e-6);
+        assert!(stats.average_pace_seconds_per_km.is_some());
+        assert!(stats.best_pace_seconds_per_km.is_some());
+        assert_eq!(stats.improvement_seconds, Some(-100.0));
     }
 
     fn flat_track(meters: f64, seconds: f64) -> Vec<TrackPoint> {

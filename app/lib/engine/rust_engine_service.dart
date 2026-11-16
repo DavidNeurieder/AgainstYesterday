@@ -229,6 +229,7 @@ final class RustEngineService implements EngineService {
     for (final a in attempts) {
       req.i64(a.startedAt.millisecondsSinceEpoch);
       req.f64(a.duration?.seconds ?? 0.0);
+      req.f64(a.distance?.meters ?? double.nan);
     }
     final bytes = _ffi.routeStats(req.takeBytes());
     final json = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
@@ -247,6 +248,14 @@ final class RustEngineService implements EngineService {
       trendSecondsPerRun: (json['trend_seconds_per_run'] as num?)?.toDouble(),
       recentAverage: el(json['recent_average_seconds']),
       verdict: json['verdict'] as String?,
+      totalDistanceMeters:
+          (json['total_distance_meters'] as num?)?.toDouble() ?? 0.0,
+      totalTimeSeconds: (json['total_time_seconds'] as num?)?.toDouble() ?? 0.0,
+      averagePaceSecondsPerKm:
+          (json['average_pace_seconds_per_km'] as num?)?.toDouble(),
+      bestPaceSecondsPerKm:
+          (json['best_pace_seconds_per_km'] as num?)?.toDouble(),
+      improvementSeconds: (json['improvement_seconds'] as num?)?.toDouble(),
     );
   }
   @override

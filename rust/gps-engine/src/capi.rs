@@ -1400,7 +1400,8 @@ pub extern "C" fn gps_route_stats(
         for _ in 0..n {
             let started = rd.i64()?;
             let dur = rd.f64()?;
-            attempts.push((started, dur));
+            let dist = rd.f64()?;
+            attempts.push((started, dur, dist));
         }
         rd.done("route_stats")?;
         let stats = RouteStats::compute(pb, attempt_count, &attempts);

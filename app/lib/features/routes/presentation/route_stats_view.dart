@@ -51,6 +51,35 @@ class RouteStatsView extends StatelessWidget {
         ],
         if (stats.stdDev != null)
           _StatRow(label: 'Std. deviation', value: stats.stdDev),
+        if (stats.totalDistanceMeters > 0)
+          _TextStatRow(
+            label: 'Total distance',
+            value: '${(stats.totalDistanceMeters / 1000).toStringAsFixed(2)} km',
+          ),
+        if (stats.totalTimeSeconds > 0)
+          _TextStatRow(
+            label: 'Total time',
+            value: Elapsed.seconds(stats.totalTimeSeconds).format(),
+          ),
+        if (stats.averagePaceSecondsPerKm case final pace?)
+          _TextStatRow(
+            label: 'Average pace',
+            value: _formatPace(pace),
+          ),
+        if (stats.bestPaceSecondsPerKm case final pace?)
+          _TextStatRow(
+            label: 'Best pace',
+            value: _formatPace(pace),
+          ),
+        if (stats.improvementSeconds case final imp?)
+          _TextStatRow(
+            label: 'Improvement (first→latest)',
+            value:
+                '${imp >= 0 ? '-' : '+'}${Elapsed.seconds(imp.abs()).format()}',
+            valueColor: imp > 0
+                ? AppColors.ahead
+                : (imp < 0 ? AppColors.behind : null),
+          ),
         if (stats.trendSecondsPerRun case final trend?)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 6),
@@ -159,6 +188,51 @@ class _StatRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TextStatRow extends StatelessWidget {
+  const _TextStatRow({required this.label, required this.value, this.valueColor});
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            value,
+            textAlign: TextAlign.right,
+            style: textTheme.titleSmall?.copyWith(
+              color: valueColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatPace(double secondsPerKm) {
+  if (secondsPerKm <= 0 || !secondsPerKm.isFinite) return '—';
+  final total = secondsPerKm.round();
+  final min = total ~/ 60;
+  final sec = total % 60;
+  return '$min:${sec.toString().padLeft(2, '0')} /km';
 }
 
 /// Bar chart of attempt times (lower is better) with the PB as a baseline.
