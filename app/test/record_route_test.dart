@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
 import 'package:against_yesterday/app/dependencies.dart';
+import 'package:against_yesterday/core/theme/app_colors.dart';
 import 'package:against_yesterday/engine/device_gps_source.dart';
 import 'package:against_yesterday/engine/models.dart';
+import 'package:against_yesterday/features/map/map_surface.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
 
 /// A receiver that is usable but never reports a fix — the parked phone.
@@ -28,14 +30,28 @@ class _ParkedGpsSource implements GpsSource {
   Future<void> openSettings() async {}
 }
 
+/// Captures the scene the recorder asks to draw, without a real map.
+class _RecordingMapSurface implements MapSurface {
+  final scenes = <MapScene>[];
+
+  @override
+  Widget build(BuildContext context, MapScene scene, {bool fullscreen = true}) {
+    scenes.add(scene);
+    return const SizedBox.shrink();
+  }
+}
+
 /// M18: the record-a-route flow (§8) — prep → recording → name-and-save →
 /// saved. Runs against the deterministic demo timeline: a fresh install walks
 /// the demo loop during recording, so a named route really lands in the
 /// catalog with its first attempt as the baseline PB.
 void main() {
+  final map = _RecordingMapSurface();
+
   Widget pumpedApp() => ProviderScope(
         overrides: [
           persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
+          mapSurfaceProvider.overrideWithValue(map),
         ],
         child: const AgainstYesterdayApp(),
       );
@@ -91,6 +107,13 @@ void main() {
     // Recording: simpler than the race — distance + time + pause/finish.
     expect(find.text('PAUSE'), findsOneWidget);
     expect(find.text('FINISH'), findsOneWidget);
+    // The travelled line is drawn in track green (like a replay), and the
+    // area behind the map is the neutral surface, not a green backdrop that
+    // would read as an empty map.
+    expect(map.scenes.last.courseColor, AppColors.track);
+    final mapBox =
+        tester.widget<Container>(find.byKey(const ValueKey('record-map')));
+    expect(mapBox.color, AppColors.surface);
     final before = distance(tester);
     await tester.pump(const Duration(seconds: 10));
     expect(distance(tester), isNot(before));

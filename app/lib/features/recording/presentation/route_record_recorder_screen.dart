@@ -101,6 +101,7 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.md),
               Expanded(
                 child: Container(
+                  key: const ValueKey('record-map'),
                   // Neutral background shows through when tiles can't load
                   // (offline or no network), so the map never looks blank.
                   color: AppColors.surface,
