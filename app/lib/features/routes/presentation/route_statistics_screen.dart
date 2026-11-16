@@ -21,6 +21,7 @@ import '../../../core/ui/app_states.dart';
 import '../../../core/units.dart';
 import '../../../engine/models.dart';
 import '../../../persistence/persistence.dart';
+import '../../../app/dependencies.dart';
 import '../../../widgets/route_silhouette.dart';
 import '../../settings/application/haptics.dart';
 import '../../settings/application/settings_controller.dart';
@@ -205,6 +206,8 @@ class RouteStatisticsSectionScreen extends ConsumerWidget {
             ),
           },
           if (section == RouteStatsSection.overview) ...[
+            const SizedBox(height: AppSpacing.lg),
+            _ElevationSummarySection(attempts: attempts),
             const SizedBox(height: AppSpacing.lg),
             PbProgressionSection(route: route, attempts: attempts),
           ],
@@ -471,6 +474,136 @@ String _deltaLabel(double delta) {
   return delta > 0
       ? '+${Elapsed.seconds(delta).format()}'
       : '-${Elapsed.seconds(-delta).format()}';
+}
+
+class _ElevationSummarySection extends ConsumerStatefulWidget {
+  const _ElevationSummarySection({required this.attempts});
+
+  final List<Activity> attempts;
+
+  @override
+  ConsumerState<_ElevationSummarySection> createState() =>
+      _ElevationSummarySectionState();
+}
+
+class _ElevationSummarySectionState
+    extends ConsumerState<_ElevationSummarySection> {
+  Future<TrackAnalytics?>? _future;
+  String? _activityId;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ElevationSummarySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final id = _representative()?.id;
+    if (id != _activityId) {
+      _future = _load();
+    }
+  }
+
+  Activity? _representative() {
+    final withTrack = [
+      for (final a in widget.attempts)
+        if (a.track != null && a.track!.length >= 2) a,
+    ];
+    if (withTrack.isEmpty) return null;
+    withTrack.sort((a, b) {
+      final da = a.duration?.seconds ?? double.infinity;
+      final db = b.duration?.seconds ?? double.infinity;
+      final cmp = da.compareTo(db);
+      if (cmp != 0) return cmp;
+      return b.startedAt.compareTo(a.startedAt);
+    });
+    return withTrack.first;
+  }
+
+  Future<TrackAnalytics?> _load() async {
+    final rep = _representative();
+    _activityId = rep?.id;
+    if (rep?.track == null) return null;
+    try {
+      return await ref
+          .read(engineServiceProvider)
+          .analyzeTrack(points: rep!.track!);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rep = _representative();
+    if (rep == null) return const SizedBox.shrink();
+    final textTheme = Theme.of(context).textTheme;
+    return FutureBuilder<TrackAnalytics?>(
+      future: _future,
+      builder: (context, snapshot) {
+        final analytics = snapshot.data;
+        if (analytics == null || !analytics.quality.hasElevationData) {
+          return const SizedBox.shrink();
+        }
+        String fmt(double? v) =>
+            v == null ? '—' : '${v.toStringAsFixed(0)} m';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SectionHeader(title: 'Elevation'),
+            const SizedBox(height: AppSpacing.sm),
+            _ElevationRow(label: 'Ascent', value: fmt(analytics.elevationGainMeters)),
+            _ElevationRow(label: 'Descent', value: fmt(analytics.elevationLossMeters)),
+            _ElevationRow(label: 'Min elevation', value: fmt(analytics.elevationMinMeters)),
+            _ElevationRow(label: 'Max elevation', value: fmt(analytics.elevationMaxMeters)),
+            Text(
+              'From fastest recorded attempt with elevation data.',
+              style: textTheme.bodySmall?.copyWith(
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ElevationRow extends StatelessWidget {
+  const _ElevationRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text(
+            value,
+            textAlign: TextAlign.right,
+            style: textTheme.titleSmall?.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _NotFoundScaffold extends StatelessWidget {
