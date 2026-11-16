@@ -72,11 +72,11 @@ Candidates to migrate or consolidate behind engine/service APIs (avoid parallel 
 
 | Location | Current behavior | Target |
 | --- | --- | --- |
-| `features/routes/application/route_stats_provider.dart` / `route_stats.dart` | Selects timed attempts per route, calls engine, fallback | Keep selection/orchestration; ensure eligibility filtering aligns with spec (possibly engine-side). |
-| `features/routes/presentation/pb_progression.dart` | Computes PB progression events client-side from attempts | Derive from engine/service progression data or a shared, spec-aligned helper to avoid drift. |
-| `features/routes/presentation/route_statistics_screen.dart` / sections | Assembles timed attempts, head-to-head, charts | Keep presentation; move aggregate/progression/period computations to engine/service results. |
-| `features/history/application/history_grouping.dart` `computeHistoryPb` | Global/history PB computed in Dart | Replace with engine/service-backed or spec-aligned computation. |
-| `features/result/presentation/result_screen.dart` `_rank` | Rank computed in Dart | Move to engine/service or shared spec-aligned logic. |
+| `features/routes/application/route_stats_provider.dart` / `route_stats.dart` | Selects eligible attempts per route, calls engine, fallback | Keep selection/orchestration; continue tightening eligibility/quality rules (possibly engine-side). |
+| `features/routes/presentation/pb_progression.dart` | Computes PB progression events client-side from attempts | Now uses shared spec-aligned helper; future: engine/service progression data. |
+| `features/routes/presentation/route_statistics_screen.dart` / sections | Assembles eligible attempts, head-to-head, charts | Keep presentation; move aggregate/progression/period computations to engine/service results. |
+| `features/history/application/history_grouping.dart` `computeHistoryPb` | Global/history PB computed in Dart | Now spec-aligned for example exclusion; future: engine/service-backed computation. |
+| `features/result/presentation/result_screen.dart` `_rank` | Rank computed in Dart | Now uses shared spec-aligned helper; future: engine/service-backed logic. |
 | `features/recording/application/recording_controller.dart` `_forwardBearing` | Demo-only bearing helper | Non-stats, but keep isolated; do not fold into stats math. |
 | Any UI pace/total derivations | Ad-hoc formatting/derivation in widgets | Use engine-provided aggregates/samples; UI formats only. |
 
@@ -100,4 +100,5 @@ Candidates to migrate or consolidate behind engine/service APIs (avoid parallel 
 - **S1:** `RouteStats` extended in Rust analytics/capi and Dart (models, Rust/fake engine services, UI) with total distance/time, aggregate/best pace (s/km), and first→latest improvement; route_stats FFI now carries per-attempt distance. Rust/Dart parity maintained for covered fields.
 - **S2:** Route overview shows elevation summary (ascent/descent/min/max) from engine `analyzeTrack` of the fastest recorded attempt with elevation data (quality-gated).
 - **S3:** Performance section adds range filtering (all, 7/30/90 days, last 5/10 runs) with filtered chart/run list and empty-range state.
-- **S4 (partial):** Parity preserved in updated stats path, existing reactive invalidation retained; broader regression matrix, deeper segment/elevation engine aggregates, time-basis/eligibility formalization, and profiling/caching remain follow-up work.
+- **S4 (ongoing):** Shared Dart eligibility/helpers (`route_attempts.dart`) now drive route stats selection, PB progression, history PB, and result ranking with `isExample` excluded from personal aggregates and timed-attempt semantics preserved. Reactive invalidation remains intact.
+  - **Still open:** stricter quality/zero-distance eligibility and canonical time-basis formalization, engine/service-owned progression/history/rank APIs (beyond shared helpers), deeper engine segment/elevation aggregates and profiles, route comparison, broader regression/parity coverage, and profiling/caching decisions.

@@ -142,4 +142,25 @@ void main() {
     expect(stats.trendSecondsPerRun, isNotNull);
     expect(stats.trendSecondsPerRun!, lessThan(0));
   });
+
+  test('totals, aggregate pace and improvement are computed', () async {
+    final stats = await engine.computeRouteStats(
+      route: Route(
+        id: 'x',
+        name: 'New route',
+        distance: const Distance.meters(4760),
+        geometry: FakeEngineService.riverLoop,
+        attemptCount: 0,
+      ),
+      attempts: [
+        _attempt(id: 'a1', seconds: 600, started: DateTime.utc(2026, 1, 1)),
+        _attempt(id: 'a2', seconds: 500, started: DateTime.utc(2026, 1, 2)),
+      ],
+    );
+    expect(stats.totalDistanceMeters, closeTo(9520, 0.01));
+    expect(stats.totalTimeSeconds, closeTo(1100, 0.01));
+    expect(stats.averagePaceSecondsPerKm, isNotNull);
+    expect(stats.bestPaceSecondsPerKm, isNotNull);
+    expect(stats.improvementSeconds, closeTo(100, 0.01));
+  });
 }
