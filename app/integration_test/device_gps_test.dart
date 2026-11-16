@@ -199,6 +199,10 @@ void main() {
     await tester.tap(find.text('VIEW RESULT'));
     await tester.pumpAndSettle();
     expect(find.text('PERFORMANCE'), findsOneWidget);
+    // The ranking is engine-derived from the saved attempt and the save lands
+    // in the background after the screen; poll instead of reading the tree too
+    // early (the native engine renders extra gap/split content above it).
+    await waitForTextContaining(tester, 'fastest run');
 
     // DONE ends the result ListView; a content-heavy result (splits, gap
     // chart, ranking) pushes it below the fold, so bring it into view and

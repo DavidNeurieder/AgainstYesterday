@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/features/routes/presentation/routes_screen.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
@@ -37,6 +38,7 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(MaterialApp)),
     );
+    expectRequestedEngine(container);
     await container
         .read(routeRepositoryProvider.notifier)
         .saveRoute(riverLoopRoute);
@@ -92,6 +94,16 @@ void main() {
     await tester.tap(find.text('VIEW RESULT'));
     await tester.pumpAndSettle();
     expect(find.text('PERFORMANCE'), findsOneWidget);
+    // The ranking is derived from the saved attempt: the finish path writes
+    // history in the background, so the label arrives a frame or more after
+    // the screen. Under the native engine the result is content-heavier, but
+    // the label now sits with the performance summary, not below the splits.
+    await waitForCondition(
+      tester,
+      () => tester.any(find.byKey(const ValueKey('result-rank'))),
+      'the result ranking label',
+      diagnostics: () => resultDiagnostics(tester, container),
+    );
     expect(find.textContaining('fastest run'), findsOneWidget);
 
     // DONE → the route library. History now shows the finished run (empty
@@ -127,6 +139,17 @@ void main() {
       },
     );
     expect(find.widgetWithText(Card, 'River Loop'), findsOneWidget);
+
+    // The connected-engine target must exercise the native engine's analytics,
+    // not only the recording pipeline: compute stats from the persisted
+    // attempt through the real `EngineService` (FFI on device).
+    final stats = await container.read(engineServiceProvider).computeRouteStats(
+          route: riverLoopRoute,
+          attempts: container.read(activityRepositoryProvider),
+        );
+    expect(stats.eligibleAttemptCount, 1);
+    expect(stats.timeBasis, 'duration');
+    expect(stats.pb, isNotNull);
   });
 
   testWidgets('browses the route library', (tester) async {
@@ -138,6 +161,7 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(MaterialApp)),
     );
+    expectRequestedEngine(container);
     final routes = container.read(routeRepositoryProvider.notifier);
     for (final route in demoRoutes) {
       await routes.saveRoute(route);
@@ -215,6 +239,7 @@ void main() {
     final container = ProviderScope.containerOf(
       tester.element(find.byType(MaterialApp)),
     );
+    expectRequestedEngine(container);
     await container
         .read(routeRepositoryProvider.notifier)
         .saveRoute(riverLoopRoute);

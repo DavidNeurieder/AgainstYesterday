@@ -173,6 +173,30 @@ class ResultScreen extends ConsumerWidget {
                 units: units,
               ),
             ),
+          // Ranking sits with the performance summary, not after the splits:
+          // it is derived from the saved attempt (the save is asynchronous)
+          // and a content-heavy result would otherwise push it off-screen.
+          FutureBuilder<String?>(
+            future: rankFuture,
+            builder: (context, snapshot) {
+              final rank = snapshot.data;
+              if (rank == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.md),
+                child: StaggeredIn(
+                  delay: const Duration(milliseconds: 270),
+                  child: Text(
+                    rank,
+                    key: const ValueKey('result-rank'),
+                    textAlign: TextAlign.center,
+                    style: textTheme.bodyLarge?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           if (gapCurve.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xl),
             StaggeredIn(
@@ -198,28 +222,6 @@ class ResultScreen extends ConsumerWidget {
                 child: SplitRow(split: entry.value),
               ),
           ],
-          FutureBuilder<String?>(
-            future: rankFuture,
-            builder: (context, snapshot) {
-              final rank = snapshot.data;
-              if (rank == null) return const SizedBox.shrink();
-              return Column(
-                children: [
-                  const SizedBox(height: AppSpacing.xl),
-                  StaggeredIn(
-                    delay: const Duration(milliseconds: 540),
-                    child: Text(
-                      rank,
-                      textAlign: TextAlign.center,
-                      style: textTheme.bodyLarge?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
           const SizedBox(height: AppSpacing.xl),
           // M20 §29: after a route race, RACE AGAIN drops back into that
           // route's pre-race (fresh session + the 3-2-1-GO countdown); DONE

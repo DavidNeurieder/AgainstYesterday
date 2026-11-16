@@ -11,7 +11,13 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'package:against_yesterday/app/dependencies.dart';
+import 'package:against_yesterday/engine/rust_engine_service.dart';
+import 'package:against_yesterday/features/recording/application/recording_controller.dart';
+import 'package:against_yesterday/persistence/persistence.dart';
 
 /// Parses a distance label like `1.23 km` or `456 m` into meters.
 ///
@@ -118,6 +124,60 @@ Future<void> waitForCondition(
   }
   fail('Timed out waiting for $description'
       '${diagnostics == null ? '' : '\n${diagnostics()}'}');
+}
+
+/// Polls until any on-screen text contains [text]. On-device saves and engine
+/// replies are asynchronous, so a plain `expect` right after `pumpAndSettle`
+/// can look at a tree that has not rebuilt yet; the poll also fails with the
+/// widget tree's text (when [diagnostics] is omitted) so a missing label is
+/// immediately attributable.
+Future<void> waitForTextContaining(
+  WidgetTester tester,
+  String text, {
+  Duration timeout = const Duration(seconds: 15),
+  String Function()? diagnostics,
+}) async {
+  await waitForCondition(
+    tester,
+    () => tester.any(find.textContaining(text)),
+    'text containing "$text"',
+    timeout: timeout,
+    diagnostics: diagnostics ??
+        () => 'texts=${tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList()}',
+  );
+}
+
+/// Fails when the suite was launched with `USE_RUST_ENGINE=true` but the app
+/// is not actually running the native engine.
+///
+/// `connected-test-engine` exists to exercise the Rust cdylib on the device.
+/// Dependencies already make a missing library a startup error, but asserting
+/// the concrete implementation here names the mismatch at the test instead of
+/// letting a future dependency change silently run the fake under the engine
+/// target.
+void expectRequestedEngine(ProviderContainer container) {
+  if (!const bool.fromEnvironment('USE_RUST_ENGINE')) return;
+  expect(
+    container.read(engineServiceProvider),
+    isA<RustEngineService>(),
+    reason: 'USE_RUST_ENGINE=true must run the native Rust engine',
+  );
+}
+
+/// What was on screen and in the stores when a result assertion timed out.
+///
+/// Kept next to the polling helpers so a red connected run names the state
+/// that never arrived instead of only the widget that was missing.
+String resultDiagnostics(
+  WidgetTester tester,
+  ProviderContainer container,
+) {
+  final activities = container.read(activityRepositoryProvider);
+  final status = container.read(recordingControllerProvider)?.status.name;
+  final snapshot = container.read(runSnapshotProvider);
+  return 'texts=${tester.widgetList<Text>(find.byType(Text)).map((t) => t.data).toList()}, '
+      'activities=${activities.map((a) => '${a.id}:${a.routeId}:${a.duration?.seconds}').toList()}, '
+      'run_status=$status, run_snapshot=${snapshot == null ? 'null' : 'present'}';
 }
 
 /// Ends a live run the way a user does: taps FINISH, then confirms the §12
