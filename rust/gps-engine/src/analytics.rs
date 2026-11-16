@@ -383,6 +383,10 @@ pub struct RouteStats {
     pub last_seconds: Option<f64>,
     /// Lifetime run count (seed count or attempt count, whichever is larger).
     pub runs: u32,
+    /// Number of attempts included in performance aggregates.
+    pub eligible_attempt_count: u32,
+    /// Canonical performance time basis identifier (e.g. "duration").
+    pub time_basis: String,
     /// Fastest attempt time, in seconds.
     pub fastest_seconds: Option<f64>,
     /// Slowest attempt time, in seconds.
@@ -563,10 +567,11 @@ impl RouteStats {
             by_time.first().map(|a| a.1)
         };
 
+        let eligible_attempt_count = eligible.len() as u32;
         let runs = if eligible.is_empty() {
             attempt_count
         } else {
-            attempt_count.max(eligible.len() as u32)
+            attempt_count.max(eligible_attempt_count)
         };
 
         let mut total_distance_meters = 0.0;
@@ -613,6 +618,8 @@ impl RouteStats {
             median_seconds: median,
             last_seconds: last,
             runs,
+            eligible_attempt_count,
+            time_basis: "duration".to_string(),
             fastest_seconds: fastest,
             slowest_seconds: slowest,
             std_dev_seconds: std_dev,
@@ -644,12 +651,14 @@ impl RouteStats {
             }
         }
         format!(
-            r#"{{"pb_seconds":{pb},"average_seconds":{avg},"median_seconds":{med},"last_seconds":{last},"runs":{runs},"fastest_seconds":{fast},"slowest_seconds":{slow},"std_dev_seconds":{sd},"range_seconds":{rng},"trend_seconds_per_run":{tr},"recent_average_seconds":{ra},"verdict":{v},"total_distance_meters":{td},"total_time_seconds":{tt},"average_pace_seconds_per_km":{ap},"best_pace_seconds_per_km":{bp},"improvement_seconds":{imp}}}"#,
+            r#"{{"pb_seconds":{pb},"average_seconds":{avg},"median_seconds":{med},"last_seconds":{last},"runs":{runs},"eligible_attempt_count":{eligible},"time_basis":{basis},"fastest_seconds":{fast},"slowest_seconds":{slow},"std_dev_seconds":{sd},"range_seconds":{rng},"trend_seconds_per_run":{tr},"recent_average_seconds":{ra},"verdict":{v},"total_distance_meters":{td},"total_time_seconds":{tt},"average_pace_seconds_per_km":{ap},"best_pace_seconds_per_km":{bp},"improvement_seconds":{imp}}}"#,
             pb = opt(self.pb_seconds),
             avg = opt(self.average_seconds),
             med = opt(self.median_seconds),
             last = opt(self.last_seconds),
             runs = self.runs,
+            eligible = self.eligible_attempt_count,
+            basis = opt_str(&Some(self.time_basis.clone())),
             fast = opt(self.fastest_seconds),
             slow = opt(self.slowest_seconds),
             sd = opt(self.std_dev_seconds),

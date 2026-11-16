@@ -41,7 +41,8 @@ class RouteStatsView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Performance time basis: recorded duration (eligible attempts only).',
+          'Performance time basis: ${stats.timeBasis} · '
+          '${stats.eligibleAttemptCount} eligible attempt(s).',
           style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
         ),
         const SizedBox(height: AppSpacing.sm),

@@ -421,6 +421,8 @@ class FakeEngineService implements EngineService {
       average: average,
       last: last,
       runs: runs,
+      eligibleAttemptCount: eligibleAttempts.length,
+      timeBasis: 'duration',
       median: median,
       fastest: fastest,
       slowest: slowest,

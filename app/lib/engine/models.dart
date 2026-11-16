@@ -886,6 +886,8 @@ class RouteStats {
     required this.average,
     required this.last,
     required this.runs,
+    this.eligibleAttemptCount = 0,
+    this.timeBasis = 'duration',
     this.median,
     this.fastest,
     this.slowest,
@@ -905,6 +907,8 @@ class RouteStats {
   final Elapsed? average;
   final Elapsed? last;
   final int runs;
+  final int eligibleAttemptCount;
+  final String timeBasis;
   final Elapsed? median;
   final Elapsed? fastest;
   final Elapsed? slowest;

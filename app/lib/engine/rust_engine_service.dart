@@ -241,6 +241,9 @@ final class RustEngineService implements EngineService {
       median: el(json['median_seconds']),
       last: el(json['last_seconds']),
       runs: (json['runs'] as num).toInt(),
+      eligibleAttemptCount:
+          (json['eligible_attempt_count'] as num?)?.toInt() ?? 0,
+      timeBasis: json['time_basis'] as String? ?? 'duration',
       fastest: el(json['fastest_seconds']),
       slowest: el(json['slowest_seconds']),
       stdDev: el(json['std_dev_seconds']),
