@@ -40,6 +40,11 @@ class RouteStatsView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text(
+          'Performance time basis: recorded duration (eligible attempts only).',
+          style: textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: AppSpacing.sm),
         _StatRow(label: 'Personal Best', value: stats.pb),
         _StatRow(label: 'Average', value: stats.average),
         _StatRow(label: 'Median', value: stats.median),

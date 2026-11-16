@@ -1460,7 +1460,7 @@ pub extern "C" fn gps_route_progression(
     output: *mut *mut u8,
     output_len: *mut usize,
 ) -> c_int {
-    use crate::analytics::{pb_progression, Attempt};
+    use crate::analytics::{Attempt, pb_progression};
 
     dispatch(input, input_len, output, output_len, |data| {
         let mut rd = Rd::new(data);
@@ -1510,7 +1510,7 @@ pub extern "C" fn gps_route_rank(
     output: *mut *mut u8,
     output_len: *mut usize,
 ) -> c_int {
-    use crate::analytics::{attempt_rank, Attempt};
+    use crate::analytics::{Attempt, attempt_rank};
 
     dispatch(input, input_len, output, output_len, |data| {
         let mut rd = Rd::new(data);
