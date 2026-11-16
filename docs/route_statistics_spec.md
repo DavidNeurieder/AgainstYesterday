@@ -87,12 +87,14 @@ Candidates to migrate or consolidate behind engine/service APIs (avoid parallel 
 - Keep `routeStatsIndexProvider` reactive and deletion-safe; do not introduce a second stats source of truth.
 - Tests: extend Rust analytics tests, fake/Rust parity, and Flutter stats/history/result tests for eligibility, units, empty/insufficient data, and mutation.
 
-## 7. Open decisions (to confirm during S1)
+## 7. Decisions (R1, 2026-11-16)
 
-- Exact canonical time basis for PB/pace (moving vs elapsed) per context and how it maps to stored `Activity.duration`.
-- Treatment of `isExample` in personal aggregates and route comparison.
-- Minimum sample sizes/thresholds for trend, consistency, and elevation display.
-- Full-attempt vs partial-association eligibility once route-matching classification exposes it.
+- **Canonical performance time basis (current):** route PB, averages/median/last/fastest/slowest/range/trend/recent, progression, ranking, and pace aggregates use the stored attempt performance duration (`Activity.duration` / route-stats duration field) as recorded today (elapsed/moving semantics remain those of the persisted duration; UI must label basis when moving-time alternatives are introduced). `TrackAnalytics` keeps elapsed/moving/stopped breakdowns; future API additions may expose both bases explicitly, but existing aggregates must not silently change meaning.
+- **Examples/bundled data:** `Activity.isExample` and attempts on `Route.isExample` are excluded from personal aggregates, progression, history PB, and result ranking. Bundled/demo data may be shown as demo context but never mixed into personal performance metrics.
+- **Eligibility baseline (current):** an eligible route attempt has `routeId` match, is not an example, and has a non-null recorded duration. Zero-duration attempts remain representable by current engine/tests; distance/quality/coverage gates and exclusion of degenerate or insufficient-quality attempts are follow-up tightening once quality signals are wired into aggregation (must be explicit, not silent).
+- **Comparable/partial attempts:** only attempts classified as valid comparable route attempts count toward PB/progression/segment-vs-PB benchmarks. Partial, ambiguous, or identity-only associations (per route-matching policy) must not count as full PB attempts unless explicitly promoted by policy; treat as excluded/unavailable until classification is exposed in stats inputs.
+- **Sample size/quality thresholds:** keep trend/recent/verdict only when sufficient attempts exist (current engine behavior: trend with >=2, recent from up to 5, verdict from recent vs average). Elevation metrics/profiles require `has_elevation_data` and adequate samples/coverage; show unavailable/insufficient rather than fabricating values. Consistency claims require enough samples to be meaningful (define numeric minimums when consistency UI expands).
+- **Determinism/ties:** strict improvement (`<` standing best) sets a new PB/progression event; equal times do not replace/duplicate an improver. Ranking is by fastest duration with deterministic tiebreaks.
 
 ## 8. Implementation status (2026-11-16)
 
