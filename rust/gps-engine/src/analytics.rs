@@ -935,7 +935,12 @@ mod tests {
 
     #[test]
     fn attempt_rank_excludes_ineligible_and_is_deterministic() {
-        let a = attempts(&[(1_000, 1500.0), (2_000, 0.0), (3_000, 1400.0), (4_000, 1400.0)]);
+        let a = attempts(&[
+            (1_000, 1500.0),
+            (2_000, 0.0),
+            (3_000, 1400.0),
+            (4_000, 1400.0),
+        ]);
         assert_eq!(attempt_rank(&a, 2), Some(1));
         assert_eq!(attempt_rank(&a, 3), Some(2));
         assert_eq!(attempt_rank(&a, 0), Some(3));
