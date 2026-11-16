@@ -103,7 +103,7 @@ class RouteRecordRecorderScreen extends ConsumerWidget {
                 child: Container(
                   // Neutral background shows through when tiles can't load
                   // (offline or no network), so the map never looks blank.
-                  color: AppColors.surfaceLow,
+                  color: AppColors.surface,
                   child: mapSurface.build(
                     context,
                     MapScene(
