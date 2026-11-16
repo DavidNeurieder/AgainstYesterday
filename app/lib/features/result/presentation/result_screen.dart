@@ -59,19 +59,42 @@ class ResultScreen extends ConsumerWidget {
     final gapCurve = pace.gapCurve;
 
     final rankFuture = () async {
-      if (route == null || activities.isEmpty) return null;
+      if (route == null || activities.isEmpty || route.isExample) return null;
       final attempts = [
         for (final a in activities)
           if (a.routeId == route.id && a.duration != null && !a.isExample) a,
       ];
-      if (attempts.isEmpty || route.isExample) return null;
-      final latest = activities.first;
+      if (attempts.isEmpty) return null;
+      // Prefer the just-completed run (typically newest in history), but fall
+      // back to the newest attempt on this route so the label still resolves if
+      // ordering differs.
+      final latest = attempts.firstWhere(
+        (a) => a.id == activities.first.id,
+        orElse: () => attempts.first,
+      );
       final rank = await ref.read(engineServiceProvider).computeRouteAttemptRank(
             route: route,
             attempts: attempts,
             activityId: latest.id,
           );
-      if (rank == null) return null;
+      if (rank == null) {
+        // Fallback for ineligible/edge cases: rank among timed attempts.
+        final ranked = [...attempts]..sort((a, b) {
+            final da = a.duration?.seconds ?? double.infinity;
+            final db = b.duration?.seconds ?? double.infinity;
+            final cmp = da.compareTo(db);
+            if (cmp != 0) return cmp;
+            return b.startedAt.compareTo(a.startedAt);
+          });
+        final idx = ranked.indexWhere((a) => a.id == latest.id);
+        if (idx < 0) return null;
+        final n = idx + 1;
+        final suffix = switch (n % 100) {
+          11 || 12 || 13 => 'th',
+          _ => switch (n % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' },
+        };
+        return 'Your $n$suffix fastest run on this route';
+      }
       final suffix = switch (rank % 100) {
         11 || 12 || 13 => 'th',
         _ => switch (rank % 10) { 1 => 'st', 2 => 'nd', 3 => 'rd', _ => 'th' },
