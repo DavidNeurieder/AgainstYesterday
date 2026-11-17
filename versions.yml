@@ -4,8 +4,8 @@
 # CI, and F-Droid recipe). Update here when bumping a toolchain.
 
 flutter: "3.41.2"
-rust: "stable"
-rust-toolchain: "stable"
+rust: "1.100.0"
+rust-toolchain: "1.100.0"
 ndk: "28.2.13676358"
 jdk: "21"
 android-min-sdk: "24"

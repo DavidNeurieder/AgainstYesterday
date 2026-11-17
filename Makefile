@@ -2,7 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 # Flutter commands run in app/; Cargo commands use the workspace at the repo
-# root. The Rust FFI suites (test-rust-engine) need the host cdylib. The app
+# root. Release APKs go through app/tool/repro_build.sh, which builds from a
+# fixed source path so local and F-Droid artifacts are byte-identical.
+# FLUTTER_BIN selects the Flutter executable (defaults to `flutter` on PATH).
+# The Rust FFI suites (test-rust-engine) need the host cdylib. The app
 # auto-selects the real engine when its native library is present, so
 # engine-android (the Android cdylibs under app/android/app/src/main/jniLibs)
 # is a prerequisite of the targets that produce a device artifact:
@@ -41,6 +44,7 @@ endif
 # keeps APKs from earlier builds in the output directory, so build and copy by
 # name instead of globbing.
 ANDROID_ABI ?= arm64-v8a
+FLUTTER_BIN ?= flutter
 # Maps a Flutter ABI name to the value --target-platform expects.
 target_platform = $(if $(filter arm64-v8a,$(1)),android-arm64,$(if $(filter armeabi-v7a,$(1)),android-arm,android-x64))
 ANDROID_TARGET_PLATFORM := $(call target_platform,$(ANDROID_ABI))
@@ -84,9 +88,8 @@ build: stale-android-apks-debug maplibre-fdroid-clean
 	cd app && flutter build apk --debug --target-platform $(ANDROID_TARGET_PLATFORM) \
 		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
 
-build-release: stale-android-apks-release maplibre-fdroid-clean engine-android
-	cd app && flutter build apk --release --target-platform $(ANDROID_TARGET_PLATFORM) \
-		--dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+build-release: stale-android-apks-release
+	ABI=$(ANDROID_ABI) ./app/tool/repro_build.sh "$(FLUTTER_BIN)"
 
 build-linux-release: engine-build
 	cd app && flutter build linux --release \
@@ -112,7 +115,7 @@ release-all: build-release build-linux-release build-cli-release
 # REPRO_REF compares build output against a reference APK/dir/hash file.
 REPRO_ABI ?= arm64-v8a
 REPRO_ARTIFACT := $(APK_OUT)/app-release.apk
-REPRO_BUILD_CMD := ABIS=$(REPRO_ABI) ./app/tool/build_rust_engine_android.sh && cd app && flutter build apk --release --target-platform $(call target_platform,$(REPRO_ABI)) --dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+REPRO_BUILD_CMD := ABI=$(REPRO_ABI) ./app/tool/repro_build.sh "$(FLUTTER_BIN)"
 REPRO_CLEAN_CMD := rm -rf app/build && cargo clean && rm -rf app/android/app/src/main/jniLibs
 
 repro-check:
@@ -218,7 +221,7 @@ check:
 
 check-versions: ## Verify toolchain versions are consistent across sources
 	@echo "== Toolchain versions =="
-	@echo "Rust toolchain: $$(cat .rust-toolchain.toml | grep channel | sed 's/.*= *\"//;s/\".*//')"
+	@echo "Rust toolchain: $$(sed -n 's/^channel *= *\"\([^\"]*\)\".*/\1/p' rust-toolchain.toml)"
 	@echo "Flutter (CI):   $$(grep 'flutter-version:' .github/workflows/ci.yml | head -1 | sed -E "s/.*flutter-version: *'([^']+)'.*/\1/")"
 	@echo "NDK (gradle):   $$(grep ndkVersion app/android/app/build.gradle.kts | sed -E 's/.*ndkVersion *= *"([^"]+)".*/\1/')" 
 	@echo "NDK (script):   (resolved from build.gradle.kts at build time)"

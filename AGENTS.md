@@ -30,6 +30,13 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
 - Android builds need **JDK 21** (MapLibre compiles with Java 21) even though
   the app targets Java 17. CI's Android job pins Temurin 21; the Makefile exports
   a detected JDK 21 as `JAVA_HOME` when one is not already set.
+- `make build-release` and F-Droid use `app/tool/repro_build.sh`, which copies
+  the source tree to `/tmp/against-yesterday-repro-build` before running Flutter.
+  Dart AOT embeds the absolute URI of Flutter's generated plugin registrant in
+  `libapp.so`; the fixed path is what makes local and F-Droid APKs byte-identical.
+  Override the path with `REPRO_BUILD_ROOT` and the Flutter executable with
+  `FLUTTER_BIN`. The same script also rebuilds the Rust cdylib, so keep its ABI
+  and the F-Droid recipe in sync.
 
 ## Engine notes
 
