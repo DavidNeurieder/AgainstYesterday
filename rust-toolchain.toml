@@ -1,0 +1,12 @@
+# Copyright (C) 2026 David Neurieder
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Pin the Rust toolchain for every build made from this repository. rustup
+# applies this file to cargo/rustc invocations regardless of the user's default
+# toolchain, so bumping `channel` here is the only place a Rust upgrade is
+# needed -- local builds, CI and the F-Droid recipe all pick it up.
+[toolchain]
+channel = "1.100.0"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
+targets = ["aarch64-linux-android"]

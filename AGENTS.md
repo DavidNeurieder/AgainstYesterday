@@ -23,6 +23,10 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   `cargo clippy --all-targets --all-features -- -D warnings`,
   `cargo fmt --all --check`, `cargo build --release -p gps-engine`.
 - CI (`.github/workflows/ci.yml`) mirrors these plus an on-device E2E suite.
+- Rust is pinned by `rust-toolchain.toml` at the repo root. rustup applies it
+  to cargo/rustc calls made from this workspace, so local, CI and F-Droid
+  builds use the same compiler regardless of the user's default toolchain.
+  Bump the version there; do not add toolchain overrides to recipes or CI.
 - Android builds need **JDK 21** (MapLibre compiles with Java 21) even though
   the app targets Java 17. CI's Android job pins Temurin 21; the Makefile exports
   a detected JDK 21 as `JAVA_HOME` when one is not already set.
