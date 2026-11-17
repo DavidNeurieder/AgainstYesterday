@@ -35,6 +35,8 @@ documented here, grouped by the implementation milestones in
 - F-Droid-clean MapLibre builds no longer ship Google Play Services
   declarations, and `libdartjni.so` no longer carries a path-dependent GNU
   build ID.
+- F-Droid buildservers without a system C linker now use the NDK's host clang
+  for Rust build scripts, so the engine cross-build no longer needs `cc`.
 
 ## [0.1.0] - 2026-11-12
 
