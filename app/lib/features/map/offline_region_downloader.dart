@@ -96,7 +96,7 @@ class DisabledOfflineRegionDownloader implements OfflineRegionDownloader {
     void Function(double progress)? onProgress,
   }) async {
     throw const OfflineDownloadException(
-      'Offline maps need the MapLibre renderer (MAP_VIEW=true).',
+      'Offline maps need the MapLibre renderer (MAP_VIEW is not false).',
     );
   }
 

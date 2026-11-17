@@ -16,7 +16,13 @@
 /// cdylib that `app/tool/build_rust_engine_android.sh` bundles into the APK. On
 /// host workloads point the build at the library with
 /// `--dart-define=GPS_ENGINE_LIB=/path/to/libgps_engine.so`.
+///
+/// The live GPS source follows `USE_DEVICE_GPS`: unset means the phone receiver
+/// on Android (the build default), `false` the deterministic demo timeline, and
+/// `true` the receiver on any platform.
 library;
+
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -67,15 +73,27 @@ final engineServiceProvider = Provider<EngineService>((_) {
   return FakeEngineService();
 });
 
-/// Raw `USE_DEVICE_GPS` — `'true'` reads the live run from the phone receiver
-/// (real GPS); anything else replays the deterministic demo timeline.
+/// Raw `USE_DEVICE_GPS` — `'true'` forces the phone receiver, `'false'` forces
+/// the deterministic demo timeline; unset means "the receiver on Android".
 const String _useDeviceGps = String.fromEnvironment('USE_DEVICE_GPS');
 
-/// The live GPS source, or `null` to keep the deterministic scenario timeline.
+/// Resolves the raw `USE_DEVICE_GPS` value into a source, so the default
+/// policy is testable without a device.
 ///
-/// `USE_DEVICE_GPS=true` installs the real [DeviceGpsSource]; host tests and
-/// the E2E run without the define and override this provider directly when
-/// they want to exercise the device path with a canned fix stream.
+/// Unset is device-first: a phone build records the real receiver. The Linux
+/// desktop and host tests fall back to the deterministic demo timeline (there
+/// is no receiver to read there), and the on-device demo integration suite
+/// passes `USE_DEVICE_GPS=false` explicitly.
+GpsSource? deviceGpsSourceFromDefine(String raw, {required bool isAndroid}) {
+  return switch (raw) {
+    'false' => null,
+    'true' => const DeviceGpsSource(),
+    _ => isAndroid ? const DeviceGpsSource() : null,
+  };
+}
+
+/// The live GPS source, or `null` to keep the deterministic scenario timeline.
 final deviceGpsProvider = Provider<GpsSource?>(
-  (_) => _useDeviceGps == 'true' ? const DeviceGpsSource() : null,
+  (_) =>
+      deviceGpsSourceFromDefine(_useDeviceGps, isAndroid: Platform.isAndroid),
 );

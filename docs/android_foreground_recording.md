@@ -153,7 +153,7 @@ Automated (all in CI):
 - `live_run_protection_banner_test.dart` — the banner appears only for
   `unavailable`.
 - Full Flutter suite, `flutter analyze`, and the Android debug build
-  (`make build`, `MAP_VIEW=true`) are green.
+  (`make build`, MapLibre by default) are green.
 
 On physical hardware (not run in this workspace — needs a phone):
 

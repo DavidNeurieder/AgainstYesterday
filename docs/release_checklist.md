@@ -117,8 +117,8 @@ needs a person and a device. CI job names refer to
 
 ## Gate 8 — Release artifact
 
-- [ ] [manual] `make build-release` (release APK with `USE_DEVICE_GPS=true` and
-      the Rust cdylibs bundled) installs, launches, and preserves data.
+- [ ] [manual] `make build-release` (release APK with the real receiver and the
+      Rust cdylibs bundled) installs, launches, and preserves data.
 - [ ] [manual] The release build — minified, **separate from the debug build** —
       passes the smoke below. Never sign off on a debug artifact alone.
 

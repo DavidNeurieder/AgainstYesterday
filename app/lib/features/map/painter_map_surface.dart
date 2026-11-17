@@ -3,10 +3,10 @@
 
 /// The [MapSurface] fallback: the existing self-contained `RouteMap` painter.
 ///
-/// This is what host tests are forced onto, and what device builds get unless
-/// `MAP_VIEW=true` selects MapLibre. Routing the painter through the seam keeps
-/// a single map call site in the screens, so switching renderers is a build
-/// flag rather than a rewrite.
+/// This is what host tests are forced onto, and what device builds get when
+/// `MAP_VIEW=false` opts out of MapLibre (MapLibre is the build default).
+/// Routing the painter through the seam keeps a single map call site in the
+/// screens, so switching renderers is a build flag rather than a rewrite.
 library;
 
 import 'package:flutter/material.dart';

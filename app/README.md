@@ -159,19 +159,22 @@ these to expose the diagnostics entry point (M15).
 
 ## Real phone GPS
 
-A plain `flutter run`/`flutter test` replays the deterministic demo timeline
-(no receiver needed — deterministic and cheap); the app starts with an empty
-route catalog and records freely until the user builds routes by finishing
-runs. A `USE_DEVICE_GPS=true` build records the phone's real fixes: the
-geolocator plugin streams 1 Hz positions into the recording controller, and
-position, distance, pace, the raw-fix buffer and the persisted track all come
-from the receiver.
+`USE_DEVICE_GPS` is an opt-out: a phone build records the phone's real fixes by
+default, so a plain `flutter run` on a device / `flutter build apk` is the
+artifact you want. The geolocator plugin streams 1 Hz positions into the
+recording controller, and position, distance, pace, the raw-fix buffer and the
+persisted track all come from the receiver.
 
 ```bash
-flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
+flutter build apk --debug                              # real receiver (default)
+flutter build apk --debug --dart-define=USE_DEVICE_GPS=false  # demo timeline
 ```
 
-`make build`, `make install` and `make build-release` pass the define for you.
+Host tests, the Linux desktop and the on-device demo integration suite keep
+the deterministic demo timeline — there is no receiver to read on the host, and
+the demo E2E passes the opt-out itself. A `USE_DEVICE_GPS=true` define forces
+the receiver on any platform. `make build`, `make install` and
+`make build-release` restate the default.
 On a recognised route the live fix snaps onto that route's geometry for the
 ghost gap (never rewinding accumulated distance); an unrecognised line
 accumulates ground distance as a new route. A free run's distance and moving
@@ -194,13 +197,15 @@ section names the active source.
 
 Screens draw route and track geometry through `MapSurface`
 (`lib/features/map/`), never a concrete map widget. `MAP_VIEW` picks the
-renderer at build time, mirroring `USE_RUST_ENGINE`: unset/`false` keeps the
-self-contained painter (`RouteMap`, hermetic on host/tests), `true` requires
-the MapLibre renderer (`maplibre_gl`, the engine behind Organic Maps);
+renderer at build time and defaults to the MapLibre renderer
+(`maplibre_gl`, the engine behind Organic Maps); `MAP_VIEW=false` opts out to
+the self-contained painter (`RouteMap`, hermetic on host/tests).
 `MAP_STYLE_URL` overrides the style document (default OpenFreeMap Liberty).
-The download button and the offline region list only exist when `MAP_VIEW=true`,
-so the device targets pass it for you: `make build`, `make install` and
-`make build-release` build with `MAP_VIEW=true` (plus `USE_DEVICE_GPS=true`).
+The painter is still what the desktop and host/widget tests get (the seam
+forces it under `FLUTTER_TEST`), so plain `flutter test` stays hermetic.
+A MapLibre device build shows the route-detail download card and the offline
+region list; `make build`, `make install` and `make build-release` restate
+`MAP_VIEW=true`, and the hermetic on-device E2E passes `MAP_VIEW=false`.
 Android builds with MapLibre need JDK 21 — the Makefile exports a detected
 JDK 21 as `JAVA_HOME`, and CI pins Temurin 21.
 

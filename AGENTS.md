@@ -37,11 +37,13 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   and `DEV_TOOLS` are compile-time `--dart-define` flags, not environment
   variables. `USE_RUST_ENGINE` is tri-state: unset (auto), `true` (require,
   missing library is a startup error), `false` (always the fake).
-  `USE_DEVICE_GPS=true` reads the live run from the phone receiver via
-  geolocator; without it the recording replays the deterministic demo timeline
-  (the host/test/E2E default). `make build`/`install`/`build-release` pass the
-  define (plus `MAP_VIEW=true`, see below) so installed phone artifacts record
-  real GPS and render with the MapLibre map. While the receiver streams, the
+  `USE_DEVICE_GPS` is an opt-out: a phone build reads the live run from the
+  receiver via geolocator by default, while `USE_DEVICE_GPS=false` replays the
+  deterministic demo timeline (what the host tests and the on-device demo
+  suite pass). `true` forces the receiver on any platform. `make
+  build`/`install`/`build-release` restate the default so the log says what was
+  built, but a plain `flutter build apk` already records real GPS and renders
+  with the MapLibre map. While the receiver streams, the
   controller keeps an Android foreground `location` service
   (`RecordingForegroundService`, started/stopped over the
   `app.against_yesterday/recording` platform channel) so fixes keep
@@ -71,12 +73,13 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   activity track and the route-detail course map all go through it. The
   renderer is `flutter_map` (raster OpenStreetMap tiles) on Linux desktop, the
   self-contained painter (`RouteMap`) in host/widget tests, and otherwise
-  selected at build time by `MAP_VIEW`: unset/`false` = the painter, `true` =
-  the MapLibre renderer (`maplibre_gl`). The painter is the default, so host
-  tests stay hermetic; device artifacts opt in — `make build`/`install`/
-  `build-release` pass `MAP_VIEW=true`, and without it the route-detail
-  download button and the offline region list never appear
-  (`offlineMapsAvailableProvider` is false).
+  selected at build time by `MAP_VIEW`, which defaults to the MapLibre
+  renderer (`maplibre_gl`); `MAP_VIEW=false` opts out to the painter. Host
+  tests stay hermetic because the seam forces the painter under
+  `FLUTTER_TEST`. The route-detail download button and the offline region
+  list follow `offlineMapsAvailableProvider`, which is false on the desktop
+  and in host tests and true on a MapLibre device build; the hermetic
+  on-device E2E passes `MAP_VIEW=false` explicitly.
 - `MAP_STYLE_URL` overrides the MapLibre style document (default OpenFreeMap
   Liberty) and `MAP_TILE_URL` overrides the desktop raster tile template
   (default the public OSM tile server — point it at a self-hosted server for

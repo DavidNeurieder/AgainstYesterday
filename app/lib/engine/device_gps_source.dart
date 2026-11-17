@@ -54,14 +54,14 @@ GpsFix gpsFixFromPlatformMap(Map<String, dynamic> map) {
 ///
 /// Two personalities exist:
 ///
-///  * [DeviceGpsSource] — the real receiver, wired in for phone builds
-///    (`USE_DEVICE_GPS=true`);
+///  * [DeviceGpsSource] — the real receiver, wired in for phone builds (the
+///    `USE_DEVICE_GPS` default on Android);
 ///  * a deterministic fake implementing this interface — tests inject one to
 ///    drive the device path with a canned fix timeline.
 ///
 /// `null` is not a source: the `deviceGpsProvider` in `app/dependencies.dart`
 /// holds a `null` when the build should keep replaying the deterministic demo
-/// timeline instead (unit/widget tests and the E2E default).
+/// timeline instead (hosts, the Linux desktop, and `USE_DEVICE_GPS=false`).
 abstract interface class GpsSource {
   /// Human-readable identity for the diagnostics readout.
   String get description;

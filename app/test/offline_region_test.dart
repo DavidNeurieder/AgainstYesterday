@@ -183,6 +183,25 @@ void main() {
         ),
         isFalse,
       );
+      // MapLibre is the build default, but a Linux host or a widget test still
+      // cannot save regions: the desktop has no MapLibre target and the tests
+      // must stay hermetic.
+      expect(
+        offlineRegionsSupported(
+          mapsEnabled: true,
+          renderer: MapRenderer.maplibre,
+          isDesktop: true,
+        ),
+        isFalse,
+      );
+      expect(
+        offlineRegionsSupported(
+          mapsEnabled: true,
+          renderer: MapRenderer.maplibre,
+          isTest: true,
+        ),
+        isFalse,
+      );
       // Linux desktop no longer persists map tiles/offline regions; the painter
       // backend is never considered offline-capable.
       expect(
@@ -222,6 +241,25 @@ void main() {
         ),
         isFalse,
       );
+    });
+
+    test('a host test resolves the no-op backend and no offline UI', () {
+      final container = ProviderContainer(
+        overrides: [
+          persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // MAP_VIEW defaults to MapLibre, but the widget-test host must not
+      // construct the plugin-backed downloader or offer a download it cannot
+      // perform.
+      expect(selectedMapRenderer, MapRenderer.maplibre);
+      expect(
+        container.read(offlineRegionDownloaderProvider),
+        isA<DisabledOfflineRegionDownloader>(),
+      );
+      expect(container.read(offlineMapsAvailableProvider), isFalse);
     });
   });
 

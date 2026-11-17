@@ -11,6 +11,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/engine/device_gps_source.dart';
 
 Map<String, dynamic> _map({
@@ -65,6 +66,34 @@ void main() {
   group('DeviceGpsSource', () {
     test('exposes the device-GPS identity', () {
       expect(const DeviceGpsSource().description, 'device GPS');
+    });
+  });
+
+  group('deviceGpsSourceFromDefine', () {
+    test('an unset define records the real receiver on Android', () {
+      // The build default: a plain `flutter build apk` records real fixes.
+      expect(
+        deviceGpsSourceFromDefine('', isAndroid: true),
+        isA<DeviceGpsSource>(),
+      );
+    });
+
+    test('an unset define keeps the demo timeline off-device', () {
+      // Hosts and the Linux desktop have no receiver worth reading, so they
+      // stay deterministic without needing the flag.
+      expect(deviceGpsSourceFromDefine('', isAndroid: false), isNull);
+    });
+
+    test('=false opts out on any platform', () {
+      expect(deviceGpsSourceFromDefine('false', isAndroid: true), isNull);
+      expect(deviceGpsSourceFromDefine('false', isAndroid: false), isNull);
+    });
+
+    test('=true forces the receiver on any platform', () {
+      expect(
+        deviceGpsSourceFromDefine('true', isAndroid: false),
+        isA<DeviceGpsSource>(),
+      );
     });
   });
 }

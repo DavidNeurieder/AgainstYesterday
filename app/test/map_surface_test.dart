@@ -37,6 +37,13 @@ void main() {
         expect(mapRendererFromDefine(raw), MapRenderer.painter, reason: raw);
       }
     });
+
+    test('the build selects MapLibre without any define', () {
+      // The defines are opt-outs now: a plain `flutter build` must produce the
+      // real map (and, per dependencies.dart, the real receiver on Android).
+      expect(kMapViewDefine, 'true');
+      expect(selectedMapRenderer, MapRenderer.maplibre);
+    });
   });
 
   group('lineStringFeatureCollection', () {

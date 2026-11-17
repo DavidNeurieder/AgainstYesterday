@@ -18,11 +18,12 @@ Flutter app  →  EngineService (facade)  →  Rust engine (FFI)
   elapsed time and the PB gap.
 - **Ghost racing** — every route carries a PB; run against its ghost live on
   the map, and finish the run to see where you were faster or slower.
-- **Map** — route and track geometry drawn through one `MapSurface` seam. The
-  default is a self-contained painter (no map SDK) that stays hermetic on host
-  and desktop; device builds opt into the MapLibre renderer (the engine behind
-  Organic Maps) with `MAP_VIEW=true`: the route, the travelled portion, the YOU
-  and PB-ghost markers and a follow camera with recenter.
+- **Map** — route and track geometry drawn through one `MapSurface` seam. Host
+  and desktop use a self-contained painter (no map SDK, hermetic); device builds
+  render through the MapLibre renderer (the engine behind Organic Maps) by
+  default, and `MAP_VIEW=false` opts back out to the painter: the route, the
+  travelled portion, the YOU and PB-ghost markers and a follow camera with
+  recenter.
 - **Offline maps** — on MapLibre device builds, each route's map can be saved
   locally (and managed in Settings → Map with progress, delete and attribution).
   Saving is per-route, size-capped and one at a time; on the Linux desktop the
@@ -132,17 +133,23 @@ diagnostics entry point.
 
 ## Using the real phone GPS
 
-A plain `flutter run`/`flutter test` replays the deterministic demo timeline
+`USE_DEVICE_GPS` is an opt-out, not an opt-in: a phone build records the
+device's real fixes by default, so a plain `flutter build apk` is the artifact
+you want. Host tests and the Linux desktop keep the deterministic demo timeline
 (roughly the ~4.8 km "River Loop" walkable on the host — the app's catalog
-itself stays empty until the user builds routes), so the flow is explorable
-with no phone. To record *actual* device fixes, build with `USE_DEVICE_GPS`:
+itself stays empty until the user builds routes), and the on-device demo
+integration suite passes `USE_DEVICE_GPS=false` explicitly:
 
 ```bash
-cd app && flutter build apk --debug --dart-define=USE_DEVICE_GPS=true
+# Real receiver (the default; the flag just spells it out)
+cd app && flutter build apk --debug
+
+# Deterministic demo timeline, e.g. for a hermetic device run
+cd app && flutter build apk --debug --dart-define=USE_DEVICE_GPS=false
 ```
 
-`make build`, `make install` and `make build-release` pass the define for you,
-so the installed app races real GPS while hosts and the emulator E2E keep the
+`make build`, `make install` and `make build-release` restate the default, so
+installed artifacts record real GPS while hosts and the emulator E2E keep the
 deterministic timeline. Device mode reads 1 Hz fixes through the geolocator
 plugin (the app requests `ACCESS_FINE_LOCATION` on Android and uses
 `NSLocationWhenInUseUsageDescription` on iOS): live position, distance, pace
@@ -161,28 +168,26 @@ section prints which source is live.
 
 ## Offline map & map licensing
 
-Device builds can render through MapLibre Native (the engine behind Organic
-Maps) and download routes for offline use:
+Device builds render through MapLibre Native (the engine behind Organic Maps)
+by default and download routes for offline use:
 
 ```bash
-cd app && flutter build apk --debug \
-  --dart-define=USE_DEVICE_GPS=true --dart-define=MAP_VIEW=true
+cd app && flutter build apk --debug
 ```
 
-`MAP_VIEW` is tri-state, mirroring `USE_RUST_ENGINE`: unset/`false` keeps the
-self-contained painter (the hermetic host/test/desktop default), `true`
-requires the MapLibre renderer. Every map-bearing screen — the live run, the
-activity track and the route-detail course map — renders through the
+`MAP_VIEW` is an opt-out, mirroring `USE_DEVICE_GPS`: unset (or `true`)
+selects the MapLibre renderer, `false` keeps the self-contained painter (the
+hermetic host/test/desktop default). Every map-bearing screen — the live run,
+the activity track and the route-detail course map — renders through the
 `MapSurface` seam, so a device build shows the MapLibre map everywhere while
 host/test builds stay hermetic. `MAP_STYLE_URL` overrides the style document
 (default OpenFreeMap Liberty) — point it at a self-hosted tile server for
-anything beyond per-route downloads. **Without `MAP_VIEW=true` the offline
-route card and the offline region list never appear**, so the device targets
-pass the define for you: `make build`, `make install` and `make build-release`
-all build with `MAP_VIEW=true` (plus `USE_DEVICE_GPS=true`). Android builds with
-MapLibre need JDK 21 (the plugin compiles with Java 21); the Makefile exports
-a detected JDK 21 as `JAVA_HOME` and CI pins Temurin 21, so `make
-build`/`install` just work.
+anything beyond per-route downloads. Offline regions come with the MapLibre
+build: `make build`, `make install` and `make build-release` restate
+`MAP_VIEW=true`; pass `MAP_VIEW=false` for a device build that must stay on
+the painter (the demo E2E does). Android builds with MapLibre need JDK 21
+(the plugin compiles with Java 21); the Makefile exports a detected JDK 21 as
+`JAVA_HOME` and CI pins Temurin 21, so `make build`/`install` just work.
 
 Offline regions are per-route, saved automatically when the route or one of its
 runs is first opened, and size-capped (zoom 12–15 under a client-side tile
@@ -279,8 +284,9 @@ Milestones M1–M29 are implemented (see [CHANGELOG.md](CHANGELOG.md)). The app
 ships with an empty catalog — no pre-recorded routes or demo history — and
 records a free run until the user builds routes by finishing runs. On the
 host/tests the deterministic fake GPS timeline (the ~4.8 km "River Loop"
-fixture) keeps the whole loop explorable with no phone; a `USE_DEVICE_GPS=true`
-build records the phone receiver's real fixes instead.
+fixture) keeps the whole loop explorable with no phone; a phone build records
+the receiver's real fixes by default (`USE_DEVICE_GPS=false` opts back into the
+demo timeline).
 M15 added the raw-GPS quality model, checked-in replay fixtures, ghost
 geometry invariants and continuity-aware matching on the Rust side, plus the
 developer diagnostics screen on the app side. It also retains the raw fixes
@@ -292,8 +298,8 @@ screens, a WCAG-checked palette and a first launch that opens straight on the
 route library —
 with `main()` now persisting settings, routes, activities and snapshots to
 the device's application documents directory across restarts.
-The offline-map roadmap added a renderer seam (`MapSurface`, painter default,
-MapLibre on device), a live-run map with YOU/PB markers and follow, the
+The offline-map roadmap added a renderer seam (`MapSurface`, hermetic painter
+on host, MapLibre on device), a live-run map with YOU/PB markers and follow, the
 recorded-track map on activity detail, and per-route offline regions with
 Settings management — see the staging plan in
 `ideas/offline_map_plan.txt` and the licensing page above for what is bundled

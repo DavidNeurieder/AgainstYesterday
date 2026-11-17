@@ -655,6 +655,7 @@ run_device_gps_suite() {
   # instead of a silent skip, mirroring REQUIRE_RUST_ENGINE in the host job.
   if ! flutter_test_retry integration_test/device_gps_test.dart -d "$SERIAL" \
     --dart-define=USE_DEVICE_GPS=true \
+    --dart-define=MAP_VIEW=false \
     --dart-define=REQUIRE_DEVICE_GPS=true \
     ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
     echo ">> Device-GPS test failed — dumping state:" >&2
@@ -777,6 +778,7 @@ run_permissions_suite() {
 
     if ! flutter_test_retry integration_test/permissions_test.dart -d "$SERIAL" \
       --dart-define=USE_DEVICE_GPS=true \
+      --dart-define=MAP_VIEW=false \
       --dart-define=REQUIRE_DEVICE_GPS=true \
       --dart-define=PERMISSION_CASE="$case" \
       ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
@@ -824,12 +826,12 @@ stop_permission_helpers() {
 # harness then:
 #
 #   1. `flutter run -t integration_test/process_death_main.dart` — install the
-#      app once (no USE_DEVICE_GPS, so the deterministic demo timeline drives
-#      the run and no permission is involved);
+#      app once (`USE_DEVICE_GPS=false`, so the deterministic demo timeline
+#      drives the run and no permission is involved);
 #   2. seed the settings document (intro and §33 rationale already seen) and a
-#      one-route catalog, then drive Home with real taps: RACE YOUR BEST →
-#      START, and wait until the interrupted-run snapshot reaches the real
-#      on-disk JsonFileStore. The run has to be a *race*: the resumed run
+#      one-route catalog, then drive Home with real taps: RACE (on the route
+#      card) → START, and wait until the interrupted-run snapshot reaches the
+#      real on-disk JsonFileStore. The run has to be a *race*: the resumed run
 #      belongs to the race flow (§28), while the new-route recording flow
 #      (`RECORD ROUTE`) deliberately starts a fresh line every time — tapping
 #      it after a relaunch would neither restore nor preserve the old run;
@@ -869,6 +871,8 @@ run_process_death_suite() {
   RUN_LOG="$ARTIFACTS_DIR/process-death-run.log"
   mkdir -p "$ARTIFACTS_DIR"
   flutter run -t "$entry" -d "$SERIAL" \
+    --dart-define=USE_DEVICE_GPS=false \
+    --dart-define=MAP_VIEW=false \
     ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"} > "$RUN_LOG" 2>&1 &
   local run_pid=$!
   # `flutter run` is left running across the kill/relaunch below; make sure it is
@@ -891,9 +895,10 @@ run_process_death_suite() {
   fi
 
   # --- Open on Home with one route: seed the settings document (intro and the
-  # §33 rationale already seen) plus a one-route catalog. Home only offers
-  # RACE YOUR BEST when a route exists, and the race flow is the only flow
-  # that restores an interrupted run (§28) — see the header note.
+  # §33 rationale already seen) plus a one-route catalog. Home is the route
+  # library, so a seeded route shows as a card with a RACE action, and the race
+  # flow is the only flow that restores an interrupted run (§28) — see the
+  # header note.
   if ! seed_app_document settings \
     '{"onboarding":true,"locationRationale":true}' ||
     ! seed_app_document routes \
@@ -915,15 +920,15 @@ run_process_death_suite() {
     collect_artifacts process-death-home
     exit 1
   fi
-  if ! ui_wait_for 'RACE YOUR BEST' 90; then
+  if ! ui_wait_for 'RACE' 90; then
     echo "error: the app's Home screen never appeared" >&2
     ui_dump >&2 || true
     collect_artifacts process-death-home
     exit 1
   fi
 
-  if ! ui_tap 'RACE YOUR BEST' 20; then
-    echo "error: RACE YOUR BEST was not tappable" >&2
+  if ! ui_tap 'RACE' 20; then
+    echo "error: the route's RACE action was not tappable" >&2
     ui_dump >&2 || true
     collect_artifacts process-death-home
     exit 1
@@ -1023,14 +1028,14 @@ run_process_death_suite() {
   # restored when the race flow opens (`RecordFlowScreen._openSession` resumes
   # the snapshot instead of starting a new session, §28). Resume is deliberately
   # not automatic on Home, so tap the same entry the user would.
-  if ! ui_wait_for 'RACE YOUR BEST' 60; then
+  if ! ui_wait_for 'RACE' 60; then
     echo "error: the relaunched process never reached Home" >&2
     ui_dump >&2 || true
     collect_artifacts process-death-read
     exit 1
   fi
-  if ! ui_tap 'RACE YOUR BEST' 20; then
-    echo "error: RACE YOUR BEST was not tappable after relaunch" >&2
+  if ! ui_tap 'RACE' 20; then
+    echo "error: the route's RACE action was not tappable after relaunch" >&2
     ui_dump >&2 || true
     collect_artifacts process-death-read
     exit 1
@@ -1089,7 +1094,11 @@ run_demo_suite() {
     target="integration_test/app_test.dart"
   fi
   log "Running integration tests ($target) on $SERIAL..."
+  # The build defaults are device-first (real receiver, MapLibre). This demo
+  # journey is deliberately hermetic, so it opts out of both explicitly.
   if ! flutter_test_retry "$target" -d "$SERIAL" \
+    --dart-define=USE_DEVICE_GPS=false \
+    --dart-define=MAP_VIEW=false \
     ${FLUTTER_ARGS[@]+"${FLUTTER_ARGS[@]}"}; then
     collect_artifacts demo
     exit 1

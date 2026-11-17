@@ -13,8 +13,8 @@ The map is rendered by MapLibre Native through the `maplibre_gl` Dart plugin
 - `maplibre_gl` is published on pub.dev by MapLibre.org; the license is
   declared in the package and in the resolved lockfile.
 
-The app builds this renderer only when the `MAP_VIEW=true` dart-define selects
-it (device builds); the default is the app's own self-contained painter, which
+The app builds this renderer by default on device (`MAP_VIEW` unset or `true`);
+`MAP_VIEW=false` selects the app's own self-contained painter instead, which
 has no third-party obligations.
 
 ## Data: OpenStreetMap

@@ -115,8 +115,8 @@ class RouteDetailScreen extends ConsumerWidget {
           // then shares it. The offline card below reports/retries the state.
           RouteMapAutosave(route: route),
           // The course on the map: through the same seam as the activity track
-          // and the live run, so device builds (MAP_VIEW=true) render it with
-          // MapLibre and host/test builds keep the hermetic painter.
+          // and the live run, so device builds render it with MapLibre (the
+          // default) and host/test builds keep the hermetic painter.
           SizedBox(
             height: 180,
             child: ClipRRect(

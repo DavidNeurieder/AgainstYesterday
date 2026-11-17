@@ -16,47 +16,38 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../engine/models.dart';
 import '../../persistence/persistence.dart';
 import '../settings/application/settings_controller.dart';
-import 'flutter_map_surface.dart';
 import 'map_surface.dart';
 import 'offline_region_downloader.dart';
 import 'offline_regions.dart';
-import 'raster_offline_region_downloader.dart';
 
 const String kOfflineRegionsKey = 'offline_regions';
 
-/// The downloader backend for this build: MapLibre on device, a raster tile
-/// cache on Linux desktop, disabled elsewhere (tests override it with a fake).
-final offlineRegionDownloaderProvider = Provider<OfflineRegionDownloader>(
-  (ref) {
-    if (selectedMapRenderer == MapRenderer.maplibre) {
-      return MapLibreOfflineRegionDownloader(styleUrl: kMapStyleUrlDefine);
-    }
-    if (Platform.isLinux && !isFlutterTest) {
-      final cacheRoot = ref.watch(mapTileCacheDirectoryProvider);
-      if (cacheRoot != null) {
-        return RasterOfflineRegionDownloader(
-          cacheRoot: cacheRoot,
-          tileUrlTemplate: kMapTileUrlDefine,
-        );
-      }
-    }
+/// The downloader backend for this build: MapLibre on device, disabled
+/// everywhere else. The Linux desktop renders raster tiles on demand (no
+/// persistent regions, see `main.dart`) and host tests must never touch the
+/// plugin, so both get the no-op backend even though `MAP_VIEW` now defaults
+/// to MapLibre.
+final offlineRegionDownloaderProvider = Provider<OfflineRegionDownloader>((_) {
+  if (Platform.isLinux || isFlutterTest) {
     return const DisabledOfflineRegionDownloader();
-  },
-);
+  }
+  if (selectedMapRenderer == MapRenderer.maplibre) {
+    return MapLibreOfflineRegionDownloader(styleUrl: kMapStyleUrlDefine);
+  }
+  return const DisabledOfflineRegionDownloader();
+});
 
 /// Whether this build and setting can save map tiles locally.
 ///
-/// MapLibre provides offline regions on device builds. The Linux desktop used
-/// to cache raster tiles to disk, but that is disabled now: the desktop app
-/// only renders maps on demand and never persists them.
+/// MapLibre provides offline regions on the mobile app. The Linux desktop no
+/// longer persists tiles, and host tests keep the hermetic painter path.
 bool offlineRegionsSupported({
   required bool mapsEnabled,
   required MapRenderer renderer,
   bool isDesktop = false,
   bool isTest = false,
   bool hasRasterCache = false,
-}) =>
-    mapsEnabled && renderer == MapRenderer.maplibre;
+}) => mapsEnabled && renderer == MapRenderer.maplibre && !isDesktop && !isTest;
 
 /// Whether this build can download offline regions.
 final offlineMapsAvailableProvider = Provider<bool>(

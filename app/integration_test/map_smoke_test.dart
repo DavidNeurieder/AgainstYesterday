@@ -433,7 +433,22 @@ void main() {
 
       // A finger on the map is the one thing that detaches the follow (§16);
       // the recenter button is the way back.
-      await tester.drag(find.byType(MapLibreMap), const Offset(-160, 60));
+      //
+      // Drag with an explicit, slow gesture instead of `tester.drag`: the map
+      // counts a camera move as a user gesture only while a pointer is down or
+      // for a short grace period after it (see `_userGesture` in
+      // `maplibre_map_surface.dart`), and a software-rendered emulator can
+      // deliver the native camera-move callback after that grace. The move then
+      // reads as a platform camera restore, the follow snaps back and no
+      // recenter button appears — a flake on slow devices, not a product bug.
+      final centre = tester.getCenter(find.byType(MapLibreMap));
+      final finger = await tester.startGesture(centre);
+      for (var i = 0; i < 10; i++) {
+        await finger.moveBy(const Offset(-16, 6));
+        await _settle(tester, const Duration(milliseconds: 100));
+      }
+      await _settle(tester, const Duration(milliseconds: 500));
+      await finger.up();
       await _settle(tester, const Duration(seconds: 2));
       expect(
         find.byIcon(Icons.my_location),

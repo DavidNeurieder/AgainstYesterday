@@ -14,26 +14,30 @@
 ///  * widget tests — [PainterMapSurface]. The test runner runs on the desktop
 ///    host, but tests must stay hermetic (no tile downloads, no oversized
 ///    layouts in tiny test viewports), so the painter is used there.
-///  * unset / `false` — [PainterMapSurface], the self-contained `RouteMap`
-///    painter.
-///  * `true` — [MaplibreMapSurface], the offline MapLibre renderer used on
-///    device builds.
+///  * unset / `true` — [MaplibreMapSurface], the offline MapLibre renderer a
+///    device build gets by default.
+///  * `false` — [PainterMapSurface], the self-contained `RouteMap` painter; the
+///    opt-out for hermetic device runs (the demo integration suite).
 ///
-/// The tri-state is deliberately conservative: unlike the Rust engine there is
-/// no runtime "did the native library load" probe for MapLibre, so the fallback
-/// is the default and device artifacts opt in explicitly.
+/// MapLibre is the build default on purpose: forgetting a define must not ship
+/// a build that cannot record real GPS or show the real map. Hosts and tests
+/// override it above, so they never need the flag.
 library;
 
 import 'dart:io';
 
-import 'package:flutter/material.dart';import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/runtime_environment.dart';
 import '../../engine/models.dart';
 import '../settings/application/settings_controller.dart';
 import 'flutter_map_surface.dart';
 import 'maplibre_map_surface.dart';
 import 'offline_region_downloader.dart';
 import 'painter_map_surface.dart';
+
+export '../../core/runtime_environment.dart' show isFlutterTest;
 
 /// Which renderer the build asked for.
 enum MapRenderer {
@@ -45,8 +49,12 @@ enum MapRenderer {
 }
 
 /// The `MAP_VIEW` build-time switch (a `--dart-define`, not an environment
-/// variable). Only the exact string `true` selects MapLibre.
-const String kMapViewDefine = String.fromEnvironment('MAP_VIEW');
+/// variable). MapLibre is the default; only the exact string `false` opts out
+/// to the painter.
+const String kMapViewDefine = String.fromEnvironment(
+  'MAP_VIEW',
+  defaultValue: 'true',
+);
 
 /// The MapLibre style document. Overridable at build time (`MAP_STYLE_URL`) so a
 /// self-hosted tile server can be dropped in without a code change. Defaults to
@@ -161,12 +169,6 @@ final mapSurfaceProvider = Provider<MapSurface>((ref) {
   );
 });
 
-/// Whether this process is the widget-test runner.
-///
-/// `flutter test` sets `FLUTTER_TEST=true` in the tester's environment; the
-/// check is read at runtime because it is not a compile-time define.
-bool get isFlutterTest => Platform.environment['FLUTTER_TEST'] == 'true';
-
 /// Picks the surface for a host. Pure so the mapping can be tested without
 /// depending on the host the test happens to run on.
 ///
@@ -194,7 +196,6 @@ MapSurface resolveMapSurface({
     MapRenderer.painter => const PainterMapSurface(),
   };
 }
-
 
 /// Shows [scene] fullscreen in a dialog using [surface].
 Future<void> showFullscreenMap(

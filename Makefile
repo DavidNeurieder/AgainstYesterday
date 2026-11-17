@@ -8,11 +8,13 @@
 # is a prerequisite of the targets that produce a device artifact:
 # build-release and install.
 #
-# Device artifacts also read the live run from the phone's real GPS
-# (USE_DEVICE_GPS=true) and render with the MapLibre map
-# (MAP_VIEW=true, which is what makes offline region downloads available);
-# a plain `flutter build` keeps the deterministic demo timeline and the
-# painter for hosts and the E2E.
+# Device artifacts record the live run from the phone's real GPS and render
+# with the MapLibre map (which is what makes offline region downloads
+# available). Both are the app's build defaults now: a bare `flutter build`
+# already produces that artifact, and `USE_DEVICE_GPS=false`/`MAP_VIEW=false`
+# are the opt-outs back to the deterministic demo timeline and the painter.
+# The targets below restate the defaults so the build log says what was built;
+# the hermetic on-device E2E passes the opt-outs explicitly.
 
 # MapLibre (via maplibre_gl) compiles with Java 21, so the Android Gradle build
 # must run on JDK 21 even though the app itself targets Java 17. Prefer an
