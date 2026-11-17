@@ -1,6 +1,6 @@
 # Against Yesterday
 
-Version 0.1.0.
+Version 0.2.0.
 
 A GPS run/cycling app built around one idea: **every route is a race with your
 own personal best.** You run against a "ghost" of your PB, and the live gap —
@@ -113,7 +113,7 @@ make build-release   # arm64-v8a release APK
 `make build` and `make build-release` produce an arm64-v8a APK under
 `app/build/app/outputs/flutter-apk/` (`app-debug.apk`, `app-release.apk`); no
 `--split-per-abi` is used, so the versionCode is the pubspec build number
-(`0.1.0+1` → `1`) rather than a per-ABI code. `make install` builds and
+(`0.2.0+2` → `2`) rather than a per-ABI code. `make install` builds and
 sideloads the debug APK. `ANDROID_ABI=...` overrides the target (e.g.
 `ANDROID_ABI=x86_64` for an emulator). `make release-all` builds the
 Android, Linux, and CLI release artifacts and copies them to

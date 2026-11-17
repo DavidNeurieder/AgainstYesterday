@@ -7,6 +7,35 @@ documented here, grouped by the implementation milestones in
 
 ---
 
+## [0.2.0] - 2026-11-17
+
+### Changed
+
+- Device builds now use live GPS and the MapLibre map by default; the
+  deterministic demo timeline and the self-contained painter remain available
+  for host tests via `USE_DEVICE_GPS=false` and `MAP_VIEW=false`.
+- Android recording keeps receiving location fixes with the screen off through
+  a foreground `location` service, with typed diagnostics for missing
+  background permission or service start failure.
+- Route statistics are computed in the Rust engine, with eligibility metadata,
+  attempt progression/ranking, pace and elevation summaries, range filtering,
+  and a route comparison screen.
+- Free runs can be matched to known routes with quality and ambiguity guards;
+  raw fixes are persisted and match status/confidence is shown in diagnostics.
+- Map surfaces gained fullscreen and multi-track views with legends, and the
+  live run, activity track, and route-detail course map all use `MapSurface`.
+- Local `make build-release` and F-Droid build from a fixed canonical source
+  path with the repo-pinned Rust toolchain, producing byte-identical unsigned
+  APKs.
+
+### Fixed
+
+- Result ranking handles ineligible or reordered attempts, and gap curves cope
+  with irregular samples and stationary periods.
+- F-Droid-clean MapLibre builds no longer ship Google Play Services
+  declarations, and `libdartjni.so` no longer carries a path-dependent GNU
+  build ID.
+
 ## [0.1.0] - 2026-11-12
 
 ### Added

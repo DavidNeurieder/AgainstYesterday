@@ -1,0 +1,6 @@
+Version 0.2.0:
+- Live GPS and MapLibre maps by default, with background-safe location recording.
+- Engine-backed route statistics, progression, ranking and route comparison.
+- Route recognition for free runs, with match status and confidence in diagnostics.
+- Fullscreen and multi-track map views with legends.
+- Reproducible unsigned APKs: local and F-Droid builds are byte-identical.
