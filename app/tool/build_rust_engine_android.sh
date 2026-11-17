@@ -18,8 +18,7 @@
 #   flutter build apk --release --dart-define=USE_RUST_ENGINE=true
 #
 # Requires: an Android SDK with an NDK installed, and `rustup target add` for
-# every ABI listed in $ABIS. The NDK's host clang is also used to link Rust
-# build scripts, so no system C linker is needed (F-Droid buildservers omit it).
+# every ABI listed in $ABIS.
 #
 # Selecting the NDK (in order):
 #   ANDROID_NDK_HOME      exact path to an NDK
@@ -117,22 +116,6 @@ echo ">> NDK:  $NDK${release:+ ($release)}"
 echo ">> API:  $API"
 echo ">> ABIs: $ABIS"
 
-# Cargo links host build scripts (proc-macro2, quote, ...) with the default
-# system linker. F-Droid buildservers have no `cc`, but the NDK clang runs on
-# the host and can link host binaries, so use it for the host target too.
-HOST_TRIPLE="$(rustc -vV | sed -n 's/^host:[[:space:]]*//p')"
-if [ -z "$HOST_TRIPLE" ]; then
-  echo "error: could not determine the Rust host triple." >&2
-  exit 1
-fi
-HOST_LINKER="$TOOLCHAIN/clang"
-if [ ! -x "$HOST_LINKER" ]; then
-  echo "error: NDK host linker not found: $HOST_LINKER" >&2
-  exit 1
-fi
-HOST_LINKER_VAR="CARGO_TARGET_$(echo "$HOST_TRIPLE" | tr 'a-z-' 'A-Z_')_LINKER"
-echo ">> Host linker: $HOST_LINKER ($HOST_TRIPLE)"
-
 BUILT=()
 for abi in $ABIS; do
   target="$(target_for_abi "$abi")"
@@ -162,7 +145,7 @@ for abi in $ABIS; do
   linker_var="CARGO_TARGET_$(echo "$target" | tr 'a-z-' 'A-Z_')_LINKER"
 
   echo ">> Building $abi ($target)..."
-  (cd "$REPO_ROOT" && env CC="$HOST_LINKER" "$HOST_LINKER_VAR=$HOST_LINKER" "$linker_var=$linker" cargo build --release -p gps-engine --target "$target")
+  (cd "$REPO_ROOT" && env "$linker_var=$linker" cargo build --release -p gps-engine --target "$target")
 
   dest="$JNI_LIBS/$abi"
   mkdir -p "$dest"
