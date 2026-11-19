@@ -29,6 +29,20 @@ maturin develop
 pytest
 ```
 
+## Example script
+
+The repository includes bundled demo GPX tracks (the same recordings shipped with
+the Android app, CC BY 4.0 GeoPrivacy 2023) under `app/assets/examples/`. After
+building/installing the bindings, you can run:
+
+```bash
+python python/examples/android_demo_tracks.py
+```
+
+This loads the demo tracks, prints summaries/analytics, compares runs against a
+reference route (attempt/ghost/performance comparison), and demonstrates route
+matching/canonicalization.
+
 ## Quick examples
 
 ### GPX and track processing
