@@ -1,0 +1,17 @@
+[package]
+name = "against-yesterday-python"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/DavidNeurieder/AgainstYesterday"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.23", features = ["extension-module", "abi3-py39"] }
+gps-engine = { path = "../rust/gps-engine", version = "0.1.0" }
+
+[workspace]
