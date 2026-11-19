@@ -35,7 +35,8 @@ endif
         engine-build engine-test engine-lint engine-fmt engine-doc \
         engine-android maplibre-fdroid-clean full-test full-test-device ci-test check check-versions clean \
         build-linux-release build-cli-release release-all repro-check repro-compare \
-        stale-android-apks-debug stale-android-apks-release stale-android-jnilibs
+        stale-android-apks-debug stale-android-apks-release stale-android-jnilibs \
+        python-venv python-develop python-build python-test python-clean
 
 # Android artifacts are built for exactly one ABI: the phone target. That also
 # means no --split-per-abi: a split of a single ABI adds nothing but a per-ABI
@@ -206,6 +207,32 @@ engine-fmt:
 engine-doc:
 	cargo doc --no-deps
 
+# Python bindings (python/, built with maturin/PyO3 against rust/gps-engine).
+# Uses a local virtual environment at $(PYTHON_VENV) by default.
+PYTHON ?= python3
+PYTHON_VENV ?= python/.venv
+PYTHON_BIN := $(PYTHON_VENV)/bin/python
+PYTHON_PIP := $(PYTHON_VENV)/bin/pip
+MATURIN := $(PYTHON_VENV)/bin/maturin
+
+python-venv:
+	@cd python && \
+	if [ ! -x .venv/bin/python ]; then $(PYTHON) -m venv .venv; fi && \
+	.venv/bin/pip install --upgrade pip maturin pytest
+
+python-develop: python-venv
+	cd python && .venv/bin/maturin develop
+
+python-build: python-venv
+	cd python && .venv/bin/maturin build --release
+
+python-test: python-develop
+	cd python && .venv/bin/python -m pytest -q
+
+python-clean:
+	rm -rf python/target python/build python/dist python/.pytest_cache
+	find python -type d -name __pycache__ -prune -exec rm -rf {} +
+
 # Removes Google Play Services from the cached MapLibre plugin before a build,
 # so device artifacts stay F-Droid-clean. Safe to run repeatedly.
 maplibre-fdroid-clean:
@@ -242,7 +269,7 @@ full-test-device:
 	DEVICE=1 bash app/tool/full_test.sh
 
 
-clean:
+clean: python-clean
 	cd app && flutter clean
 	cargo clean
 	rm -rf app/android/app/src/main/jniLibs/*/libgps_engine.so

@@ -8,6 +8,18 @@ analytics. The API may evolve while the engine is in the `0.x` series.
 
 ## Development
 
+From the repository root, the Makefile can set up a local virtual environment in
+`python/.venv` and build/test the bindings:
+
+```bash
+make python-develop  # editable install into python/.venv
+make python-build    # release wheel in python/target/wheels/
+make python-test     # develop + pytest
+make python-clean    # remove Python build artifacts
+```
+
+Or manually with maturin:
+
 ```bash
 cd python
 python -m venv .venv
