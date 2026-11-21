@@ -173,6 +173,9 @@ class _ExportSource {
       return;
     }
     for (final activity in activities) {
+      // Bundled examples now carry raw fixes too, but diagnostics exports must
+      // describe the user's receiver — never a demo trace.
+      if (activity.isExample) continue;
       final raw = activity.rawFixes;
       if (raw == null || raw.isEmpty) {
         continue;

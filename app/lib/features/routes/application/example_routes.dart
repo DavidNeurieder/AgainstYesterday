@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 /// Bundled example route: a real cycling track from the GeoPrivacy open
-/// dataset, exposed as one example course with six real runs so a new user
+/// dataset, exposed as one example course with four real runs so a new user
 /// can explore route details, history, statistics and ghost racing without
-/// recording anything.
+/// recording anything. The runs carry the same fields as saved recordings —
+/// distance, result caption, processed track and raw fixes — so every surface
+/// a real run drives is populated.
 library;
 
 import 'dart:convert';
@@ -57,6 +59,7 @@ final exampleRoutesProvider = FutureProvider<List<Route>>((ref) async {
 
 /// Loads the bundled example runs (activities) for the example route.
 final exampleActivitiesProvider = FutureProvider<List<Activity>>((ref) async {
+  final engine = ref.read(engineServiceProvider);
   try {
     final raw = await rootBundle.loadString(_manifestAsset);
     final entry = jsonDecode(raw) as Map<String, dynamic>;
@@ -82,16 +85,26 @@ final exampleActivitiesProvider = FutureProvider<List<Activity>>((ref) async {
       final durationSeconds = timestamps.length >= 2
           ? timestamps.last.difference(timestamps.first).inMilliseconds / 1000.0
           : 0.0;
-      runs.add(Activity(
-        id: 'example-run-$index',
-        routeId: routeId,
-        startedAt: startedAt,
-        duration: durationSeconds > 0
-            ? Elapsed.seconds(durationSeconds)
-            : null,
-        track: trackPoints,
-        isExample: true,
-      ));
+      final duration = durationSeconds > 0
+          ? Elapsed.seconds(durationSeconds)
+          : null;
+      // A saved run records its distance through the engine, not by summing
+      // the GPX coordinates in the UI. Do the same here so the example's
+      // history, detail and analytics numbers match a real recording.
+      final info = await engine.routeInfo(points: trackPoints);
+      runs.add(
+        Activity(
+          id: 'example-run-$index',
+          routeId: routeId,
+          startedAt: startedAt,
+          duration: duration,
+          distance: Distance.meters(info.lengthMeters),
+          performance: duration?.format(),
+          track: trackPoints,
+          rawFixes: _toRawFixes(trackPoints),
+          isExample: true,
+        ),
+      );
     }
     return runs;
   } catch (e) {
@@ -152,10 +165,31 @@ List<TrackPoint> _toTrackPoints(GpxTrack details) {
     } else {
       ts = DateTime.utc(2023, 1, 1).add(Duration(seconds: i));
     }
-    result.add(TrackPoint(position: details.points[i], timestamp: ts));
+    result.add(
+      TrackPoint(
+        position: details.points[i],
+        altitudeMeters: i < details.altitudes.length
+            ? details.altitudes[i]
+            : null,
+        timestamp: ts,
+      ),
+    );
   }
   return result;
 }
+
+/// The GPX point stream is the example's raw receiver trace. Keep it alongside
+/// the processed track, with only the sensor fields the source actually
+/// carries, so replay and diagnostics see the same shape as a saved run.
+List<GpsFix> _toRawFixes(List<TrackPoint> points) => [
+  for (final point in points)
+    GpsFix(
+      timestamp: point.timestamp,
+      latitude: point.position.latitude,
+      longitude: point.position.longitude,
+      altitudeMeters: point.altitudeMeters,
+    ),
+];
 
 /// Whether any example route is currently installed in the library.
 final hasExampleRoutesProvider = Provider<bool>((ref) {

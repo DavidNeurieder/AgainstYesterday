@@ -422,6 +422,9 @@ class SettingsScreen extends ConsumerWidget {
         for (var i = 0; i < geometry.length; i++)
           engine.TrackPoint(
             position: geometry[i],
+            altitudeMeters: i < details.altitudes.length
+                ? details.altitudes[i]
+                : null,
             timestamp: timestamps[i] ?? startedAt,
           ),
       ];

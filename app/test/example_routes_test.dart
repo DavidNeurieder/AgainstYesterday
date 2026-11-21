@@ -37,7 +37,21 @@ void main() {
       container.read(routeRepositoryProvider).every((r) => r.isExample),
       isTrue,
     );
-    expect(container.read(activityRepositoryProvider).length, 4);
+    final activities = container.read(activityRepositoryProvider);
+    expect(activities, hasLength(4));
+    // Examples are installed with the same observable fields as saved runs;
+    // none of the real-run readouts should fall back to a dash.
+    for (final activity in activities) {
+      expect(activity.distance, isNotNull);
+      expect(activity.distance!.meters, greaterThan(0));
+      expect(activity.performance, activity.duration?.format());
+      expect(activity.track, isNotNull);
+      expect(activity.rawFixes, hasLength(activity.track!.length));
+      expect(
+        activity.rawFixes!.first.latitude,
+        activity.track!.first.position.latitude,
+      );
+    }
     expect(find.text('Welcome to Against Yesterday'), findsNothing);
     expect(find.text('Cycling Finland'), findsWidgets);
     expect(find.text('Example'), findsWidgets);

@@ -4,30 +4,36 @@
 /// Minimal GPX track-point reader for Settings → Import GPX.
 ///
 /// The app only needs the geometry of a `<trk>`: every `<trkpt>` becomes a
-/// [GeoPoint], in document order. Elevation, time and extensions are ignored
-/// for the route shape, but timestamps are retained separately so imported
-/// recordings can be compared statistically.
+/// [GeoPoint], in document order. Time and elevation are retained separately
+/// so imported recordings can be compared statistically and drawn with an
+/// elevation profile; extensions are ignored.
 library;
 
 import '../../../engine/models.dart';
 
-/// A parsed GPX track: its geometry and the (possibly missing or sentinel)
-/// timestamp of every point, in the same order.
+/// A parsed GPX track: its geometry and the (possibly missing) timestamp and
+/// elevation of every point, in the same order.
 class GpxTrack {
-  const GpxTrack({required this.points, required this.timestamps});
+  const GpxTrack({
+    required this.points,
+    required this.timestamps,
+    this.altitudes = const [],
+  });
 
   final List<GeoPoint> points;
   final List<DateTime?> timestamps;
+  final List<double?> altitudes;
 }
 
-/// Parses a GPX document into geometry plus per-point timestamps.
+/// Parses a GPX document into geometry plus per-point timestamps/elevation.
 ///
-/// Points without a usable position are dropped, along with their timestamp.
-/// Timestamps that cannot be parsed become `null` rather than failing the
-/// point, so a track with bad clock data still imports its shape.
+/// Points without a usable position are dropped, along with their timestamp and
+/// elevation. Values that cannot be parsed become `null` rather than failing
+/// the point, so a partial trace still imports its shape.
 GpxTrack parseGpxTrackDetails(String contents) {
   final points = <GeoPoint>[];
   final timestamps = <DateTime?>[];
+  final altitudes = <double?>[];
   for (final match in _trackPointDetailed.allMatches(contents)) {
     final attributes = match.group(1)!;
     final inner = match.group(2) ?? '';
@@ -53,8 +59,22 @@ GpxTrack parseGpxTrackDetails(String contents) {
       parsed = DateTime.tryParse(timestamp);
     }
     timestamps.add(parsed);
+
+    final eleMatch = RegExp(
+      r'<ele>(.*?)</ele>',
+      caseSensitive: false,
+      dotAll: true,
+    ).firstMatch(inner);
+    final parsedElevation = eleMatch == null
+        ? null
+        : double.tryParse(eleMatch.group(1)!.trim());
+    altitudes.add(
+      parsedElevation != null && parsedElevation.isFinite
+          ? parsedElevation
+          : null,
+    );
   }
-  return GpxTrack(points: points, timestamps: timestamps);
+  return GpxTrack(points: points, timestamps: timestamps, altitudes: altitudes);
 }
 
 /// Extracts every `<trkpt>` position from a GPX document, in file order.

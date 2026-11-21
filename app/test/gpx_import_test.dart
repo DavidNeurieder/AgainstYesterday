@@ -20,12 +20,14 @@ void main() {
   </trk>
 </gpx>
 ''';
-    final points = parseGpxTrack(contents);
+    final details = parseGpxTrackDetails(contents);
+    final points = details.points;
     expect(points, hasLength(2));
     expect(points.first.latitude, 52.5);
     expect(points.first.longitude, 13.4);
     expect(points.last.latitude, 52.5005);
     expect(points.last.longitude, 13.4005);
+    expect(details.altitudes, [34.0, null]);
   });
 
   test('accepts lon before lat and single-quoted values', () {
