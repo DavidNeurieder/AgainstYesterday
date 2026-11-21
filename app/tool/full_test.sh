@@ -271,7 +271,13 @@ fi
 
 EXPECTED_TARGETS=("${HOST_TARGETS[@]}")
 if [ "$RUN_DEVICE" = "1" ]; then
-    run_one "connected-test-engine" bash -c 'cd "'"$APP_DIR"'" && ./tool/android_integration_test.sh --dart-define=USE_RUST_ENGINE=true'
+    # Use the same rebuild-and-run path as `make connected-test-engine` so a
+    # full-test run cannot silently package a stale cdylib for the device ABI.
+    # Software rendering is the portable default here: the host GPU path can
+    # lose its GL context on a desktop, which surfaces as a DDS WebSocket
+    # failure before a single test body runs.
+    export EMULATOR_GPU="${EMULATOR_GPU:-swiftshader_indirect}"
+    run_one "connected-test-engine" make -C "$REPO_ROOT" connected-test-engine
 else
     skip_target "connected-test-engine" "QUICK=1 / CI"
     EXPECTED_TARGETS+=("connected-test-engine")
