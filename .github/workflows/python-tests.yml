@@ -10,7 +10,9 @@ on:
 jobs:
   test:
     name: Python ${{ matrix.python-version }}
-    runs-on: ubuntu-latest
+    # Python 3.9 has no setup-python build for Ubuntu 26.04 (ubuntu-latest).
+    # Pin 24.04 so the advertised runtime floor can still be tested.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
