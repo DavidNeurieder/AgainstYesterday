@@ -135,7 +135,8 @@ pub use route::{
 };
 pub use synthetic::{GroundTruthSample, SyntheticResult};
 pub use track::{
-    CursorConfig, FilterConfig, FilterCursor, FilterReason, MovingConfig, ProcessingReport,
+    CursorConfig, ElevationBreakdown, ElevationConfig, FilterConfig, FilterCursor, FilterReason,
+    MovingConfig, ProcessingReport, RollingPace, RollingPaceConfig, RollingPaceSample,
     RouteSegment, RouteSegmentComparison, SegmentComparison, SegmentError, SimplifyConfig, Track,
     TrackPoint, TrackSegment, compare_route_segments, compare_segments, filter, filter_detailed,
     resample_by_distance, route_segments, segments, simplify,

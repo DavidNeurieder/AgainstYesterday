@@ -49,7 +49,12 @@ pub struct GroundTruthSample {
     pub stationary: bool,
     /// Whether no observed fix was emitted at this nominal time.
     pub outage: bool,
+    /// True altitude at this nominal time, when the config models elevation.
+    pub altitude: Option<f64>,
 }
+
+/// One generated observation before it is converted into a [`TrackPoint`].
+type GeneratedStep = (Timestamp, Coordinate, Option<f64>);
 
 /// A generated observation together with the truth it was derived from.
 #[derive(Debug, Clone, PartialEq)]
@@ -132,6 +137,14 @@ pub struct SyntheticConfig {
     pub stationary_drift: Distance,
     /// How far outliers are displaced, in meters.
     pub outlier_distance: Distance,
+    /// Peak-to-trough altitude of a deterministic cosine hill profile, in
+    /// meters. `ZERO` leaves generated fixes without altitude, preserving the
+    /// legacy fixtures exactly.
+    pub altitude_amplitude_m: f64,
+    /// Distance between hill crests in the deterministic altitude profile.
+    pub altitude_wavelength_m: f64,
+    /// Uniform altitude jitter in meters, applied only when a profile exists.
+    pub altitude_noise_m: f64,
     /// Traverse the route from finish to start instead.
     pub reverse: bool,
     /// Seed for the deterministic generator.
@@ -149,6 +162,9 @@ impl Default for SyntheticConfig {
             stop_probability: 0.01,
             stationary_drift: Distance::ZERO,
             outlier_distance: Distance::from_meters(500.0),
+            altitude_amplitude_m: 0.0,
+            altitude_wavelength_m: 1_000.0,
+            altitude_noise_m: 0.0,
             reverse: false,
             seed: 42,
         }
@@ -250,7 +266,15 @@ pub fn generate_with_truth(route: &[Coordinate], config: &SyntheticConfig) -> Sy
 
     let points = steps
         .into_iter()
-        .map(|(t, c)| TrackPoint::new(t, c))
+        .map(|(t, c, altitude)| {
+            let mut point = TrackPoint::new(t, c);
+            if let Some(altitude) = altitude {
+                point = point
+                    .with_altitude(altitude)
+                    .expect("synthetic generator produced an invalid altitude");
+            }
+            point
+        })
         .collect::<Vec<_>>();
 
     SyntheticResult {
@@ -259,14 +283,24 @@ pub fn generate_with_truth(route: &[Coordinate], config: &SyntheticConfig) -> Sy
     }
 }
 
+/// Deterministic altitude at a distance along the route, when configured.
+fn altitude_at(distance_m: f64, config: &SyntheticConfig) -> Option<f64> {
+    if !config.altitude_amplitude_m.is_finite() || config.altitude_amplitude_m <= 0.0 {
+        return None;
+    }
+    let wavelength = config.altitude_wavelength_m.max(1.0);
+    let phase = std::f64::consts::TAU * distance_m / wavelength;
+    Some(config.altitude_amplitude_m * 0.5 * (1.0 - phase.cos()))
+}
+
 /// Walks a route (already oriented) at the configured speed, sampling with
-/// the configured defects. Returns observed `(timestamp, coordinate)` pairs
-/// and the matching ground-truth rows.
+/// the configured defects. Returns observed `(timestamp, coordinate, altitude)`
+/// triples and the matching ground-truth rows.
 fn forward(
     route: &[Coordinate],
     config: &SyntheticConfig,
     rng: &mut Rng,
-) -> (Vec<(Timestamp, Coordinate)>, Vec<GroundTruthSample>) {
+) -> (Vec<GeneratedStep>, Vec<GroundTruthSample>) {
     debug_assert!(
         route.len() >= 2,
         "synthetic generator needs a route polyline"
@@ -289,8 +323,9 @@ fn forward(
         let end_ms = (config.sampling_interval.as_secs() * 1000.0).round() as i64;
         let start = Timestamp::from_unix_ms(0);
         let end = Timestamp::from_unix_ms(end_ms);
+        let altitude = altitude_at(0.0, config);
         return (
-            vec![(start, route[0]), (end, route[0])],
+            vec![(start, route[0], altitude), (end, route[0], altitude)],
             vec![
                 GroundTruthSample {
                     timestamp: start,
@@ -299,6 +334,7 @@ fn forward(
                     speed: config.speed,
                     stationary: false,
                     outage: false,
+                    altitude,
                 },
                 GroundTruthSample {
                     timestamp: end,
@@ -307,12 +343,13 @@ fn forward(
                     speed: Speed::ZERO,
                     stationary: true,
                     outage: false,
+                    altitude,
                 },
             ],
         );
     }
 
-    let mut points: Vec<(Timestamp, Coordinate)> = Vec::new();
+    let mut points: Vec<GeneratedStep> = Vec::new();
     let mut truth: Vec<GroundTruthSample> = Vec::new();
     let mut sample_no = 0i64;
     let mut prev_coord = route[0];
@@ -323,6 +360,7 @@ fn forward(
         speed: config.speed,
         stationary: false,
         outage: false,
+        altitude: altitude_at(0.0, config),
     };
     // A gap after nominal sample `k` suppresses `k + 1` and `k + 2`, matching
     // the legacy `sample_no += 3` behaviour without skipping their truth rows.
@@ -351,6 +389,7 @@ fn forward(
                 speed: config.speed,
                 stationary: false,
                 outage: true,
+                altitude: altitude_at(target.min(total), config),
             });
             prev_truth = *truth.last().expect("just pushed");
             sample_no += 1;
@@ -383,7 +422,15 @@ fn forward(
             base
         };
 
-        points.push((timestamp, coordinate));
+        let true_altitude = altitude_at(target.min(total), config);
+        let observed_altitude = true_altitude.map(|altitude| {
+            if config.altitude_noise_m > 0.0 {
+                altitude + rng.range(-config.altitude_noise_m, config.altitude_noise_m)
+            } else {
+                altitude
+            }
+        });
+        points.push((timestamp, coordinate, observed_altitude));
         prev_coord = coordinate;
 
         let truth_sample = if stopped {
@@ -394,6 +441,7 @@ fn forward(
                 speed: Speed::ZERO,
                 stationary: true,
                 outage: false,
+                altitude: prev_truth.altitude,
             }
         } else {
             GroundTruthSample {
@@ -403,6 +451,7 @@ fn forward(
                 speed: config.speed,
                 stationary: false,
                 outage: false,
+                altitude: true_altitude,
             }
         };
         truth.push(truth_sample);
@@ -421,7 +470,19 @@ fn forward(
         let end_t_ms =
             (sample_no as f64 * config.sampling_interval.as_secs() * 1000.0).round() as i64;
         let timestamp = Timestamp::from_unix_ms(end_t_ms);
-        points.push((timestamp, *route.last().expect("non-empty")));
+        let finish_altitude = altitude_at(total, config);
+        let observed_altitude = finish_altitude.map(|altitude| {
+            if config.altitude_noise_m > 0.0 {
+                altitude + rng.range(-config.altitude_noise_m, config.altitude_noise_m)
+            } else {
+                altitude
+            }
+        });
+        points.push((
+            timestamp,
+            *route.last().expect("non-empty"),
+            observed_altitude,
+        ));
         truth.push(GroundTruthSample {
             timestamp,
             coordinate: *route.last().expect("non-empty"),
@@ -429,6 +490,7 @@ fn forward(
             speed: config.speed,
             stationary: false,
             outage: false,
+            altitude: finish_altitude,
         });
     }
 

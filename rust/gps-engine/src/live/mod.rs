@@ -28,8 +28,8 @@ use crate::geo::{Coordinate, distance};
 use crate::ghost::{GhostState, confidence_for_spacing};
 use crate::gps::GpsFix;
 use crate::route::{ContinuityConfig, MatchStatus, Route, RouteMatcher, RouteObservation};
-use crate::track::CursorConfig;
 use crate::track::filtering::fix_passes_sensor_checks;
+use crate::track::{CursorConfig, RollingPace};
 use crate::units::{Distance, Duration, Speed};
 
 /// Configuration for a [`LiveRecorder`].
@@ -147,8 +147,10 @@ pub struct LiveSnapshot {
     pub distance: Distance,
     /// Moving seconds on the active axis.
     pub moving: Duration,
-    /// Speed of the most recent segment that earned ground, or zero.
+    /// Speed over the rolling time window, or zero when evidence is weak.
     pub pace: Speed,
+    /// Confidence in the rolling pace, when the window has movement evidence.
+    pub pace_confidence: Option<Confidence>,
     /// Fraction of the route completed, `0.0..=1.0`. Always `0.0` free-running.
     pub route_progress: f64,
     /// Lateral distance from the route line when it exceeds the off-route
@@ -390,7 +392,8 @@ pub struct LiveRecorder {
     route_moving: f64,
     route_last_ground: Option<Coordinate>,
     route_last_time: Option<crate::units::Timestamp>,
-    route_pace: Speed,
+    /// Time-windowed pace shared by free runs and route mode.
+    pace_window: RollingPace,
     /// Continuity-aware route progress (windowed, forward-preference). `None`
     /// when free-running.
     matcher: Option<RouteMatcher>,
@@ -430,7 +433,7 @@ impl LiveRecorder {
             route_moving: 0.0,
             route_last_ground: None,
             route_last_time: None,
-            route_pace: Speed::ZERO,
+            pace_window: RollingPace::new(Default::default()),
             matcher,
             last_lateral: None,
             last_raw: None,
@@ -462,6 +465,7 @@ impl LiveRecorder {
         if !sensor_ok {
             return;
         }
+        self.pace_window.push(fix.timestamp, fix.coordinate);
 
         if let Some(prev_time) = self.active_last_time {
             let dt = fix.timestamp.elapsed_since(prev_time).as_secs();
@@ -524,7 +528,6 @@ impl LiveRecorder {
             let ground = distance(prev_coord, fix.coordinate).meters();
             if dt > 0.0 && ground / dt >= self.config.cursor.motion_floor.mps() {
                 self.route_moving += dt;
-                self.route_pace = Speed::from_mps(ground / dt);
             }
             // A sub-floor or discontinuous step earns no moving time but the
             // fix still advances coverage/position above.
@@ -542,9 +545,9 @@ impl LiveRecorder {
         }
         self.paused = true;
         self.cursor.reset_chain();
+        self.pace_window.reset();
         self.route_last_ground = None;
         self.route_last_time = None;
-        self.route_pace = Speed::ZERO;
         self.active_last_time = None;
         if let Some(matcher) = self.matcher.as_mut() {
             let covered = self.route_coverage;
@@ -568,7 +571,7 @@ impl LiveRecorder {
         self.route_moving = m;
         self.route_last_ground = None;
         self.route_last_time = None;
-        self.route_pace = Speed::ZERO;
+        self.pace_window.reset();
         self.last_lateral = None;
         self.last_raw = None;
         self.last_match_confidence = 0.0;
@@ -644,13 +647,20 @@ impl LiveRecorder {
         }
     }
 
-    /// Current pace (last earned segment speed).
+    /// Current pace from the rolling displacement window.
+    ///
+    /// This replaces the old last-segment speed: adjacent fixes are dominated
+    /// by positional noise, while a 15 s window keeps pace readable without
+    /// smoothing away genuine speed changes.
     pub fn pace(&self) -> Speed {
-        if self.route.is_some() {
-            self.route_pace
-        } else {
-            self.cursor.last_speed()
-        }
+        self.pace_window.speed().unwrap_or(Speed::ZERO)
+    }
+
+    /// Confidence in the rolling pace, when the window has movement evidence.
+    pub fn pace_confidence(&self) -> Option<Confidence> {
+        self.pace_window
+            .speed()
+            .map(|_| self.pace_window.sample().confidence)
     }
 
     /// The active route's length, or zero when free-running.
@@ -712,6 +722,7 @@ impl LiveRecorder {
             distance: self.distance(),
             moving: self.moving(),
             pace: self.pace(),
+            pace_confidence: self.pace_confidence(),
             route_progress,
             off_route,
             accuracy: self.last_fix.and_then(|fix| fix.accuracy),

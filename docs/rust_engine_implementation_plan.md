@@ -15,12 +15,20 @@ Scope: `rust/gps-engine` and the contracts consumed by
 `app/lib/engine/engine_service.dart`, `app/lib/engine/models.dart`, and
 `app/lib/engine/fake_engine.dart`.
 
-Status: phases 0.1–0.3 and Phase 1 are implemented, including Gate B promotion.
-`EstimatorConfig::default().enabled == true`; `EstimatorConfig::legacy()` keeps
-the old passthrough for diagnostics. The promoted estimator now drives batch
-processing, `gps_process_track`, and the live recorder. The C ABI v1 wire layout
-and Dart decoders are unchanged; `FakeEngineService` intentionally keeps the
-pre-promotion demo semantics. Phases 2–5 are not started.
+Status: phases 0.1–0.3, Phase 1, Phase 2 and the measured parts of Phase 3 are
+implemented, including Gate B promotion. `EstimatorConfig::default().enabled ==
+true`; `EstimatorConfig::legacy()` keeps the old passthrough for diagnostics.
+The promoted estimator drives batch processing, `gps_process_track`, and the
+live recorder. Phase 2 fixed the stale recovery anchor and exposed independent
+ghost-confidence evidence. Rolling pace replaces the two-fix pace in the live
+snapshot and in benchmark scoring. A robust elevation estimator is available as
+an additive Rust API and is benchmark-gated, but analytics/Python/Dart/UI
+exposure remains a follow-up. The C ABI v1 prefix is unchanged: Phase 2 appended
+ghost evidence, and later work added only Rust-side fields. Dart decoders remain
+backward-compatible; `FakeEngineService` intentionally keeps the pre-promotion
+live-cursor numeric semantics. Remaining Phase 3 items (first-class
+`DistanceBreakdown` exposure, elevation exposure in analytics/UI, rolling-best
+pace, and typed outage summaries) and Phases 4–5 are not started.
 
 ## 1. Review conclusion
 
@@ -304,7 +312,7 @@ recorded in §1.4.
 the final tuning with:
 
 ```text
-cargo run -q -p gps-engine --bin gps-engine -- quality --json \
+cargo run -q -p gps-engine --example quality_benchmark -- --json \
   rust/gps-engine/testdata/baselines/gps_quality_v1.json
 ```
 
@@ -478,6 +486,29 @@ presence byte, reliable flag). Dart readers treat a truncated suffix as "no
 evidence" and keep the v1 display behavior; `FakeEngineService` mirrors the new
 fields. `gps_capi_version` is unchanged because no existing field moved.
 
+### 2.5 Rejected matcher-scoring experiments (not shipped)
+
+The remaining Phase 2 idea was to let `PositionEstimate` confidence and an
+explicit candidate-ambiguity value change candidate scoring or matcher state.
+Both were measured against the pinned quality suite and reverted:
+
+- Direct `estimate_factor = confidence` broke
+  `live::tests::off_route_detour_reacquires_with_coarse_sampling` with
+  `coarse-sampled rejoin did not reacquire: detour 111.195…, recovered
+  111.195…`. The lowered belief kept the rejoin candidate out of the scoring
+  window.
+- Softening the scaling to `0.5 + 0.5 * confidence` avoided that failure but did
+  not improve projection or ghost-gap error; it also reduced `urban_canyon`
+  adaptive recoveries from 130 to 129.
+- Computing ambiguity from the runner-up margin and using it to force
+  `Uncertain` raised clean projection MAE to 0.106 m with a 30 m maximum. Adding
+  the same value as evidence without changing state was benign numerically but
+  duplicated the existing confidence signal, so it was also reverted.
+
+The production matcher therefore keeps its v1 scoring inputs and confidence
+state machine. The independent confidence evidence in §2.4 remains additive and
+does not alter route coverage.
+
 ## 6. Phase 3 — distance, pace, and elevation
 
 Goal: make the three distance meanings first-class and remove misleading pace
@@ -518,6 +549,78 @@ Acceptance:
 - Pace error improves in the benchmark, with confidence lower during gaps and
   low-speed periods.
 - All analytics JSON additions are additive and fake/Rust snapshots agree.
+
+### 6.1 Rolling pace (done)
+
+`track::RollingPace` now derives pace from net displacement over a 15 s window
+with a 15 m minimum movement and a 30 s fallback bound. A gap longer than 30 s
+reports no pace rather than extrapolating a stale pair; stationary jitter also
+reports no pace. Pause and seed reset the window. `LiveRecorder::pace()` uses
+the same estimator in free-run and route mode, replacing the old last-segment
+speed. `LiveSnapshot` gained a Rust-only `pace_confidence: Option<Confidence>`;
+no C ABI field was added or reordered. `quality_metrics::pace_error` now scores
+the same rolling estimator used by the live engine, and
+`tests/quality_benchmark.rs` pins the improvement independently of the baseline
+JSON.
+
+Measured before → after (s/km, pinned baseline regenerated):
+
+| scenario | raw pace | adaptive pace |
+| --- | ---: | ---: |
+| `jitter_5m` | 147.407 → 51.072 | — |
+| `jitter_12m` | 275.724 → 104.839 | 164.848 → 86.817 |
+| `gps_jumps` | 242.333 → 100.713 | — |
+| `urban_canyon` | 354.285 → 120.060 | 220.527 → 76.684 |
+| `stationary_drift` | 276.959 → 20.888 | 234.338 → 47.985 |
+| `sparse` | 9.582 → 0.000 | 9.582 → 0.000 |
+
+The accepted tradeoffs are a clean adaptive pace increase of 1.856 → 3.452
+s/km, still below the 5 s/km gate, and a `sparse` pace of zero because 45 s
+sampling exceeds the fallback bound. `stationary_drift` remains worse on the
+adaptive axis than on raw samples, so the gate does not assert `shadow < raw`
+there. The remaining Phase 3 items above are still open; this change does not
+claim first-class distance breakdowns, rolling-best pace, or typed outage
+summaries.
+
+### 6.2 Robust elevation (Rust API and benchmark, done)
+
+`track::elevation` adds `ElevationConfig` and `ElevationBreakdown`. The
+breakdown keeps the legacy raw gain/loss sums for audit and adds gain/loss after
+a median filter and a dead band. The default is a 13-sample median window with a
+1.0 m noise threshold; `clamped()` forces an odd window of at least one and a
+non-negative threshold. It is pure, deterministic, dependency-free, and never
+mutates the track.
+
+Synthetic truth gained additive altitude fields: `SyntheticConfig` can generate
+a cosine hill profile with uniform altitude noise, and `GroundTruthSample`
+records the true altitude at every nominal time. Defaults leave every existing
+fixture bit-for-bit unchanged. A new `elevation_noise` scenario and
+`elevation_noise_gate` pin the problem and the fix.
+
+Measured on the benchmark scenario (meters):
+
+| metric | value |
+| --- | ---: |
+| ground-truth gain / loss | 266.593 / 240.000 |
+| raw gain / loss error | 2379.767 / 2378.785 |
+| robust gain / loss error | 10.366 / 10.072 |
+
+A wider sweep over seeds, noise levels, amplitudes, wavelengths and sampling
+intervals reduced mean gain/loss error from 3041.6/3040.6 m to 177.6/171.0 m
+with maximum errors of 940.3/929.2 m. The initial 9-sample/3.0 m setting failed
+the 100 m gate at 117.609 m gain error; the selected setting passed.
+
+This is deliberately a Rust-side improvement. Analytics JSON, Python, Dart and
+the UI still expose the raw gain/loss fields, so no FFI payload, JSON key, or
+fake/Rust display parity changed. Exposing `ElevationBreakdown` additively in
+those layers is the remaining integration step.
+
+Verification after the combined rolling-pace and elevation work:
+`cargo fmt --all --check`, `cargo test --all-features`, `cargo clippy
+--all-targets --all-features -- -D warnings`, `cargo doc --no-deps`,
+`git diff --check`, `flutter analyze`, and `flutter test` all pass. `cargo doc`
+still reports seven pre-existing unresolved link warnings in `analytics.rs`.
+No F-Droid or on-device E2E run was performed.
 
 ## 7. Phase 4 — optional sensor fusion
 

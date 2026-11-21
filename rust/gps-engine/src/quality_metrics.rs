@@ -22,15 +22,12 @@ use crate::ghost::Ghost;
 use crate::gps::GpsFix;
 use crate::route::{ContinuityConfig, Route, RouteMatcher, RouteObservation};
 use crate::synthetic::{GroundTruthSample, SyntheticConfig, generate_with_truth};
-use crate::track::{Track, TrackPoint};
+use crate::track::{ElevationConfig, RollingPace, Track, TrackPoint, elevation};
 use crate::units::{Distance, Duration, Speed, Timestamp};
 use crate::{FilterConfig, filter};
 
 /// Maximum progress error that counts as recovered after an outage.
 const RECOVERY_PROGRESS_TOLERANCE_M: f64 = 20.0;
-/// Number of seconds used for rolling observed speed before scoring pace.
-const PACE_WINDOW_SAMPLES: usize = 5;
-
 /// A generated observation plus the route and truth needed to score it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct QualityScenario {
@@ -89,6 +86,18 @@ pub struct ShadowQualityMetrics {
     pub projection_max_error_m: f64,
     /// Mean absolute rolling-pace error, in seconds per kilometre.
     pub pace_mae_s_per_km: f64,
+    /// True elevation gain from ground truth, in meters.
+    pub truth_elevation_gain_m: f64,
+    /// True elevation loss from ground truth, in meters.
+    pub truth_elevation_loss_m: f64,
+    /// Raw gain error before noise-tolerant filtering, in meters.
+    pub raw_elevation_gain_error_m: f64,
+    /// Raw loss error before noise-tolerant filtering, in meters.
+    pub raw_elevation_loss_error_m: f64,
+    /// Robust gain error after median filtering and thresholding, in meters.
+    pub elevation_gain_error_m: f64,
+    /// Robust loss error after median filtering and thresholding, in meters.
+    pub elevation_loss_error_m: f64,
     /// Mean absolute ghost time-gap error, in seconds.
     pub ghost_gap_mae_s: f64,
     /// Distance accepted while truth was stationary, in meters.
@@ -144,6 +153,18 @@ pub struct QualityMetrics {
     pub projection_max_error_m: f64,
     /// Mean absolute rolling-pace error, in seconds per kilometre.
     pub pace_mae_s_per_km: f64,
+    /// True elevation gain from ground truth, in meters.
+    pub truth_elevation_gain_m: f64,
+    /// True elevation loss from ground truth, in meters.
+    pub truth_elevation_loss_m: f64,
+    /// Raw gain error before noise-tolerant filtering, in meters.
+    pub raw_elevation_gain_error_m: f64,
+    /// Raw loss error before noise-tolerant filtering, in meters.
+    pub raw_elevation_loss_error_m: f64,
+    /// Robust gain error after median filtering and thresholding, in meters.
+    pub elevation_gain_error_m: f64,
+    /// Robust loss error after median filtering and thresholding, in meters.
+    pub elevation_loss_error_m: f64,
     /// Mean absolute ghost time-gap error, in seconds.
     pub ghost_gap_mae_s: f64,
     /// Distance accepted while truth was stationary, in meters.
@@ -245,6 +266,12 @@ impl QualityReport {
                  \"projection_mae_m\": {},\n\
                  \"projection_max_error_m\": {},\n\
                  \"pace_mae_s_per_km\": {},\n\
+                 \"truth_elevation_gain_m\": {},\n\
+                 \"truth_elevation_loss_m\": {},\n\
+                 \"raw_elevation_gain_error_m\": {},\n\
+                 \"raw_elevation_loss_error_m\": {},\n\
+                 \"elevation_gain_error_m\": {},\n\
+                 \"elevation_loss_error_m\": {},\n\
                  \"ghost_gap_mae_s\": {},\n\
                  \"false_movement_m\": {},\n\
                  \"false_movement_m_per_min\": {},\n\
@@ -266,6 +293,12 @@ impl QualityReport {
                 json_f64(m.projection_mae_m),
                 json_f64(m.projection_max_error_m),
                 json_f64(m.pace_mae_s_per_km),
+                json_f64(m.truth_elevation_gain_m),
+                json_f64(m.truth_elevation_loss_m),
+                json_f64(m.raw_elevation_gain_error_m),
+                json_f64(m.raw_elevation_loss_error_m),
+                json_f64(m.elevation_gain_error_m),
+                json_f64(m.elevation_loss_error_m),
                 json_f64(m.ghost_gap_mae_s),
                 json_f64(m.false_movement_m),
                 json_f64(m.false_movement_m_per_min),
@@ -308,6 +341,14 @@ pub fn score(scenario: &QualityScenario) -> QualityMetrics {
         error_vectors(observed.points(), &projections, &truth_by_time);
 
     let pace_mae = pace_error(observed.points(), &truth_by_time);
+    let (
+        truth_elevation_gain,
+        truth_elevation_loss,
+        raw_elevation_gain_error,
+        raw_elevation_loss_error,
+        elevation_gain_error,
+        elevation_loss_error,
+    ) = elevation_errors(observed.points(), truth);
     let ghost_gap_mae = ghost_gap_error(truth, truth_distance, &projections);
     let (false_movement, stationary_minutes) =
         false_movement_for_points(observed.points(), &truth_by_time, truth);
@@ -329,6 +370,12 @@ pub fn score(scenario: &QualityScenario) -> QualityMetrics {
         projection_mae_m: mean(&projection_errors),
         projection_max_error_m: max_or_zero(&projection_errors),
         pace_mae_s_per_km: pace_mae,
+        truth_elevation_gain_m: truth_elevation_gain,
+        truth_elevation_loss_m: truth_elevation_loss,
+        raw_elevation_gain_error_m: raw_elevation_gain_error,
+        raw_elevation_loss_error_m: raw_elevation_loss_error,
+        elevation_gain_error_m: elevation_gain_error,
+        elevation_loss_error_m: elevation_loss_error,
         ghost_gap_mae_s: ghost_gap_mae,
         false_movement_m: false_movement,
         false_movement_m_per_min: if stationary_minutes > 0.0 {
@@ -357,6 +404,14 @@ fn score_shadow(
     let route_distance = projections.last().map_or(0.0, |p| p.1);
     let (position_errors, projection_errors) = error_vectors(points, &projections, truth_by_time);
     let pace_mae = pace_error(points, truth_by_time);
+    let (
+        truth_elevation_gain,
+        truth_elevation_loss,
+        raw_elevation_gain_error,
+        raw_elevation_loss_error,
+        elevation_gain_error,
+        elevation_loss_error,
+    ) = elevation_errors(points, &scenario.truth);
     let ghost_gap_mae = ghost_gap_error(&scenario.truth, truth_distance, &projections);
     let (false_movement, stationary_minutes) =
         false_movement_for_points(points, truth_by_time, &scenario.truth);
@@ -375,6 +430,12 @@ fn score_shadow(
         projection_mae_m: mean(&projection_errors),
         projection_max_error_m: max_or_zero(&projection_errors),
         pace_mae_s_per_km: pace_mae,
+        truth_elevation_gain_m: truth_elevation_gain,
+        truth_elevation_loss_m: truth_elevation_loss,
+        raw_elevation_gain_error_m: raw_elevation_gain_error,
+        raw_elevation_loss_error_m: raw_elevation_loss_error,
+        elevation_gain_error_m: elevation_gain_error,
+        elevation_loss_error_m: elevation_loss_error,
         ghost_gap_mae_s: ghost_gap_mae,
         false_movement_m: false_movement,
         false_movement_m_per_min: if stationary_minutes > 0.0 {
@@ -476,6 +537,32 @@ fn error_vectors(
     (position_errors, projection_errors)
 }
 
+/// Elevation truth and gain/loss errors for one track.
+fn elevation_errors(
+    points: &[TrackPoint],
+    truth: &[GroundTruthSample],
+) -> (f64, f64, f64, f64, f64, f64) {
+    let mut truth_gain = 0.0;
+    let mut truth_loss = 0.0;
+    for pair in truth.windows(2) {
+        let (Some(a), Some(b)) = (pair[0].altitude, pair[1].altitude) else {
+            continue;
+        };
+        truth_gain += (b - a).max(0.0);
+        truth_loss += (a - b).max(0.0);
+    }
+    let track = Track::new(points.to_vec()).expect("scenario points are a valid track");
+    let totals = elevation::breakdown(&track, &ElevationConfig::default());
+    (
+        truth_gain,
+        truth_loss,
+        (totals.raw_gain_m - truth_gain).abs(),
+        (totals.raw_loss_m - truth_loss).abs(),
+        (totals.gain_m - truth_gain).abs(),
+        (totals.loss_m - truth_loss).abs(),
+    )
+}
+
 /// A deterministic set of scenarios covering the documented degradations.
 pub fn benchmark_scenarios() -> Vec<QualityScenario> {
     let route = benchmark_route();
@@ -533,6 +620,16 @@ pub fn benchmark_scenarios() -> Vec<QualityScenario> {
                 ..SyntheticConfig::noisy(110, 5.0)
             },
         ),
+        QualityScenario::from_synthetic(
+            "elevation_noise",
+            &route,
+            &SyntheticConfig {
+                altitude_amplitude_m: 60.0,
+                altitude_wavelength_m: 1_200.0,
+                altitude_noise_m: 8.0,
+                ..SyntheticConfig::clean(111)
+            },
+        ),
     ]
 }
 
@@ -552,40 +649,31 @@ fn benchmark_route() -> Vec<Coordinate> {
     ]
 }
 
-/// Rolling observed speed compared with the true ground speed.
+/// Rolling observed pace compared with the true ground speed.
+///
+/// The live engine derives pace from net displacement over a time window, not
+/// from adjacent fixes. Scoring the same estimator keeps the benchmark honest:
+/// a two-fix speed has unbounded error under jitter and stationary drift.
 fn pace_error(points: &[TrackPoint], truth_by_time: &HashMap<i64, GroundTruthSample>) -> f64 {
-    let mut observed_speeds: Vec<f64> = Vec::new();
+    let mut pace = RollingPace::new(Default::default());
     let mut errors = Vec::new();
-    for pair in points.windows(2) {
-        let dt = pair[1]
-            .timestamp()
-            .elapsed_since(pair[0].timestamp())
-            .as_secs();
-        if dt <= 0.0 {
-            continue;
-        }
-        let (Some(a), Some(b)) = (
-            truth_by_time.get(&pair[0].timestamp().unix_ms()),
-            truth_by_time.get(&pair[1].timestamp().unix_ms()),
-        ) else {
+    for point in points {
+        pace.push(point.timestamp(), point.coordinate());
+        let Some(speed) = pace.speed() else {
             continue;
         };
-        let truth_speed = (a.speed.mps() + b.speed.mps()) / 2.0;
+        let speed = speed.mps();
+        if speed <= 0.0 {
+            continue;
+        }
+        let Some(truth) = truth_by_time.get(&point.timestamp().unix_ms()) else {
+            continue;
+        };
+        let truth_speed = truth.speed.mps();
         if truth_speed <= 0.0 {
             continue;
         }
-        let measured_speed = geo_distance(pair[0].coordinate(), pair[1].coordinate()).meters() / dt;
-        observed_speeds.push(measured_speed);
-        let window = observed_speeds
-            .iter()
-            .rev()
-            .take(PACE_WINDOW_SAMPLES)
-            .copied()
-            .collect::<Vec<_>>();
-        let smoothed = mean(&window);
-        if smoothed > 0.0 {
-            errors.push((1000.0 / smoothed - 1000.0 / truth_speed).abs());
-        }
+        errors.push((1000.0 / speed - 1000.0 / truth_speed).abs());
     }
     mean(&errors)
 }
@@ -736,6 +824,12 @@ fn shadow_json(s: ShadowQualityMetrics) -> String {
           \"projection_mae_m\": {},\n\
           \"projection_max_error_m\": {},\n\
           \"pace_mae_s_per_km\": {},\n\
+          \"truth_elevation_gain_m\": {},\n\
+          \"truth_elevation_loss_m\": {},\n\
+          \"raw_elevation_gain_error_m\": {},\n\
+          \"raw_elevation_loss_error_m\": {},\n\
+          \"elevation_gain_error_m\": {},\n\
+          \"elevation_loss_error_m\": {},\n\
           \"ghost_gap_mae_s\": {},\n\
           \"false_movement_m\": {},\n\
           \"false_movement_m_per_min\": {},\n\
@@ -759,6 +853,12 @@ fn shadow_json(s: ShadowQualityMetrics) -> String {
         json_f64(s.projection_mae_m),
         json_f64(s.projection_max_error_m),
         json_f64(s.pace_mae_s_per_km),
+        json_f64(s.truth_elevation_gain_m),
+        json_f64(s.truth_elevation_loss_m),
+        json_f64(s.raw_elevation_gain_error_m),
+        json_f64(s.raw_elevation_loss_error_m),
+        json_f64(s.elevation_gain_error_m),
+        json_f64(s.elevation_loss_error_m),
         json_f64(s.ghost_gap_mae_s),
         json_f64(s.false_movement_m),
         json_f64(s.false_movement_m_per_min),

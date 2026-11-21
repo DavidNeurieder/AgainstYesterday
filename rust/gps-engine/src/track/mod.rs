@@ -1,8 +1,10 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+pub mod elevation;
 pub(crate) mod filtering;
 mod model;
+pub mod pace;
 mod point;
 mod resampling;
 mod reverse;
@@ -10,11 +12,13 @@ pub mod segments;
 mod simplification;
 mod statistics;
 
+pub use elevation::{ElevationBreakdown, ElevationConfig};
 pub use filtering::{
     CursorConfig, FilterConfig, FilterCursor, FilterReason, ProcessingReport, filter,
     filter_detailed,
 };
 pub use model::Track;
+pub use pace::{RollingPace, RollingPaceConfig, RollingPaceSample};
 pub use point::TrackPoint;
 pub use resampling::resample_by_distance;
 pub use reverse::reverse;
