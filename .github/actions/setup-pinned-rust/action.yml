@@ -10,9 +10,15 @@ description: Install the exact Rust toolchain declared in rust-toolchain.toml
 # runners that can collide with the preinstalled clippy binaries:
 #   failed to install component: 'clippy-preview', detected conflict: 'bin/cargo-clippy'
 # Reading the version from rust-toolchain.toml keeps that file the single source
-# of truth for compiler upgrades.
+# of truth for compiler upgrades. The optional `toolchain` input is the one
+# deliberate exception: Miri is nightly-only, so that job opts into nightly
+# while every build/test job keeps using the pinned stable channel.
 
 inputs:
+  toolchain:
+    description: Override the pinned channel for tools unavailable on it (Miri needs nightly)
+    required: false
+    default: ''
   components:
     description: Extra rustup components to install on top of rust-toolchain.toml
     required: false
@@ -44,6 +50,9 @@ runs:
           echo "::error::rust-toolchain.toml has no channel"
           exit 1
         fi
+        if [ -n "$INPUT_TOOLCHAIN" ]; then
+          channel="$INPUT_TOOLCHAIN"
+        fi
         components="$(yaml_array components)"
         targets="$(yaml_array targets)"
         if [ -n "$INPUT_COMPONENTS" ]; then
@@ -58,6 +67,7 @@ runs:
         echo "components=$components" >> "$GITHUB_OUTPUT"
         echo "targets=$targets" >> "$GITHUB_OUTPUT"
       env:
+        INPUT_TOOLCHAIN: ${{ inputs.toolchain }}
         INPUT_COMPONENTS: ${{ inputs.components }}
         INPUT_TARGETS: ${{ inputs.targets }}
 

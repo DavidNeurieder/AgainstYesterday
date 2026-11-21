@@ -1,14 +1,14 @@
 name: nightly
 
-# The Android runs that are too slow for every PR: the newest supported API
-# and a repeated full journey, to surface flakiness. Manual dispatch is
-# available for on-demand checks.
+# The Android runs that are too slow for every PR: the full API matrix, the real
+# receiver, permissions, process death, MapLibre and a repeated full journey to
+# surface flakiness. PR CI keeps one narrow native-engine smoke; this workflow
+# keeps the whole matrix. Manual dispatch is available for on-demand checks.
 #
 # These jobs exercise the deterministic fake engine by default (USE_RUST_ENGINE
 # is left unset, so the app falls back when no cdylib is present). The `engine`
 # suite is the exception: it cross-compiles the cdylib and runs the same demo
-# journey against it, because the PR integration job is disabled and nothing
-# else exercises the native engine end to end on Android.
+# journey against it, so the native engine still gets end-to-end coverage here.
 
 on:
   workflow_dispatch:
@@ -18,10 +18,15 @@ jobs:
     name: android nightly (API ${{ matrix.api-level }}, ${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      EMULATOR_GPU: swiftshader_indirect
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Oldest supported API, smoke only (PR CI now checks API 34).
+          - api-level: 24
+            suite: smoke
           # Newest supported API, smoke only.
           - api-level: 36
             suite: smoke
@@ -87,6 +92,8 @@ jobs:
           api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
+          # Software rendering avoids a blank/frozen window on headless runners.
+          emulator-options: -no-snapshot -gpu swiftshader_indirect
           working-directory: app
           script: |
             if [ "${{ matrix.suite }}" = "repeat" ]; then
@@ -112,6 +119,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: nightly-artifacts-api${{ matrix.api-level }}
+          name: nightly-artifacts-api${{ matrix.api-level }}-${{ matrix.suite }}
           path: app/build/integration-artifacts
           if-no-files-found: ignore

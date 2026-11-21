@@ -20,10 +20,13 @@
 //! code.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char, c_int};
+use std::mem::size_of;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::ptr;
 use std::slice;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use crate::attempt::{Attempt, AttemptAxis, AttemptSample, MovingAxisConfig};
 use crate::filtering::{EstimatorConfig, estimate_fixes};
@@ -45,6 +48,19 @@ const ST_INVALID: c_int = 1;
 /// Engine error (see [`gps_last_error`]).
 const ST_ERROR: c_int = 2;
 
+/// Largest request the boundary will copy into the engine. Real recordings are
+/// far smaller; this bounds hostile or corrupt callers before allocation.
+const MAX_INPUT_BYTES: usize = 64 * 1024 * 1024;
+/// Largest length-prefixed string accepted from a request.
+const MAX_STRING_BYTES: usize = 1024 * 1024;
+/// Collection limits. These are checked before any allocation or element loop,
+/// not used merely as an initial-capacity hint.
+const MAX_POINTS: usize = 1_000_000;
+const MAX_FIXES: usize = 1_000_000;
+const MAX_COORDINATES: usize = 1_000_000;
+const MAX_ATTEMPTS: usize = 100_000;
+const MAX_SAMPLES_PER_ATTEMPT: usize = 100_000;
+
 thread_local! {
     static LAST_ERROR: RefCell<Arc<CStr>> =
         RefCell::new(Arc::from(c"ok"));
@@ -52,10 +68,16 @@ thread_local! {
 
 fn set_error(msg: &str) {
     LAST_ERROR.with(|cell| {
-        let mut text = msg.as_bytes().to_vec();
+        // Error text comes from the engine and must never make the FFI panic,
+        // even if a detail string contains an interior NUL.
+        let mut text: Vec<u8> = msg
+            .bytes()
+            .map(|byte| if byte == 0 { b'?' } else { byte })
+            .collect();
         text.push(0);
-        *cell.borrow_mut() =
-            Arc::from(CStr::from_bytes_with_nul(&text).expect("last error is valid UTF-8 + NUL"));
+        if let Ok(c) = CStr::from_bytes_with_nul(&text) {
+            *cell.borrow_mut() = Arc::from(c);
+        }
     });
 }
 
@@ -85,25 +107,33 @@ pub extern "C" fn gps_capi_version() -> *const c_char {
 ///
 /// # Safety
 /// `ptr` must be the payload pointer of a successful earlier call (or null).
-/// An 8-byte little-endian length header written by [`alloc_out`] just before
-/// the payload is read back so the allocation can be restored exactly.
+/// [`alloc_out`] stores the length in one aligned `usize` word immediately
+/// before the payload, and this function reconstructs the same `Vec<usize>`
+/// allocation that produced it.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn gps_free(ptr: *mut u8) {
     if ptr.is_null() {
         return;
     }
 
-    // SAFETY: `ptr` is the payload of a successful earlier `alloc_out`, which
-    // wrote an 8-byte length header immediately before it.
-    let len = unsafe { *(ptr as *mut u64).offset(-1) } as usize;
-    // SAFETY: reconstructing `len + 8` bytes starting 8 before `ptr` restores
-    // the exact allocation made by `alloc_out`.
-    let full = unsafe { slice::from_raw_parts_mut(ptr.offset(-8), len + 8) };
-    // SAFETY: `full` was returned by the allocator as a `Box<[u8]>`, so
-    // `from_raw` + drop is the uniquely-owning free.
-    unsafe {
-        drop(Box::from_raw(full));
-    }
+    // SAFETY: the payload starts exactly one `usize` after the base of the
+    // `Vec<usize>` allocated by `alloc_out`, so casting back and stepping one
+    // word lands on a correctly aligned, initialized header.
+    let header = unsafe { (ptr as *mut usize).sub(1) };
+    // SAFETY: `header` is the first word of a live allocation whose header was
+    // written by `alloc_out`; only the owner of `ptr` calls this function.
+    let len = unsafe { header.read() };
+    let word_bytes = size_of::<usize>();
+    let payload_words = len / word_bytes + usize::from(len % word_bytes != 0);
+    let Some(total_words) = 1usize.checked_add(payload_words) else {
+        return;
+    };
+
+    // SAFETY: `header` is the base pointer of the `Vec<usize>` created in
+    // `alloc_out`; `total_words` is the same length/capacity used there, every
+    // word was initialized, and this call consumes the allocation exactly once.
+    let words = unsafe { Vec::from_raw_parts(header, total_words, total_words) };
+    drop(words);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +186,32 @@ impl<'a> Rd<'a> {
         Ok(bytes)
     }
 
+    fn remaining(&self) -> usize {
+        self.data.len() - self.pos
+    }
+
+    /// Reads a `u32` element count and validates it before any allocation.
+    ///
+    /// `min_bytes` is the smallest encoding of one element, so this also
+    /// rejects a huge count before the element loop can run. The arithmetic is
+    /// checked even though `count <= max` keeps it in range in practice.
+    fn read_count(&mut self, max: usize, min_bytes: usize, label: &str) -> Result<usize, String> {
+        let count = self.u32()? as usize;
+        if count > max {
+            return Err(format!("{label} count {count} exceeds limit {max}"));
+        }
+        let needed = count
+            .checked_mul(min_bytes)
+            .ok_or_else(|| format!("integer overflow sizing {label}"))?;
+        if needed > self.remaining() {
+            return Err(format!(
+                "truncated buffer: {label} needs at least {needed} bytes, {} remain",
+                self.remaining()
+            ));
+        }
+        Ok(count)
+    }
+
     fn u8(&mut self) -> Result<u8, String> {
         Ok(self.take(1)?[0])
     }
@@ -173,6 +229,11 @@ impl<'a> Rd<'a> {
     }
     fn str(&mut self) -> Result<String, String> {
         let n = self.u32()? as usize;
+        if n > MAX_STRING_BYTES {
+            return Err(format!(
+                "string length {n} exceeds limit {MAX_STRING_BYTES}"
+            ));
+        }
         let bytes = self.take(n)?;
         String::from_utf8(bytes.to_vec()).map_err(|e| format!("invalid UTF-8: {e}"))
     }
@@ -188,19 +249,37 @@ impl<'a> Rd<'a> {
     }
 }
 
-/// Allocates a payload buffer with an 8-byte little-endian length header;
-/// returns a pointer to the payload (after the header) plus its length.
+/// Allocates one `Vec<usize>` containing an aligned length header followed by
+/// the payload bytes, and returns a pointer just past the header.
+///
+/// Using one allocation with one layout keeps `gps_free` exact: it reads the
+/// header as a `usize` (never unaligned) and rebuilds the very same vector.
 fn alloc_out(bytes: Vec<u8>) -> (*mut u8, usize) {
     let len = bytes.len();
-    let mut vec = Vec::with_capacity(len + 8);
-    vec.extend_from_slice(&(len as u64).to_le_bytes());
-    vec.extend_from_slice(&bytes);
-    let head = vec.as_mut_ptr();
-    std::mem::forget(vec);
+    let word_bytes = size_of::<usize>();
+    let payload_words = len / word_bytes + usize::from(len % word_bytes != 0);
+    let total_words = 1usize
+        .checked_add(payload_words)
+        .expect("output buffer size overflow");
 
-    // SAFETY: `head` points at the start of an allocation of at least 8
-    // bytes; adding 8 lands inside it, aligned for `u8`.
-    (unsafe { head.add(8) }, len)
+    // Initializing every word keeps the reconstructed `Vec<usize>` fully
+    // defined, including the padding tail of the final partial word.
+    let mut words = vec![0usize; total_words];
+    words[0] = len;
+    if len > 0 {
+        // SAFETY: one `usize` past the base is inside the allocation and at
+        // least `len` bytes remain; `bytes` is a separate live allocation.
+        let dst = unsafe { words.as_mut_ptr().add(1).cast::<u8>() };
+        // SAFETY: `dst..dst+len` and `bytes` are disjoint, writable/readable,
+        // and both large enough for the copy.
+        unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), dst, len) };
+    }
+
+    // SAFETY: `words` has at least one word, so stepping one word lands at the
+    // first payload byte, which is valid for `u8` access.
+    let payload = unsafe { words.as_mut_ptr().add(1).cast::<u8>() };
+    std::mem::forget(words);
+    (payload, len)
 }
 
 /// Runs a handler over the input, marshals its output, and reports failures.
@@ -212,7 +291,23 @@ fn dispatch(
     output_len: *mut usize,
     handler: impl FnOnce(&[u8]) -> Result<Vec<u8>, String>,
 ) -> c_int {
-    if (input.is_null() && input_len > 0) || output.is_null() || output_len.is_null() {
+    if output.is_null() || output_len.is_null() {
+        return fail(ST_INVALID, "null pointer passed to the engine");
+    }
+
+    // Initialize the out-params before any other check so a failed call never
+    // leaves a stale pointer that a caller might free twice.
+    // SAFETY: both pointers were checked non-null and the caller promises they
+    // point to writable storage.
+    unsafe {
+        *output = ptr::null_mut();
+        *output_len = 0;
+    }
+
+    if input_len > MAX_INPUT_BYTES {
+        return fail(ST_INVALID, "input buffer exceeds the engine limit");
+    }
+    if input.is_null() && input_len > 0 {
         return fail(ST_INVALID, "null pointer passed to the engine");
     }
     // SAFETY: a non-null `input` promises `input_len` readable bytes; a null
@@ -223,14 +318,18 @@ fn dispatch(
         // SAFETY: a non-null `input` promises `input_len` readable bytes.
         unsafe { slice::from_raw_parts(input, input_len) }
     };
-    match catch_unwind(AssertUnwindSafe(|| handler(data))) {
-        Ok(Ok(bytes)) => {
-            let (ptr, len) = alloc_out(bytes);
-
+    // Allocation is inside the catch too: no panic from marshalling the reply
+    // may unwind into foreign code.
+    let result = catch_unwind(AssertUnwindSafe(|| -> Result<(*mut u8, usize), String> {
+        let bytes = handler(data)?;
+        Ok(alloc_out(bytes))
+    }));
+    match result {
+        Ok(Ok((out_ptr, len))) => {
             // SAFETY: the caller promised `output`/`output_len` point to
             // writable storage.
             unsafe {
-                *output = ptr;
+                *output = out_ptr;
                 *output_len = len;
             }
             ST_OK
@@ -249,11 +348,38 @@ fn fail(code: c_int, msg: &str) -> c_int {
 // Shared encodings
 // ---------------------------------------------------------------------------
 
+// Smallest valid encoding of one element, used only to reject impossible
+// counts before allocation. Optional fields are still bounds-checked on read.
+const POINT_MIN_BYTES: usize = 8 + 8 + 1 + 8;
+const COORDINATE_BYTES: usize = 8 + 8;
+const FIX_MIN_BYTES: usize = 8 + 8 + 8 + 1;
+const SAMPLE_BYTES: usize = 8 + 8;
+const ANALYTICS_ROW_BYTES: usize = 8 + 8 + 8;
+const ANALYTICS_PAIR_BYTES: usize = 8 + 8;
+
+fn read_finite_f64(rd: &mut Rd<'_>, field: &str) -> Result<f64, String> {
+    let value = rd.f64()?;
+    if value.is_finite() {
+        Ok(value)
+    } else {
+        Err(format!("{field} must be finite"))
+    }
+}
+
+fn read_nonnegative_f64(rd: &mut Rd<'_>, field: &str) -> Result<f64, String> {
+    let value = read_finite_f64(rd, field)?;
+    if value >= 0.0 {
+        Ok(value)
+    } else {
+        Err(format!("{field} must be non-negative"))
+    }
+}
+
 /// `[u32 n]` then per point: `f64 lat, f64 lon, u8 has_altitude, [f64 altitude],
 /// i64 unix-ms timestamp`.
 fn read_points(rd: &mut Rd<'_>) -> Result<Vec<TrackPoint>, String> {
-    let n = rd.u32()? as usize;
-    let mut out = Vec::with_capacity(n.min(1_000_000));
+    let n = rd.read_count(MAX_POINTS, POINT_MIN_BYTES, "point")?;
+    let mut out = Vec::with_capacity(n);
     for i in 0..n {
         let lat = rd.f64()?;
         let lon = rd.f64()?;
@@ -274,8 +400,8 @@ fn read_points(rd: &mut Rd<'_>) -> Result<Vec<TrackPoint>, String> {
 
 /// `[u32 n]` then per coordinate: `f64 lat, f64 lon`.
 fn read_coordinates(rd: &mut Rd<'_>) -> Result<Vec<Coordinate>, String> {
-    let n = rd.u32()? as usize;
-    let mut out = Vec::with_capacity(n.min(1_000_000));
+    let n = rd.read_count(MAX_COORDINATES, COORDINATE_BYTES, "coordinate")?;
+    let mut out = Vec::with_capacity(n);
     for i in 0..n {
         let lat = rd.f64()?;
         let lon = rd.f64()?;
@@ -284,19 +410,25 @@ fn read_coordinates(rd: &mut Rd<'_>) -> Result<Vec<Coordinate>, String> {
     Ok(out)
 }
 
-#[allow(dead_code)]
 /// `[u32 n]` then per fix:
 /// `f64 lat, f64 lon, i64 unix-ms, u8 mask, [f64]*` where mask bit 0 =
 /// accuracy (m), 1 = altitude (m), 2 = speed (m/s), 3 = bearing (deg).
 fn read_fixes(rd: &mut Rd<'_>) -> Result<Vec<GpsFix>, String> {
-    let n = rd.u32()? as usize;
-    let mut out = Vec::with_capacity(n.min(1_000_000));
+    let n = rd.read_count(MAX_FIXES, FIX_MIN_BYTES, "fix")?;
+    let mut out = Vec::with_capacity(n);
     for i in 0..n {
         out.push(read_fix(rd, i)?);
     }
     Ok(out)
 }
 
+/// Reads one raw fix, validating optional sensors at the boundary.
+///
+/// Finite bearing degrees keep the domain's normalization into `[0, 2π)`;
+/// non-finite values are errors rather than silently becoming "absent".
+/// Accuracy and speed are physical magnitudes and must be non-negative;
+/// altitude may be negative but must be finite. Unix-ms timestamps are
+/// accepted as any `i64`, matching the domain model.
 fn read_fix(rd: &mut Rd<'_>, i: usize) -> Result<GpsFix, String> {
     let lat = rd.f64()?;
     let lon = rd.f64()?;
@@ -305,17 +437,22 @@ fn read_fix(rd: &mut Rd<'_>, i: usize) -> Result<GpsFix, String> {
     let mask = rd.u8()?;
     let mut fix = GpsFix::new(timestamp, coord);
     if mask & 0x01 != 0 {
-        fix.accuracy = Some(Distance::from_meters(rd.f64()?));
+        let accuracy = read_nonnegative_f64(rd, "fix accuracy")?;
+        fix.accuracy = Some(Distance::from_meters(accuracy));
     }
     if mask & 0x02 != 0 {
-        fix.altitude = Some(rd.f64()?);
+        fix.altitude = Some(read_finite_f64(rd, "fix altitude")?);
     }
     if mask & 0x04 != 0 {
-        fix.speed = Some(crate::units::Speed::from_mps(rd.f64()?));
+        let speed = read_nonnegative_f64(rd, "fix speed")?;
+        fix.speed = Some(crate::units::Speed::from_mps(speed));
     }
     if mask & 0x08 != 0 {
-        let degrees = rd.f64()?;
-        fix.bearing = crate::geo::Bearing::from_degrees(degrees).ok();
+        let degrees = read_finite_f64(rd, "fix bearing")?;
+        fix.bearing = Some(
+            crate::geo::Bearing::from_degrees(degrees)
+                .map_err(|e| format!("fix {i}: bearing: {e}"))?,
+        );
     }
     Ok(fix)
 }
@@ -367,11 +504,11 @@ fn read_live_ghost(rd: &mut Rd<'_>) -> Result<Option<LiveGhost>, String> {
 
 /// `[u32 n]` then per sample: `f64 distance_m, f64 elapsed_s`.
 fn read_attempt(rd: &mut Rd<'_>) -> Result<Vec<AttemptSample>, String> {
-    let n = rd.u32()? as usize;
-    let mut out = Vec::with_capacity(n.min(1_000_000));
+    let n = rd.read_count(MAX_SAMPLES_PER_ATTEMPT, SAMPLE_BYTES, "attempt sample")?;
+    let mut out = Vec::with_capacity(n);
     for _ in 0..n {
-        let distance = Distance::from_meters(rd.f64()?);
-        let elapsed = Duration::from_secs(rd.f64()?);
+        let distance = Distance::from_meters(read_nonnegative_f64(rd, "sample distance")?);
+        let elapsed = Duration::from_secs(read_nonnegative_f64(rd, "sample elapsed")?);
         out.push(AttemptSample { distance, elapsed });
     }
     Ok(out)
@@ -535,16 +672,23 @@ fn route_info(bytes: &[u8]) -> Result<Vec<u8>, String> {
 /// f64 min_speed_mps, f64 max_speed_mps, f64 mean_speed_mps, f64 speed_spread_mps`.
 fn compare_route_segments_impl(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
-    let route_distance = Distance::from_meters(rd.f64()?);
-    let segment_distance = Distance::from_meters(rd.f64()?);
-    let attempt_count = rd.u32()? as usize;
-    let mut attempts = Vec::with_capacity(attempt_count.min(1_000_000));
-    for _ in 0..attempt_count {
-        let n = rd.u32()? as usize;
-        let mut samples = Vec::with_capacity(n.min(1_000_000));
-        for _ in 0..n {
-            let distance = Distance::from_meters(rd.f64()?);
-            let elapsed = Duration::from_secs(rd.f64()?);
+    let route_distance = Distance::from_meters(read_nonnegative_f64(&mut rd, "route distance")?);
+    let segment_distance =
+        Distance::from_meters(read_nonnegative_f64(&mut rd, "segment distance")?);
+    let attempt_count = rd.read_count(MAX_ATTEMPTS, 4, "route segment attempt")?;
+    let mut attempts = Vec::with_capacity(attempt_count);
+    for i in 0..attempt_count {
+        let n = rd.read_count(MAX_SAMPLES_PER_ATTEMPT, SAMPLE_BYTES, "attempt sample")?;
+        let mut samples = Vec::with_capacity(n);
+        for j in 0..n {
+            let distance = Distance::from_meters(read_nonnegative_f64(
+                &mut rd,
+                &format!("sample {i}.{j} distance"),
+            )?);
+            let elapsed = Duration::from_secs(read_nonnegative_f64(
+                &mut rd,
+                &format!("sample {i}.{j} elapsed"),
+            )?);
             samples.push(crate::attempt::AttemptSample { distance, elapsed });
         }
         let attempt = crate::attempt::Attempt::from_samples(samples).map_err(|e| e.to_string())?;
@@ -579,7 +723,7 @@ fn ghost_state_at(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let reference_samples = read_attempt(&mut rd)?;
     let current_samples = read_attempt(&mut rd)?;
-    let distance = Distance::from_meters(rd.f64()?);
+    let distance = Distance::from_meters(read_nonnegative_f64(&mut rd, "ghost distance")?);
     rd.done("ghost_state_at")?;
 
     let reference = Attempt::from_samples(reference_samples).map_err(|e| e.to_string())?;
@@ -606,9 +750,10 @@ fn ghost_state_at(bytes: &[u8]) -> Result<Vec<u8>, String> {
 fn live_ghost_gap_impl(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let reference_samples = read_attempt(&mut rd)?;
-    let current_distance = Distance::from_meters(rd.f64()?);
-    let moving_seconds = Duration::from_secs(rd.f64()?);
-    let loop_length = Distance::from_meters(rd.f64()?);
+    let current_distance =
+        Distance::from_meters(read_nonnegative_f64(&mut rd, "current distance")?);
+    let moving_seconds = Duration::from_secs(read_nonnegative_f64(&mut rd, "moving seconds")?);
+    let loop_length = Distance::from_meters(read_nonnegative_f64(&mut rd, "loop length")?);
     rd.done("live_ghost_gap")?;
 
     let reference = Attempt::from_samples(reference_samples).map_err(|e| e.to_string())?;
@@ -708,6 +853,236 @@ fn jitter(c: Coordinate, noise: f64, rng: &mut Rng) -> Coordinate {
 }
 
 // ---------------------------------------------------------------------------
+// Opaque handle registry
+// ---------------------------------------------------------------------------
+
+/// Handle kinds are encoded in the high byte so cross-type use is rejected
+/// before any registry lookup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HandleKind {
+    Live,
+    Replay,
+}
+
+const HANDLE_TAG_LIVE: u8 = 0xA1;
+const HANDLE_TAG_REPLAY: u8 = 0xB2;
+const HANDLE_GENERATION_MASK: u64 = 0x00FF_FFFF;
+const MAX_HANDLE_GENERATION: u32 = HANDLE_GENERATION_MASK as u32;
+
+impl HandleKind {
+    fn tag(self) -> u8 {
+        match self {
+            HandleKind::Live => HANDLE_TAG_LIVE,
+            HandleKind::Replay => HANDLE_TAG_REPLAY,
+        }
+    }
+
+    fn from_tag(tag: u8) -> Result<Self, String> {
+        match tag {
+            HANDLE_TAG_LIVE => Ok(HandleKind::Live),
+            HANDLE_TAG_REPLAY => Ok(HandleKind::Replay),
+            _ => Err("unknown handle type".into()),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            HandleKind::Live => "live",
+            HandleKind::Replay => "replay",
+        }
+    }
+}
+
+/// A slot's contents are removed on free while the `Arc` may still be held by
+/// an in-flight operation. Later users then see `None` instead of a dangling
+/// object, and a free waits for an operation already in progress.
+struct Slot<T> {
+    value: Mutex<Option<T>>,
+}
+
+struct KindSlots<T> {
+    next_index: u32,
+    reusable: Vec<u32>,
+    generations: HashMap<u32, u32>,
+    slots: HashMap<u32, Arc<Slot<T>>>,
+}
+
+impl<T> Default for KindSlots<T> {
+    fn default() -> Self {
+        KindSlots {
+            next_index: 0,
+            reusable: Vec::new(),
+            generations: HashMap::new(),
+            slots: HashMap::new(),
+        }
+    }
+}
+
+impl<T> KindSlots<T> {
+    fn allocate(&mut self, value: T, kind: HandleKind) -> Result<u64, String> {
+        loop {
+            let index = match self.reusable.pop() {
+                Some(index) => index,
+                None => {
+                    let index = self.next_index;
+                    self.next_index = self
+                        .next_index
+                        .checked_add(1)
+                        .ok_or_else(|| format!("{} handle index space exhausted", kind.name()))?;
+                    index
+                }
+            };
+            let generation = self.generations.entry(index).or_insert(1);
+            // Retire an index rather than wrap its generation and revive a
+            // stale handle.
+            if *generation > MAX_HANDLE_GENERATION {
+                continue;
+            }
+            let handle = encode_handle(kind, *generation, index);
+            self.slots.insert(
+                index,
+                Arc::new(Slot {
+                    value: Mutex::new(Some(value)),
+                }),
+            );
+            return Ok(handle);
+        }
+    }
+
+    fn slot(&self, decoded: &DecodedHandle) -> Result<Arc<Slot<T>>, String> {
+        let current = self.generations.get(&decoded.index).copied().unwrap_or(0);
+        if current != decoded.generation {
+            return Err(format!("stale {} handle", decoded.kind.name()));
+        }
+        self.slots
+            .get(&decoded.index)
+            .cloned()
+            .ok_or_else(|| format!("invalid or freed {} handle", decoded.kind.name()))
+    }
+
+    fn remove(&mut self, decoded: &DecodedHandle) -> Option<Arc<Slot<T>>> {
+        if self.generations.get(&decoded.index).copied() != Some(decoded.generation) {
+            return None;
+        }
+        let slot = self.slots.remove(&decoded.index)?;
+        if let Some(generation) = self.generations.get_mut(&decoded.index) {
+            if *generation < MAX_HANDLE_GENERATION {
+                *generation += 1;
+                self.reusable.push(decoded.index);
+            } else {
+                self.generations.remove(&decoded.index);
+            }
+        }
+        Some(slot)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DecodedHandle {
+    kind: HandleKind,
+    generation: u32,
+    index: u32,
+}
+
+#[derive(Default)]
+struct Registry {
+    live: KindSlots<LiveRecorder>,
+    replay: KindSlots<ReplaySession>,
+}
+
+fn registry() -> MutexGuard<'static, Registry> {
+    static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
+    REGISTRY
+        .get_or_init(|| Mutex::new(Registry::default()))
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+}
+
+fn encode_handle(kind: HandleKind, generation: u32, index: u32) -> u64 {
+    ((kind.tag() as u64) << 56)
+        | (((generation as u64) & HANDLE_GENERATION_MASK) << 32)
+        | index as u64
+}
+
+fn decode_handle(handle: u64) -> Result<DecodedHandle, String> {
+    if handle == 0 {
+        return Err("null handle".into());
+    }
+    let kind = HandleKind::from_tag((handle >> 56) as u8)?;
+    let generation = ((handle >> 32) & HANDLE_GENERATION_MASK) as u32;
+    if generation == 0 {
+        return Err("invalid handle generation".into());
+    }
+    Ok(DecodedHandle {
+        kind,
+        generation,
+        index: handle as u32,
+    })
+}
+
+fn with_live<T>(
+    handle: u64,
+    operation: impl FnOnce(&mut LiveRecorder) -> Result<T, String>,
+) -> Result<T, String> {
+    let decoded = decode_handle(handle)?;
+    if decoded.kind != HandleKind::Live {
+        return Err("handle type mismatch: expected a live handle".into());
+    }
+    let slot = registry().live.slot(&decoded)?;
+    let mut guard = slot.value.lock().unwrap_or_else(|err| err.into_inner());
+    let recorder = guard
+        .as_mut()
+        .ok_or_else(|| "live handle was already freed".to_string())?;
+    operation(recorder)
+}
+
+fn with_replay<T>(
+    handle: u64,
+    operation: impl FnOnce(&mut ReplaySession) -> Result<T, String>,
+) -> Result<T, String> {
+    let decoded = decode_handle(handle)?;
+    if decoded.kind != HandleKind::Replay {
+        return Err("handle type mismatch: expected a replay handle".into());
+    }
+    let slot = registry().replay.slot(&decoded)?;
+    let mut guard = slot.value.lock().unwrap_or_else(|err| err.into_inner());
+    let session = guard
+        .as_mut()
+        .ok_or_else(|| "replay handle was already freed".to_string())?;
+    operation(session)
+}
+
+fn free_live_handle(handle: u64) -> Result<(), String> {
+    let decoded = decode_handle(handle)?;
+    if decoded.kind != HandleKind::Live {
+        return Err("handle type mismatch: expected a live handle".into());
+    }
+    let slot = registry()
+        .live
+        .remove(&decoded)
+        .ok_or_else(|| "invalid or freed live handle".to_string())?;
+    // Waiting here ensures a concurrent operation finishes before the free
+    // returns; any operation that arrives later sees an empty slot.
+    let mut guard = slot.value.lock().unwrap_or_else(|err| err.into_inner());
+    *guard = None;
+    Ok(())
+}
+
+fn free_replay_handle(handle: u64) -> Result<(), String> {
+    let decoded = decode_handle(handle)?;
+    if decoded.kind != HandleKind::Replay {
+        return Err("handle type mismatch: expected a replay handle".into());
+    }
+    let slot = registry()
+        .replay
+        .remove(&decoded)
+        .ok_or_else(|| "invalid or freed replay handle".to_string())?;
+    let mut guard = slot.value.lock().unwrap_or_else(|err| err.into_inner());
+    *guard = None;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Live recorder (opaque handle)
 // ---------------------------------------------------------------------------
 
@@ -724,22 +1099,10 @@ fn live_new(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
     let mut rec = LiveRecorder::new(LiveConfig::default(), route);
     rec.set_ghost(ghost);
-    let handle = (Box::into_raw(Box::new(rec)) as usize) as u64;
+    let handle = registry().live.allocate(rec, HandleKind::Live)?;
     let mut w = Wr::default();
     w.u64(handle);
     Ok(w.data)
-}
-
-/// # Safety
-/// `handle` must be a live handle returned by `gps_live_new` and not yet freed.
-unsafe fn live_ref(handle: u64) -> Result<&'static mut LiveRecorder, String> {
-    if handle == 0 {
-        return Err("null live handle".into());
-    }
-    // SAFETY: the handle was produced by `Box::into_raw` in `live_new` and is
-    // valid until `gps_live_free` consumes it. The caller owns the handle and
-    // does not alias it across threads.
-    Ok(unsafe { &mut *(handle as usize as *mut LiveRecorder) })
 }
 
 fn live_push(bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -747,49 +1110,52 @@ fn live_push(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let handle = rd.u64()?;
     let fix = read_fix(&mut rd, 0)?;
     rd.done("live_push")?;
-    // SAFETY: see `live_ref`.
-    // SAFETY: see `live_ref`.
-    let rec = unsafe { live_ref(handle)? };
-    rec.push(fix);
-    Ok(Vec::new())
+    with_live(handle, |rec| {
+        rec.push(fix);
+        Ok(Vec::new())
+    })
 }
 
 fn live_pause(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
     rd.done("live_pause")?;
-    // SAFETY: see `live_ref`.
-    unsafe { live_ref(handle)? }.pause();
-    Ok(Vec::new())
+    with_live(handle, |rec| {
+        rec.pause();
+        Ok(Vec::new())
+    })
 }
 
 fn live_resume(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
     rd.done("live_resume")?;
-    // SAFETY: see `live_ref`.
-    unsafe { live_ref(handle)? }.resume();
-    Ok(Vec::new())
+    with_live(handle, |rec| {
+        rec.resume();
+        Ok(Vec::new())
+    })
 }
 
 fn live_finish(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
     rd.done("live_finish")?;
-    // SAFETY: see `live_ref`.
-    unsafe { live_ref(handle)? }.finish();
-    Ok(Vec::new())
+    with_live(handle, |rec| {
+        rec.finish();
+        Ok(Vec::new())
+    })
 }
 
 fn live_seed(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
-    let distance = Distance::from_meters(rd.f64()?);
-    let moving = Duration::from_secs(rd.f64()?);
+    let distance = Distance::from_meters(read_nonnegative_f64(&mut rd, "seed distance")?);
+    let moving = Duration::from_secs(read_nonnegative_f64(&mut rd, "seed moving time")?);
     rd.done("live_seed")?;
-    // SAFETY: see `live_ref`.
-    unsafe { live_ref(handle)? }.seed(distance, moving);
-    Ok(Vec::new())
+    with_live(handle, |rec| {
+        rec.seed(distance, moving);
+        Ok(Vec::new())
+    })
 }
 
 fn live_set_ghost(bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -797,105 +1163,102 @@ fn live_set_ghost(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let handle = rd.u64()?;
     let ghost = read_live_ghost(&mut rd)?;
     rd.done("live_set_ghost")?;
-    // SAFETY: see `live_ref`.
-    unsafe { live_ref(handle)? }.set_ghost(ghost);
-    Ok(Vec::new())
+    with_live(handle, |rec| {
+        rec.set_ghost(ghost);
+        Ok(Vec::new())
+    })
 }
 
 fn live_snapshot(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
     rd.done("live_snapshot")?;
-    // SAFETY: see `live_ref`.
-    let rec = unsafe { live_ref(handle)? };
-    let snap = rec.snapshot();
-    let ghost = rec.ghost_snapshot();
+    with_live(handle, |rec| {
+        let snap = rec.snapshot();
+        let ghost = rec.ghost_snapshot();
 
-    let mut w = Wr::default();
-    w.f64(snap.distance.meters());
-    w.f64(snap.moving.as_secs());
-    w.f64(snap.pace.mps());
-    w.f64(snap.route_progress);
-    if let Some(off) = snap.off_route {
-        w.u8(1);
-        w.f64(off.meters());
-    } else {
-        w.u8(0);
-        w.f64(0.0);
-    }
-    if let Some(acc) = snap.accuracy {
-        w.u8(1);
-        w.f64(acc.meters());
-    } else {
-        w.u8(0);
-        w.f64(0.0);
-    }
-    if let Some(pos) = snap.position {
-        w.u8(1);
-        w.f64(pos.latitude());
-        w.f64(pos.longitude());
-    } else {
-        w.u8(0);
-        w.f64(0.0);
-        w.f64(0.0);
-    }
-    if let Some(g) = ghost {
-        w.u8(1);
-        w.f64(g.state.distance.meters());
-        w.f64(g.state.time_difference.as_secs());
-        w.u8(g.state.ahead as u8);
-        w.f64(g.spatial_gap.meters());
-        w.f64(g.confidence);
-    } else {
-        w.u8(0);
-        w.f64(0.0);
-        w.f64(0.0);
-        w.u8(0);
-        w.f64(0.0);
-        w.f64(0.0);
-    }
-    w.u8(snap.match_status as u8);
-    w.f64(snap.match_confidence);
-    // Append-only ghost evidence. The v1 prefix above is byte-stable; older
-    // readers that ignore trailing bytes keep working unchanged.
-    if let Some(g) = ghost {
-        w.u8(g.match_status as u8);
-        w.f64(g.match_confidence.map(|c| c.value()).unwrap_or(0.0));
-        match g.position_confidence {
-            Some(confidence) => {
-                w.u8(1);
-                w.f64(confidence.value());
-            }
-            None => {
-                w.u8(0);
-                w.f64(0.0);
-            }
+        let mut w = Wr::default();
+        w.f64(snap.distance.meters());
+        w.f64(snap.moving.as_secs());
+        w.f64(snap.pace.mps());
+        w.f64(snap.route_progress);
+        if let Some(off) = snap.off_route {
+            w.u8(1);
+            w.f64(off.meters());
+        } else {
+            w.u8(0);
+            w.f64(0.0);
         }
-        w.u8(g.reliable() as u8);
-    } else {
-        w.u8(0);
-        w.f64(0.0);
-        w.u8(0);
-        w.f64(0.0);
-        w.u8(0);
-    }
-    Ok(w.data)
+        if let Some(acc) = snap.accuracy {
+            w.u8(1);
+            w.f64(acc.meters());
+        } else {
+            w.u8(0);
+            w.f64(0.0);
+        }
+        if let Some(pos) = snap.position {
+            w.u8(1);
+            w.f64(pos.latitude());
+            w.f64(pos.longitude());
+        } else {
+            w.u8(0);
+            w.f64(0.0);
+            w.f64(0.0);
+        }
+        if let Some(g) = ghost {
+            w.u8(1);
+            w.f64(g.state.distance.meters());
+            w.f64(g.state.time_difference.as_secs());
+            w.u8(g.state.ahead as u8);
+            w.f64(g.spatial_gap.meters());
+            w.f64(g.confidence);
+        } else {
+            w.u8(0);
+            w.f64(0.0);
+            w.f64(0.0);
+            w.u8(0);
+            w.f64(0.0);
+            w.f64(0.0);
+        }
+        w.u8(snap.match_status as u8);
+        w.f64(snap.match_confidence);
+        // Append-only ghost evidence. The v1 prefix above is byte-stable; older
+        // readers that ignore trailing bytes keep working unchanged.
+        if let Some(g) = ghost {
+            w.u8(g.match_status as u8);
+            w.f64(g.match_confidence.map(|c| c.value()).unwrap_or(0.0));
+            match g.position_confidence {
+                Some(confidence) => {
+                    w.u8(1);
+                    w.f64(confidence.value());
+                }
+                None => {
+                    w.u8(0);
+                    w.f64(0.0);
+                }
+            }
+            w.u8(g.reliable() as u8);
+        } else {
+            w.u8(0);
+            w.f64(0.0);
+            w.u8(0);
+            w.f64(0.0);
+            w.u8(0);
+        }
+        Ok(w.data)
+    })
 }
 
-/// Frees a live handle returned by `gps_live_new`. Null is ignored.
+/// Frees a live handle returned by `gps_live_new`. Null, stale, and
+/// cross-type handles are ignored.
 ///
 /// # Safety
-/// `handle` must be a live handle from `gps_live_new`, or zero.
+/// `handle` may be any `u64`; only a live handle from `gps_live_new` has an
+/// effect.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn gps_live_free(handle: u64) {
-    if handle == 0 {
-        return;
-    }
+pub extern "C" fn gps_live_free(handle: u64) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
-        // SAFETY: see `live_ref`; this consumes the handle exactly once.
-        unsafe {
-            drop(Box::from_raw(handle as usize as *mut LiveRecorder));
-        }
+        let _ = free_live_handle(handle);
     }));
 }
 
@@ -1146,22 +1509,10 @@ fn replay_new(bytes: &[u8]) -> Result<Vec<u8>, String> {
     rd.done("replay_new")?;
 
     let session = ReplaySession::with_ghost(fixes, route, ghost);
-    let handle = (Box::into_raw(Box::new(session)) as usize) as u64;
+    let handle = registry().replay.allocate(session, HandleKind::Replay)?;
     let mut w = Wr::default();
     w.u64(handle);
     Ok(w.data)
-}
-
-/// # Safety
-/// `handle` must be a replay handle returned by `gps_replay_new` and not yet freed.
-unsafe fn replay_ref(handle: u64) -> Result<&'static mut ReplaySession, String> {
-    if handle == 0 {
-        return Err("null replay handle".into());
-    }
-    // SAFETY: produced by `Box::into_raw` in `replay_new`, valid until
-    // `gps_replay_free`. The caller owns the handle and does not alias it
-    // across threads.
-    Ok(unsafe { &mut *(handle as usize as *mut ReplaySession) })
 }
 
 fn write_replay_snapshot(w: &mut Wr, snap: &crate::replay::ReplaySnapshot) {
@@ -1259,61 +1610,70 @@ fn replay_play(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
     rd.done("replay_play")?;
-    // SAFETY: see `replay_ref`.
-    unsafe { replay_ref(handle)? }.play();
-    Ok(Vec::new())
+    with_replay(handle, |session| {
+        session.play();
+        Ok(Vec::new())
+    })
 }
 
 fn replay_pause(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
     rd.done("replay_pause")?;
-    // SAFETY: see `replay_ref`.
-    unsafe { replay_ref(handle)? }.pause();
-    Ok(Vec::new())
+    with_replay(handle, |session| {
+        session.pause();
+        Ok(Vec::new())
+    })
 }
 
 fn replay_seek(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
-    let elapsed = Duration::from_secs(rd.f64()?);
+    let elapsed = Duration::from_secs(read_nonnegative_f64(&mut rd, "seek elapsed")?);
     rd.done("replay_seek")?;
-    // SAFETY: see `replay_ref`.
-    unsafe { replay_ref(handle)? }.seek(elapsed);
-    Ok(Vec::new())
+    with_replay(handle, |session| {
+        session.seek(elapsed);
+        Ok(Vec::new())
+    })
 }
 
 fn replay_set_speed(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
-    let speed = rd.f64()?;
+    let speed = read_finite_f64(&mut rd, "replay speed")?;
+    if speed <= 0.0 {
+        return Err("replay speed must be positive".into());
+    }
     rd.done("replay_set_speed")?;
-    // SAFETY: see `replay_ref`.
-    unsafe { replay_ref(handle)? }.set_speed(speed);
-    Ok(Vec::new())
+    with_replay(handle, |session| {
+        session.set_speed(speed);
+        Ok(Vec::new())
+    })
 }
 
 fn replay_advance(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
-    let delta = Duration::from_secs(rd.f64()?);
+    let delta = Duration::from_secs(read_nonnegative_f64(&mut rd, "advance delta")?);
     rd.done("replay_advance")?;
-    // SAFETY: see `replay_ref`.
-    let snap = unsafe { replay_ref(handle)? }.advance(delta);
-    let mut w = Wr::default();
-    write_replay_snapshot(&mut w, &snap);
-    Ok(w.data)
+    with_replay(handle, |session| {
+        let snap = session.advance(delta);
+        let mut w = Wr::default();
+        write_replay_snapshot(&mut w, &snap);
+        Ok(w.data)
+    })
 }
 
 fn replay_snapshot(bytes: &[u8]) -> Result<Vec<u8>, String> {
     let mut rd = Rd::new(bytes);
     let handle = rd.u64()?;
     rd.done("replay_snapshot")?;
-    // SAFETY: see `replay_ref`.
-    let snap = unsafe { replay_ref(handle)? }.snapshot();
-    let mut w = Wr::default();
-    write_replay_snapshot(&mut w, &snap);
-    Ok(w.data)
+    with_replay(handle, |session| {
+        let snap = session.snapshot();
+        let mut w = Wr::default();
+        write_replay_snapshot(&mut w, &snap);
+        Ok(w.data)
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -1415,19 +1775,14 @@ pub unsafe extern "C" fn gps_replay_snapshot(
 }
 
 #[unsafe(no_mangle)]
-/// Frees a replay handle. Null is ignored.
+/// Frees a replay handle. Null, stale, and cross-type handles are ignored.
 ///
 /// # Safety
-/// `handle` must be a replay handle from `gps_replay_new`, or zero.
-pub unsafe extern "C" fn gps_replay_free(handle: u64) {
-    if handle == 0 {
-        return;
-    }
+/// `handle` may be any `u64`; only a replay handle from `gps_replay_new` has an
+/// effect.
+pub extern "C" fn gps_replay_free(handle: u64) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
-        // SAFETY: consumes the handle exactly once.
-        unsafe {
-            drop(Box::from_raw(handle as usize as *mut ReplaySession));
-        }
+        let _ = free_replay_handle(handle);
     }));
 }
 
@@ -1474,12 +1829,17 @@ pub extern "C" fn gps_route_stats(
             Some(pb_raw as f64 / 1000.0)
         };
         let attempt_count = rd.u32()?;
-        let n = rd.u32()? as usize;
+        if attempt_count as usize > MAX_ATTEMPTS {
+            return Err(format!(
+                "attempt count {attempt_count} exceeds limit {MAX_ATTEMPTS}"
+            ));
+        }
+        let n = rd.read_count(MAX_ATTEMPTS, ANALYTICS_ROW_BYTES, "route stat attempt")?;
         let mut attempts = Vec::with_capacity(n);
-        for _ in 0..n {
+        for i in 0..n {
             let started = rd.i64()?;
-            let dur = rd.f64()?;
-            let dist = rd.f64()?;
+            let dur = read_nonnegative_f64(&mut rd, &format!("attempt {i} duration"))?;
+            let dist = read_nonnegative_f64(&mut rd, &format!("attempt {i} distance"))?;
             attempts.push((started, dur, dist));
         }
         rd.done("route_stats")?;
@@ -1507,14 +1867,14 @@ pub extern "C" fn gps_pace_analysis(
         } else {
             Some(pb_raw as f64 / 1000.0)
         };
-        let route_meters = rd.f64()?;
+        let route_meters = read_nonnegative_f64(&mut rd, "route meters")?;
         let has_start = rd.u8()? != 0;
         let route_start = if has_start {
             Some(Coordinate::new(rd.f64()?, rd.f64()?).map_err(|e| format!("route start: {e}"))?)
         } else {
             None
         };
-        let track_meters = rd.f64()?;
+        let track_meters = read_nonnegative_f64(&mut rd, "track meters")?;
         let points = read_points(&mut rd)?;
         rd.done("pace_analysis")?;
         let analysis = match pb_seconds {
@@ -1549,11 +1909,11 @@ pub extern "C" fn gps_route_progression(
         } else {
             Some(seed_raw as f64 / 1000.0)
         };
-        let n = rd.u32()? as usize;
+        let n = rd.read_count(MAX_ATTEMPTS, ANALYTICS_PAIR_BYTES, "progression attempt")?;
         let mut attempts: Vec<Attempt> = Vec::with_capacity(n);
-        for _ in 0..n {
+        for i in 0..n {
             let started = rd.i64()?;
-            let dur = rd.f64()?;
+            let dur = read_nonnegative_f64(&mut rd, &format!("attempt {i} duration"))?;
             attempts.push((started, dur, f64::NAN));
         }
         rd.done("route_progression")?;
@@ -1594,11 +1954,16 @@ pub extern "C" fn gps_route_rank(
     dispatch(input, input_len, output, output_len, |data| {
         let mut rd = Rd::new(data);
         let target = rd.u32()? as usize;
-        let n = rd.u32()? as usize;
+        if target > MAX_ATTEMPTS {
+            return Err(format!(
+                "target index {target} exceeds limit {MAX_ATTEMPTS}"
+            ));
+        }
+        let n = rd.read_count(MAX_ATTEMPTS, ANALYTICS_PAIR_BYTES, "rank attempt")?;
         let mut attempts: Vec<Attempt> = Vec::with_capacity(n);
-        for _ in 0..n {
+        for i in 0..n {
             let started = rd.i64()?;
-            let dur = rd.f64()?;
+            let dur = read_nonnegative_f64(&mut rd, &format!("attempt {i} duration"))?;
             attempts.push((started, dur, f64::NAN));
         }
         rd.done("route_rank")?;
@@ -1657,8 +2022,7 @@ mod tests {
         let mut request = Wr::default();
         request.u64(handle);
         let output = live_snapshot(&request.data).expect("live_snapshot succeeds");
-        // SAFETY: `handle` came from `live_new` and is consumed exactly once.
-        unsafe { gps_live_free(handle) };
+        gps_live_free(handle);
 
         let mut rd = Rd::new(&output);
         for _ in 0..4 {
@@ -1757,8 +2121,15 @@ mod tests {
         // The resampled point count may exceed the input count; only the
         // field's position and type are part of the v1 contract.
         assert!(output_points > 0);
-        assert_eq!(original, track.distance().meters());
-        assert_eq!(processed, adaptive.distance.meters());
+        // Miri interprets some platform-specific math rather than executing
+        // it, so identical sources can differ in the last bit there.
+        if cfg!(miri) {
+            assert!((original - track.distance().meters()).abs() < 1e-6);
+            assert!((processed - adaptive.distance.meters()).abs() < 1e-6);
+        } else {
+            assert_eq!(original, track.distance().meters());
+            assert_eq!(processed, adaptive.distance.meters());
+        }
         assert_eq!(duration, track.duration().as_secs());
         assert_eq!(moving, adaptive.moving.as_secs());
 
@@ -1774,5 +2145,338 @@ mod tests {
             (processed - legacy).abs() > 1.0,
             "processed={processed} legacy={legacy}"
         );
+    }
+
+    fn new_live_handle() -> u64 {
+        let mut input = Wr::default();
+        input.u8(0); // no route
+        input.u8(0); // no ghost
+        let bytes = live_new(&input.data).expect("live_new succeeds");
+        let mut rd = Rd::new(&bytes);
+        let handle = rd.u64().expect("handle");
+        rd.done("live_new").expect("handle only");
+        handle
+    }
+
+    fn new_replay_handle() -> u64 {
+        let mut input = Wr::default();
+        input.u32(0); // no fixes
+        input.u8(0); // no route
+        input.u8(0); // no ghost
+        let bytes = replay_new(&input.data).expect("replay_new succeeds");
+        let mut rd = Rd::new(&bytes);
+        let handle = rd.u64().expect("handle");
+        rd.done("replay_new").expect("handle only");
+        handle
+    }
+
+    #[test]
+    fn alloc_out_round_trips_empty_normal_large_and_repeated_buffers() {
+        // Null is always a valid no-op for the public free function.
+        // SAFETY: `gps_free` documents null as a no-op.
+        unsafe { gps_free(std::ptr::null_mut()) };
+
+        let payloads: [Vec<u8>; 4] = [Vec::new(), vec![42], vec![7; 4_096], vec![0xAB; 131_073]];
+        for payload in payloads {
+            let (ptr, len) = alloc_out(payload.clone());
+            assert_eq!(len, payload.len());
+            // SAFETY: `ptr` is a live `alloc_out` payload of exactly `len`
+            // readable bytes and has not been freed yet.
+            let bytes = unsafe { slice::from_raw_parts(ptr, len) };
+            assert_eq!(bytes, payload);
+            // SAFETY: `ptr` is consumed exactly once here.
+            unsafe { gps_free(ptr) };
+        }
+
+        let mut allocations = Vec::new();
+        for value in 0..64u8 {
+            let (ptr, len) = alloc_out(vec![value; 17]);
+            allocations.push((ptr, len, value));
+        }
+        for (ptr, len, value) in allocations {
+            // SAFETY: every pointer is still live and points at 17 bytes.
+            let bytes = unsafe { slice::from_raw_parts(ptr, len) };
+            assert_eq!(bytes, &vec![value; 17]);
+            // SAFETY: each pointer is freed exactly once.
+            unsafe { gps_free(ptr) };
+        }
+    }
+
+    #[test]
+    fn dispatch_rejects_oversized_and_null_inputs_without_dereferencing_them() {
+        let mut out: *mut u8 = std::ptr::dangling_mut();
+        let mut out_len = usize::MAX;
+
+        // A non-null but deliberately invalid pointer is safe only because the
+        // size guard rejects the request before any slice is created.
+        let bogus = std::ptr::dangling::<u8>();
+        let status = dispatch(
+            bogus,
+            MAX_INPUT_BYTES + 1,
+            &mut out as *mut *mut u8,
+            &mut out_len,
+            process_track,
+        );
+        assert_eq!(status, ST_INVALID);
+        assert!(out.is_null());
+        assert_eq!(out_len, 0);
+
+        let status = dispatch(
+            std::ptr::null(),
+            1,
+            &mut out as *mut *mut u8,
+            &mut out_len,
+            process_track,
+        );
+        assert_eq!(status, ST_INVALID);
+
+        let status = dispatch(
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            &mut out_len,
+            process_track,
+        );
+        assert_eq!(status, ST_INVALID);
+    }
+
+    #[test]
+    fn dispatch_never_unwinds_and_last_error_stays_a_c_string() {
+        let mut out: *mut u8 = std::ptr::dangling_mut();
+        let mut out_len = usize::MAX;
+        let out_ptr = &mut out as *mut *mut u8;
+        let len_ptr = &mut out_len as *mut usize;
+
+        let status = dispatch(std::ptr::null(), 0, out_ptr, len_ptr, |_| panic!("boom"));
+        assert_eq!(status, ST_ERROR);
+        assert!(out.is_null());
+        assert_eq!(out_len, 0);
+
+        let status = dispatch(std::ptr::null(), 0, out_ptr, len_ptr, |_| {
+            Err("detail\0with-nul".into())
+        });
+        assert_eq!(status, ST_ERROR);
+        // SAFETY: `gps_last_error` returns a process-lifetime, NUL-terminated
+        // C string owned by this thread's `LAST_ERROR` cell.
+        let message = unsafe { CStr::from_ptr(gps_last_error()) }
+            .to_str()
+            .expect("last error is UTF-8");
+        assert!(message.contains("detail?with-nul"), "{message}");
+    }
+
+    #[test]
+    fn handles_reject_invalid_stale_freed_and_cross_type_uses() {
+        let live = new_live_handle();
+        let replay = new_replay_handle();
+        assert_ne!(live, replay);
+
+        with_live(live, |rec| {
+            rec.pause();
+            Ok(())
+        })
+        .expect("valid live handle works");
+        with_replay(replay, |session| {
+            session.pause();
+            Ok(())
+        })
+        .expect("valid replay handle works");
+
+        assert!(with_live(0, |rec| Ok(rec.snapshot())).is_err());
+        assert!(with_replay(u64::MAX, |session| Ok(session.snapshot())).is_err());
+        assert!(with_replay(live, |session| Ok(session.snapshot())).is_err());
+        assert!(with_live(replay, |rec| Ok(rec.snapshot())).is_err());
+
+        free_live_handle(live).expect("first free succeeds");
+        assert!(free_live_handle(live).is_err(), "double free is rejected");
+        assert!(with_live(live, |rec| Ok(rec.snapshot())).is_err());
+        free_replay_handle(replay).expect("first free succeeds");
+        assert!(free_replay_handle(replay).is_err());
+        assert!(with_replay(replay, |session| Ok(session.snapshot())).is_err());
+
+        // The public free functions must tolerate arbitrary values.
+        gps_live_free(live);
+        gps_replay_free(replay);
+        gps_live_free(0);
+        gps_replay_free(u64::MAX);
+    }
+
+    #[test]
+    fn freed_handle_cannot_alias_a_reused_slot() {
+        let first = new_live_handle();
+        free_live_handle(first).expect("free first");
+        let second = new_live_handle();
+        assert_ne!(first, second, "generation must change on reuse");
+        assert!(with_live(first, |rec| Ok(rec.snapshot())).is_err());
+        with_live(second, |rec| {
+            rec.pause();
+            Ok(())
+        })
+        .expect("current handle still works");
+        free_live_handle(second).expect("free second");
+    }
+
+    #[test]
+    fn multiple_handles_keep_independent_state() {
+        let a = new_live_handle();
+        let b = new_live_handle();
+        with_live(a, |rec| {
+            rec.seed(Distance::from_meters(100.0), Duration::from_secs(10.0));
+            Ok(())
+        })
+        .expect("seed a");
+        let distance_a = with_live(a, |rec| Ok(rec.snapshot().distance.meters())).expect("a");
+        let distance_b = with_live(b, |rec| Ok(rec.snapshot().distance.meters())).expect("b");
+        assert_eq!(distance_a, 100.0);
+        assert_eq!(distance_b, 0.0);
+        free_live_handle(a).expect("free a");
+        free_live_handle(b).expect("free b");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn concurrent_handle_operations_are_serialized() {
+        let handle = new_live_handle();
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                std::thread::spawn(move || {
+                    with_live(handle, |rec| {
+                        rec.pause();
+                        rec.resume();
+                        Ok(())
+                    })
+                    .expect("concurrent operation succeeds");
+                })
+            })
+            .collect();
+        for thread in threads {
+            thread.join().expect("worker does not panic");
+        }
+        free_live_handle(handle).expect("free after all users finish");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn free_waits_for_an_in_flight_operation() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let handle = new_live_handle();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            with_live(handle, |rec| {
+                entered_tx.send(()).expect("signal entered");
+                release_rx.recv().expect("wait for release");
+                rec.pause();
+                Ok(())
+            })
+            .expect("operation succeeds");
+        });
+
+        entered_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("worker entered");
+        let (started_tx, started_rx) = mpsc::channel();
+        let (freed_tx, freed_rx) = mpsc::channel();
+        let freer = std::thread::spawn(move || {
+            started_tx.send(()).expect("signal free started");
+            free_live_handle(handle).expect("free succeeds");
+            freed_tx.send(()).expect("signal free finished");
+        });
+        started_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("free started");
+        assert!(
+            freed_rx.recv_timeout(Duration::from_millis(100)).is_err(),
+            "free returned while an operation was still in progress"
+        );
+
+        release_tx.send(()).expect("release worker");
+        worker.join().expect("worker does not panic");
+        freer.join().expect("freer does not panic");
+        assert!(
+            with_live(handle, |_| Ok(())).is_err(),
+            "freed handle must not resolve"
+        );
+    }
+
+    #[test]
+    fn element_counts_are_capped_before_allocation() {
+        for (count, label) in [
+            ((MAX_POINTS + 1) as u32, "point"),
+            ((MAX_COORDINATES + 1) as u32, "coordinate"),
+            ((MAX_FIXES + 1) as u32, "fix"),
+            ((MAX_SAMPLES_PER_ATTEMPT + 1) as u32, "attempt sample"),
+        ] {
+            let mut input = Wr::default();
+            input.u32(count);
+            // The readers reject the count even when the buffer is short,
+            // proving the limit is checked before any element loop.
+            let message = match label {
+                "point" => read_points(&mut Rd::new(&input.data)).unwrap_err(),
+                "coordinate" => read_coordinates(&mut Rd::new(&input.data)).unwrap_err(),
+                "fix" => read_fixes(&mut Rd::new(&input.data)).unwrap_err(),
+                _ => read_attempt(&mut Rd::new(&input.data)).unwrap_err(),
+            };
+            assert!(message.contains("exceeds limit"), "{label}: {message}");
+        }
+
+        let mut segments = Wr::default();
+        segments.f64(1_000.0);
+        segments.f64(100.0);
+        segments.u32((MAX_ATTEMPTS + 1) as u32);
+        assert!(
+            compare_route_segments_impl(&segments.data)
+                .unwrap_err()
+                .contains("exceeds limit")
+        );
+
+        let mut nested = Wr::default();
+        nested.f64(1_000.0);
+        nested.f64(100.0);
+        nested.u32(1);
+        nested.u32((MAX_SAMPLES_PER_ATTEMPT + 1) as u32);
+        assert!(
+            compare_route_segments_impl(&nested.data)
+                .unwrap_err()
+                .contains("exceeds limit")
+        );
+    }
+
+    #[test]
+    fn read_fix_validates_optional_sensors() {
+        fn fix_bytes(mask: u8, values: &[f64]) -> Vec<u8> {
+            let mut w = Wr::default();
+            w.f64(52.5);
+            w.f64(13.4);
+            w.i64(0);
+            w.u8(mask);
+            for value in values {
+                w.f64(*value);
+            }
+            w.data
+        }
+
+        let valid = fix_bytes(0x0F, &[5.0, -12.0, 3.5, 450.0]);
+        let fix = read_fix(&mut Rd::new(&valid), 0).expect("valid fix");
+        assert_eq!(fix.accuracy.expect("accuracy").meters(), 5.0);
+        assert_eq!(fix.altitude, Some(-12.0), "negative altitude is valid");
+        assert_eq!(fix.speed.expect("speed").mps(), 3.5);
+        assert_eq!(
+            fix.bearing.expect("bearing").as_degrees(),
+            90.0,
+            "finite bearing degrees are normalized"
+        );
+
+        for (mask, values, field) in [
+            (0x01, &[-1.0][..], "accuracy"),
+            (0x02, &[f64::NAN][..], "altitude"),
+            (0x04, &[-1.0][..], "speed"),
+            (0x08, &[f64::INFINITY][..], "bearing"),
+        ] {
+            let bytes = fix_bytes(mask, values);
+            let error = read_fix(&mut Rd::new(&bytes), 0).unwrap_err();
+            assert!(error.contains(field), "{error}");
+        }
     }
 }

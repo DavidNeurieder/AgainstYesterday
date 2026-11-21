@@ -691,9 +691,12 @@ documented here, grouped by the implementation milestones in
   A leading non-flag argument still names the AVD; `ANDROID_AVD` and
   `ANDROID_SERIAL` now override the AVD and serial.
 - CI: a new `android-engine-lib` matrix job cross-compiles the `cdylib` per
-  Android ABI and fails if any of the eight Dart FFI symbols is missing, and the
-  on-device E2E job now runs against the real Rust engine instead of the fake
-  one.
+  Android ABI and checks the complete 33-symbol `gps_*` export set that the
+  Dart FFI layer binds. PRs now run one native-engine smoke on API 34 with
+  `USE_RUST_ENGINE=true` and a software-GPU emulator; the wider on-device
+  matrix (API 24/34/36, real receiver, permissions, process death, MapLibre)
+  remains in `nightly.yml`.
+  The FFI boundary also has proptest and Miri coverage.
 - **Skips are not a silent fallback in CI.** The Rust FFI suites skip
   themselves when the `cdylib` is unbuilt, which is right locally but would let
   a misconfigured CI job go green with less coverage than it advertises. They
