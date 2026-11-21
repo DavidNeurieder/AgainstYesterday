@@ -1,0 +1,136 @@
+# Copyright (C) 2026 David Neurieder
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: python-wheels
+
+# Wheels are built on every push/PR so packaging regressions are visible.
+# Publishing runs only for version tags and requires the `pypi` GitHub
+# environment to be configured with a trusted publisher; PR builds need no
+# secrets. The sdist stages the external ../rust/gps-engine path dependency so
+# it builds without this checkout.
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: wheel ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            smoke: true
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            smoke: false  # cross-built; cannot be imported on the x86_64 runner
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            smoke: false  # cross-built on the arm64 runner
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            smoke: true
+          - os: macos-latest
+            target: universal2-apple-darwin
+            smoke: true
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            smoke: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # maturin-action adds the target(s) it needs (including both darwin
+      # targets for universal2), so no explicit rustup target list here.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --out dist
+
+      - name: Verify artifact and metadata
+        shell: bash
+        working-directory: python
+        run: |
+          set -euo pipefail
+          ls -l dist/*.whl
+          python -m pip install --upgrade twine
+          python -m twine check dist/*.whl
+
+      - name: Smoke import in a clean virtualenv
+        if: matrix.smoke
+        shell: bash
+        working-directory: python
+        run: |
+          set -euo pipefail
+          smoke="$RUNNER_TEMP/ay-wheel-smoke"
+          python -m venv "$smoke"
+          if [ -x "$smoke/Scripts/python.exe" ]; then
+            py="$smoke/Scripts/python.exe"
+          else
+            py="$smoke/bin/python"
+          fi
+          "$py" -m pip install --upgrade pip
+          "$py" -m pip install dist/*.whl
+          "$py" -c "import against_yesterday as ay; print(ay.__version__)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.target }}
+          path: python/dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build and verify sdist
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip maturin twine
+          make python-sdist MATURIN="$(python -c 'import shutil; print(shutil.which("maturin"))')"
+          python -m twine check python/target/sdist/*.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: python/target/sdist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: publish distributions (tags only)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, sdist]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write  # PyPI trusted publishing; no token secret needed
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: true

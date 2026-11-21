@@ -36,7 +36,7 @@ endif
         engine-android maplibre-fdroid-clean full-test full-test-device ci-test check check-versions clean \
         build-linux-release build-cli-release release-all repro-check repro-compare \
         stale-android-apks-debug stale-android-apks-release stale-android-jnilibs \
-        python-venv python-develop python-build python-test python-clean
+        python-venv python-develop python-build python-sdist python-test python-clean
 
 # Android artifacts are built for exactly one ABI: the phone target. That also
 # means no --split-per-abi: a split of a single ABI adds nothing but a per-ABI
@@ -225,6 +225,11 @@ python-develop: python-venv
 
 python-build: python-venv
 	cd python && .venv/bin/maturin build --release
+
+# Stage python/ plus the external gps-engine path dependency into a temporary
+# tree so the sdist can build from source without this checkout.
+python-sdist: python-venv
+	python/tool/build_sdist.sh --maturin "$(abspath $(MATURIN))"
 
 python-test: python-develop
 	cd python && .venv/bin/python -m pytest -q

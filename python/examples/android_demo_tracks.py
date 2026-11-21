@@ -132,7 +132,10 @@ def match_and_catalog(tracks: list[tuple[str, ay.Track]]) -> None:
             f"continuity={score.continuity:.3f} match={score.is_match()}"
         )
         if either is not None:
-            print(f"  either-direction match: {either.is_match()} (overall={either.overall_score:.3f})")
+            print(
+                "  either-direction match: "
+                f"{either.is_match()} (overall={either.overall_score:.3f})"
+            )
 
     catalog = ay.RouteCatalog()
     for name, track in tracks:

@@ -1,0 +1,89 @@
+# Copyright (C) 2026 David Neurieder
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: python-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # The repo-pinned toolchain is selected by rustup inside the checkout;
+      # this action only makes sure a current Rust is available on the runner.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Create virtualenv and install build/test tools
+        working-directory: python
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install maturin pytest mypy ruff twine
+
+      - name: Build and install the extension
+        working-directory: python
+        run: .venv/bin/maturin develop
+
+      - name: pytest
+        working-directory: python
+        run: .venv/bin/python -m pytest -q
+
+      - name: ruff
+        working-directory: python
+        run: |
+          set -euo pipefail
+          if { [ -f pyproject.toml ] && grep -q '^\[tool\.ruff\]' pyproject.toml; } \
+             || [ -f ruff.toml ] || [ -f .ruff.toml ]; then
+            echo "Using repository ruff configuration"
+            .venv/bin/ruff check .
+          else
+            echo "No ruff configuration found; checking sources with default rules"
+            .venv/bin/ruff check against_yesterday examples tests
+          fi
+
+      - name: mypy (when configured)
+        working-directory: python
+        run: |
+          set -euo pipefail
+          if { [ -f pyproject.toml ] && grep -q '^\[tool\.mypy\]' pyproject.toml; } \
+             || [ -f mypy.ini ] || [ -f .mypy.ini ]; then
+            .venv/bin/mypy against_yesterday examples
+          else
+            echo "No mypy configuration found; skipping type check"
+          fi
+
+      - name: Build distributions and check metadata
+        run: |
+          set -euo pipefail
+          (cd python && .venv/bin/maturin build --release --out dist)
+          # Stages the external gps-engine path dependency into the sdist.
+          make python-sdist MATURIN="$PWD/python/.venv/bin/maturin"
+          python/.venv/bin/python -m twine check python/dist/*.whl python/target/sdist/*.tar.gz
+          # Install the sdist in a clean environment with no repository checkout.
+          sdist_smoke="$RUNNER_TEMP/ay-sdist-${{ matrix.python-version }}"
+          python -m venv "$sdist_smoke"
+          "$sdist_smoke/bin/python" -m pip install --upgrade pip
+          "$sdist_smoke/bin/python" -m pip install python/target/sdist/*.tar.gz
+          "$sdist_smoke/bin/python" -c "import against_yesterday as ay; print(ay.__version__)"
+
+      - name: Smoke import the wheel in a clean virtualenv
+        working-directory: python
+        run: |
+          set -euo pipefail
+          smoke="$RUNNER_TEMP/ay-smoke-${{ matrix.python-version }}"
+          python -m venv "$smoke"
+          "$smoke/bin/python" -m pip install --upgrade pip
+          "$smoke/bin/python" -m pip install dist/*.whl
+          "$smoke/bin/python" -c "import against_yesterday as ay; print(ay.__version__)"

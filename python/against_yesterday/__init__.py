@@ -1,26 +1,27 @@
 # Copyright (C) 2026 David Neurieder
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Python bindings for the Against Yesterday GPS engine."""
+"""Python bindings for the Against Yesterday GPS engine.
+
+The compiled extension lives in :mod:`against_yesterday._native`; this module
+is the curated, typed public surface.  Domain exceptions are defined in
+:mod:`against_yesterday.errors` and re-exported here for convenience.
+"""
 
 from ._native import (
     AnalyticsQuality,
     Attempt,
-    AttemptError,
     AttemptMovingConfig,
     AttemptSample,
     CanonicalizeConfig,
     ComparisonConfig,
     ComparisonPoint,
     DiscoveredRoute,
-    EngineError,
     FilterConfig,
-    GeoError,
     Ghost,
     GhostSnapshot,
     GhostState,
     GpsFix,
-    GpxError,
     LiveConfig,
     LiveGhost,
     LiveGhostSnapshot,
@@ -36,30 +37,48 @@ from ._native import (
     ReplaySnapshot,
     Route,
     RouteCatalog,
-    RouteError,
     RoutePoint,
     SimplifyConfig,
     Track,
     TrackAddition,
     TrackAnalytics,
-    TrackError,
     TrackPoint,
-    __version__ as _native_version,
     canonicalize_route,
     compare_performances,
     compare_tracks,
     compare_tracks_either_direction,
     parse_gpx,
 )
+from ._native import (
+    __version__ as _native_version,
+)
+from .enums import AttemptAxis, LiveMatchStatus, ReplayState
+from .errors import (
+    AgainstYesterdayError,
+    AttemptError,
+    CanonicalizationError,
+    EngineError,
+    GeoError,
+    GpxError,
+    GpxWriteError,
+    InvalidInputError,
+    ParseError,
+    ProcessingError,
+    RouteError,
+    TrackError,
+)
 
 __version__ = _native_version
 
 __all__ = [
+    "AgainstYesterdayError",
     "AnalyticsQuality",
     "Attempt",
+    "AttemptAxis",
     "AttemptError",
     "AttemptMovingConfig",
     "AttemptSample",
+    "CanonicalizationError",
     "CanonicalizeConfig",
     "ComparisonConfig",
     "ComparisonPoint",
@@ -72,19 +91,25 @@ __all__ = [
     "GhostState",
     "GpsFix",
     "GpxError",
+    "GpxWriteError",
+    "InvalidInputError",
     "LiveConfig",
     "LiveGhost",
     "LiveGhostSnapshot",
+    "LiveMatchStatus",
     "LiveRecorder",
     "LiveSnapshot",
     "MatchConfig",
     "MatchScore",
     "MovingConfig",
+    "ParseError",
     "PerformanceComparison",
+    "ProcessingError",
     "ProcessingReport",
     "Projection",
     "ReplaySession",
     "ReplaySnapshot",
+    "ReplayState",
     "Route",
     "RouteCatalog",
     "RouteError",

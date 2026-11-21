@@ -22,3 +22,20 @@ classifiers = [
 python-source = "."
 module-name = "against_yesterday._native"
 features = ["pyo3/extension-module"]
+
+[tool.mypy]
+# The runtime floor is Python 3.9; current mypy releases no longer accept 3.9
+# as an analysis target, so type-check against the next lowest supported level.
+python_version = "3.10"
+files = ["against_yesterday", "examples", "tests"]
+strict = false
+ignore_missing_imports = true
+warn_unused_configs = true
+show_error_codes = true
+
+[tool.ruff]
+line-length = 100
+exclude = [".venv", "target", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
