@@ -586,6 +586,10 @@ pub struct RouteMatcher {
     confident_count: u32,
     reacq_progress: Option<f64>,
     reacq_count: u32,
+    /// Plausible recent progress used while `Uncertain`. It is a scoring anchor
+    /// only: coverage reported to callers stays at `reliable_covered` until the
+    /// match is trusted again.
+    recovery_progress: f64,
     init_count: u32,
 }
 
@@ -610,6 +614,7 @@ impl RouteMatcher {
             confident_count: 0,
             reacq_progress: None,
             reacq_count: 0,
+            recovery_progress: 0.0,
             init_count: 0,
         }
     }
@@ -637,6 +642,7 @@ impl RouteMatcher {
         self.confident_count = 0;
         self.reacq_progress = None;
         self.reacq_count = 0;
+        self.recovery_progress = self.reliable_covered;
         self.init_count = 0;
     }
 
@@ -653,6 +659,7 @@ impl RouteMatcher {
         self.confident_count = 0;
         self.reacq_progress = None;
         self.reacq_count = 0;
+        self.recovery_progress = self.reliable_covered;
         self.init_count = 0;
     }
 
@@ -660,6 +667,7 @@ impl RouteMatcher {
     /// time anchor (route-end completion when geometry is ambiguous at the seam).
     pub fn snap_to(&mut self, covered: Distance) {
         self.reliable_covered = self.reliable_covered.max(covered.meters());
+        self.recovery_progress = self.recovery_progress.max(self.reliable_covered);
     }
 
     /// Matches one observation (coordinate + time only).
@@ -691,22 +699,32 @@ impl RouteMatcher {
         self.last_timestamp = Some(obs.timestamp);
 
         // Candidate generation: continuity window around reliable progress.
+        // While uncertain, the search follows a provisional anchor so a short
+        // confidence dip cannot leave the window hundreds of metres behind the
+        // runner. The anchor never lowers or reports coverage; it only lets
+        // plausible in-window evidence be scored again.
+        let search_anchor = if self.status == MatchStatus::Uncertain {
+            self.recovery_progress.max(self.reliable_covered)
+        } else {
+            self.reliable_covered
+        };
         // When off-route/reacquiring, also consider global candidates to find
         // a plausible re-entry (accepted only after a stable sequence).
         let (forward, backward) = self.adaptive_window(dt, obs.accuracy);
         let (lo, hi) = route
             .window_bounds(
-                Distance::from_meters(self.reliable_covered),
+                Distance::from_meters(search_anchor),
                 Distance::from_meters(backward),
                 Distance::from_meters(forward),
             )
-            .unwrap_or((self.reliable_covered, self.reliable_covered));
+            .unwrap_or((search_anchor, search_anchor));
         let mut candidates = route.projections_in_window(obs.coordinate, lo, hi);
 
         let global_reacq = matches!(
             self.status,
             MatchStatus::OffRoute | MatchStatus::Reacquiring
         );
+        let uncertain = self.status == MatchStatus::Uncertain;
         if global_reacq {
             let global = route.project(obs.coordinate);
             let dominated = candidates
@@ -717,7 +735,8 @@ impl RouteMatcher {
             }
         }
 
-        let (best, confidence) = self.score_candidates(route, obs, dt, &candidates, global_reacq);
+        let (best, confidence) =
+            self.score_candidates(route, obs, dt, &candidates, global_reacq, uncertain);
 
         let (raw, lateral, reanchored) = match best {
             Some((raw, lateral)) => (raw, lateral, candidates.is_empty()),
@@ -743,8 +762,10 @@ impl RouteMatcher {
 
         let reported_distance = if accepted {
             self.reliable_covered = self.reliable_covered.max(raw);
+            self.recovery_progress = self.reliable_covered;
             self.reliable_covered
         } else {
+            self.recovery_progress = self.recovery_progress.max(self.reliable_covered);
             self.reliable_covered
         };
 
@@ -799,6 +820,16 @@ impl RouteMatcher {
             self.confident_count = 0;
         }
 
+        // A degraded match may still have locally plausible, on-route observations.
+        // Follow them only as a scoring anchor; accepted coverage remains frozen.
+        if self.status == MatchStatus::Uncertain
+            && on_route
+            && confidence >= UNCERTAIN_ENTER_CONFIDENCE
+            && raw >= self.reliable_covered
+        {
+            self.recovery_progress = self.recovery_progress.max(raw);
+        }
+
         match self.status {
             MatchStatus::Initializing => {
                 self.init_count += 1;
@@ -820,9 +851,11 @@ impl RouteMatcher {
                 if (far_off_route || !on_route) && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
                     self.reacq_progress = None;
                     self.reacq_count = 0;
+                    self.recovery_progress = self.reliable_covered;
                     return (MatchStatus::OffRoute, false);
                 }
                 if !on_route || (poor_conf && self.uncertain_count >= 2) {
+                    self.recovery_progress = self.reliable_covered;
                     return (MatchStatus::Uncertain, false);
                 }
                 (MatchStatus::Matched, true)
@@ -831,6 +864,7 @@ impl RouteMatcher {
                 if far_off_route && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
                     self.reacq_progress = None;
                     self.reacq_count = 0;
+                    self.recovery_progress = self.reliable_covered;
                     return (MatchStatus::OffRoute, false);
                 }
                 if on_route && good_conf && self.confident_count >= 2 {
@@ -839,6 +873,7 @@ impl RouteMatcher {
                 if !on_route && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
                     self.reacq_progress = None;
                     self.reacq_count = 0;
+                    self.recovery_progress = self.reliable_covered;
                     return (MatchStatus::OffRoute, false);
                 }
                 (MatchStatus::Uncertain, false)
@@ -855,6 +890,7 @@ impl RouteMatcher {
                 if far_off_route && self.off_route_count >= OFF_ROUTE_ENTER_COUNT {
                     self.reacq_progress = None;
                     self.reacq_count = 0;
+                    self.recovery_progress = self.reliable_covered;
                     return (MatchStatus::OffRoute, false);
                 }
                 if on_route && confidence >= 0.2 {
@@ -931,6 +967,7 @@ impl RouteMatcher {
         dt: f64,
         candidates: &[Projection],
         global_reacq: bool,
+        uncertain: bool,
     ) -> (Option<(f64, f64)>, MatchConfidence) {
         if candidates.is_empty() {
             return (None, MatchConfidence::NONE);
@@ -950,12 +987,15 @@ impl RouteMatcher {
         let runner_bearing = if moving { obs.bearing } else { None };
 
         // Progress plausibility is judged against the trusted coverage while
-        // tracking normally, but against the *re-entry* anchor while
-        // reacquiring. Anchoring a re-entry to the frozen `reliable_covered`
-        // makes a legitimate rejoin hundreds of metres ahead look impossible,
-        // so its confidence decays to zero and recovery never completes.
+        // tracking normally, but against the *recovery* anchor while uncertain
+        // or reacquiring. Anchoring either recovery mode to the frozen
+        // `reliable_covered` makes legitimate progress hundreds of metres ahead
+        // look impossible, so confidence decays to zero and recovery never
+        // completes.
         let progress_anchor = if global_reacq {
             self.reacq_progress
+        } else if uncertain {
+            Some(self.recovery_progress.max(self.reliable_covered))
         } else {
             Some(self.reliable_covered)
         };
@@ -996,7 +1036,8 @@ impl RouteMatcher {
             }
 
             if dt.is_finite() && dt > 0.0 && !global_reacq {
-                let implied = (raw - self.reliable_covered) / dt;
+                let anchor = progress_anchor.unwrap_or(self.reliable_covered);
+                let implied = (raw - anchor) / dt;
                 let max_v = self.config.max_speed.mps();
                 let ev = if implied > max_v * 1.2 {
                     implied - max_v

@@ -289,13 +289,32 @@ class LiveGhostSnapshot {
     required this.ahead,
     required this.spatialGapMeters,
     required this.confidence,
+    this.matchStatus = LiveMatchStatusCode.none,
+    this.matchConfidence = 0.0,
+    this.positionConfidence,
+    this.reliable = true,
   });
 
   final double distanceMeters;
   final double timeDifferenceSeconds;
   final bool ahead;
   final double spatialGapMeters;
+
+  /// Confidence from reference-sample spacing alone (the original v1 signal).
   final double confidence;
+
+  /// Live route-match status at the comparison point (`none` for free runs).
+  final int matchStatus;
+
+  /// Confidence in the live route match, `0.0..=1.0`.
+  final double matchConfidence;
+
+  /// Confidence in the live position estimate, when the engine supplied one.
+  final double? positionConfidence;
+
+  /// Whether all available evidence is strong enough to show AHEAD/BEHIND.
+  /// Defaults to `true` so pre-evidence callers keep the v1 display behavior.
+  final bool reliable;
 
   /// Where the ghost is along the route at the runner's current moving time.
   double get ghostDistanceMeters => distanceMeters + spatialGapMeters;
@@ -568,6 +587,7 @@ class LiveRunState {
     this.currentPosition,
     required this.pace,
     this.ghostGap,
+    this.ghostReliable = true,
     required this.routeProgress,
     this.gpsQuality = 'good',
     this.offRoute,
@@ -598,6 +618,11 @@ class LiveRunState {
 
   /// How the live run compares to the ghost at the current distance.
   final GhostState? ghostGap;
+
+  /// Whether the ghost comparison has enough independent evidence to show an
+  /// AHEAD/BEHIND change. Defaults to `true` for callers without engine
+  /// confidence signals.
+  final bool ghostReliable;
 
   /// Fraction of the route completed, 0..1.
   final double routeProgress;

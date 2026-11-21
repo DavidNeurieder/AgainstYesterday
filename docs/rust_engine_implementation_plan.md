@@ -428,6 +428,56 @@ Acceptance:
 prediction, or HMM/Viterbi topology until confidence and gap error are measured
 as still insufficient.
 
+### 2.3 Fix the stale confidence anchor (done)
+
+The first Phase 2 measurement found a deadlock rather than an ambiguous match:
+after a short confidence dip, the matcher kept judging later on-route fixes
+against the frozen `reliable_covered`. Once raw progress was more than a few
+seconds ahead, every candidate looked implausible, confidence stayed at zero,
+and `Uncertain` could never accumulate the two confident steps needed to exit.
+Route geometry then drifted far enough from the stale anchor to trigger
+`OffRoute`, after which global reacquisition jumped the runner hundreds of
+metres forward. Ghost comparisons inherited the frozen segment; the
+`urban_canyon` adaptive-axis gap error was 205 s with 364 m projection error.
+
+`RouteMatcher` now keeps a `recovery_progress` anchor while `Uncertain`. It is
+used only for candidate windows and scoring priors; accepted/reported coverage
+still comes from monotone `reliable_covered`. The anchor follows locally
+plausible, on-route evidence and resets on off-route transitions, so it cannot
+reproduce a detour or jump. Two consecutive confident fixes restore `Matched`
+and let coverage catch up once.
+
+Measured effect (pinned baseline v1 regenerated after review):
+
+| scenario | adaptive ghost gap error | adaptive projection error |
+| --- | ---: | ---: |
+| `urban_canyon` | 205.179 s → 1.719 s | 363.604 m → 5.183 m |
+| `jitter_12m` | 2.416 s → 2.416 s | 5.159 m → 5.135 m |
+| all other adaptive axes | unchanged or improved | unchanged or improved |
+
+The legacy columns also improve where the same deadlock appeared
+(`urban_canyon` 208.213 s → 52.552 s, `jitter_12m` 155.836 s → 3.959 s), but
+the promoted adaptive axis remains the gate. `tests/quality_benchmark.rs` now
+pins the Phase 2 threshold independently of the exact baseline JSON.
+
+### 2.4 Surface independent ghost-confidence evidence (done)
+
+The stale-anchor fix removes the large gap error, but a small gap can still be
+misleading when the reference spacing, live match, or position estimate is
+weak. `LiveGhostSnapshot` now carries the existing spacing confidence alongside
+`match_status`, `match_confidence`, and `position_confidence`, and exposes a
+single `reliable()` predicate requiring every present signal to clear `0.35`.
+A free run has no match evidence, so `None` is neutral; `Uncertain`,
+`OffRoute`, and `Reacquiring` veto an AHEAD/BEHIND change. The hero readout
+renders `—` while the comparison is unreliable, preserving the sign convention
+and the stationary time-gap behavior underneath.
+
+Both live and replay C ABI responses append the new fields after the unchanged
+v1 prefix (match status, match confidence, optional position confidence with a
+presence byte, reliable flag). Dart readers treat a truncated suffix as "no
+evidence" and keep the v1 display behavior; `FakeEngineService` mirrors the new
+fields. `gps_capi_version` is unchanged because no existing field moved.
+
 ## 6. Phase 3 — distance, pace, and elevation
 
 Goal: make the three distance meanings first-class and remove misleading pace

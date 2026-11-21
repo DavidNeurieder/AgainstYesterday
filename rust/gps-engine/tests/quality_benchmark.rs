@@ -45,6 +45,30 @@ fn committed_baseline_matches_generated_report() {
 }
 
 #[test]
+fn phase_two_ghost_gate() {
+    let report = QualityReport::from_scenarios(&benchmark_scenarios());
+    let urban = report
+        .scenarios
+        .iter()
+        .find(|s| s.name == "urban_canyon")
+        .expect("urban scenario");
+    // The frozen-anchor failure produced >200 s of ghost-gap error and >360 m
+    // of projection error on the adaptive axis. Recovery must keep both near
+    // the clean-scenario noise floor.
+    assert!(urban.metrics.shadow.ghost_gap_mae_s < 5.0);
+    assert!(urban.metrics.shadow.projection_mae_m < 20.0);
+    assert!(urban.metrics.ghost_gap_mae_s < 100.0);
+    for scenario in &report.scenarios {
+        assert!(
+            scenario.metrics.shadow.ghost_gap_mae_s < 5.0,
+            "{}: shadow gap {}",
+            scenario.name,
+            scenario.metrics.shadow.ghost_gap_mae_s
+        );
+    }
+}
+
+#[test]
 fn baseline_exposes_all_documented_metrics() {
     let report = QualityReport::from_scenarios(&benchmark_scenarios());
     assert_eq!(report.scenarios.len(), 10);

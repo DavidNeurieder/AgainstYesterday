@@ -969,6 +969,7 @@ class RecordingController extends Notifier<LiveRunState?> {
       pace: pace,
       error: status == RunStatus.error ? (error ?? state?.error) : null,
       ghostGap: ghost?.toGhostState(),
+      ghostReliable: ghost?.reliable ?? true,
       routeProgress: _routeProgressFor(session, snap),
       gpsQuality: status == RunStatus.gpsAcquiring
           ? 'reduced'

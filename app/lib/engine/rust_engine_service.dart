@@ -553,6 +553,12 @@ class _RustLiveRun implements LiveRunHandle {
     final gConf = r.f64();
     final matchStatus = r.u8();
     final matchConfidence = r.f64();
+    final ghostMatchStatus = r.hasMore ? r.u8() : LiveMatchStatusCode.none;
+    final ghostMatchConfidence = r.hasMore ? r.f64() : 0.0;
+    final hasGhostPositionConfidence = r.hasMore && r.u8() == 1;
+    final ghostPositionConfidence =
+        hasGhostPositionConfidence && r.hasMore ? r.f64() : null;
+    final ghostReliable = r.hasMore ? r.u8() == 1 : true;
     return LiveEngineSnapshot(
       distanceMeters: distanceMeters,
       movingSeconds: movingSeconds,
@@ -568,6 +574,10 @@ class _RustLiveRun implements LiveRunHandle {
               ahead: gAhead,
               spatialGapMeters: gSpatial,
               confidence: gConf,
+              matchStatus: ghostMatchStatus,
+              matchConfidence: ghostMatchConfidence,
+              positionConfidence: ghostPositionConfidence,
+              reliable: ghostReliable,
             )
           : null,
       matchStatus: matchStatus,
@@ -655,6 +665,12 @@ class _RustReplayRun implements ReplayHandle {
     final gConf = r.f64();
     final matchStatus = r.u8();
     final matchConfidence = r.f64();
+    final ghostMatchStatus = r.hasMore ? r.u8() : matchStatus;
+    final ghostMatchConfidence = r.hasMore ? r.f64() : matchConfidence;
+    final hasGhostPositionConfidence = r.hasMore && r.u8() == 1;
+    final ghostPositionConfidence =
+        hasGhostPositionConfidence && r.hasMore ? r.f64() : null;
+    final ghostReliable = r.hasMore ? r.u8() == 1 : true;
     final state = switch (stateCode) {
       0 => ReplayState.playing,
       2 => ReplayState.finished,
@@ -682,6 +698,10 @@ class _RustReplayRun implements ReplayHandle {
               ahead: gAhead,
               spatialGapMeters: gSpatial,
               confidence: gConf,
+              matchStatus: ghostMatchStatus,
+              matchConfidence: ghostMatchConfidence,
+              positionConfidence: ghostPositionConfidence,
+              reliable: ghostReliable,
             )
           : null,
       matchStatus: matchStatus,
@@ -836,6 +856,10 @@ class _R {
 
   final Uint8List data;
   int _pos = 0;
+
+  /// Whether appended v2+ evidence is available. The v1 prefix is unchanged,
+  /// so an older native library simply leaves these fields absent.
+  bool get hasMore => _pos < data.length;
 
   void _ensure(int n) {
     if (_pos + n > data.length) {

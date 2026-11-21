@@ -1191,24 +1191,6 @@ class _FakeLiveRun implements LiveRunHandle {
         ? (_routeCoverage / _routeLength).clamp(0.0, 1.0)
         : 0.0;
 
-    LiveGhostSnapshot? ghost;
-    final samples = _ghostSamples;
-    if (samples != null && samples.isNotEmpty) {
-      final active = _activeElapsed;
-      final refTime = _referenceTimeAt(samples, dist);
-      final diff = active - refTime;
-      final ghostDist = _distanceAt(samples, active);
-      final spacing = _sampleSpacing(samples, dist);
-      final conf = (1.0 - (spacing - 10.0) / 50.0).clamp(0.0, 1.0);
-      ghost = LiveGhostSnapshot(
-        distanceMeters: dist,
-        timeDifferenceSeconds: diff,
-        ahead: diff < 0,
-        spatialGapMeters: ghostDist - dist,
-        confidence: conf,
-      );
-    }
-
     var matchStatus = LiveMatchStatusCode.none;
     var matchConfidence = 0.0;
     if (_route != null) {
@@ -1222,6 +1204,31 @@ class _FakeLiveRun implements LiveRunHandle {
         matchStatus = LiveMatchStatusCode.matched;
         matchConfidence = 1.0;
       }
+    }
+
+    LiveGhostSnapshot? ghost;
+    final samples = _ghostSamples;
+    if (samples != null && samples.isNotEmpty) {
+      final active = _activeElapsed;
+      final refTime = _referenceTimeAt(samples, dist);
+      final diff = active - refTime;
+      final ghostDist = _distanceAt(samples, active);
+      final spacing = _sampleSpacing(samples, dist);
+      final conf = (1.0 - (spacing - 10.0) / 50.0).clamp(0.0, 1.0);
+      final matchOk = matchStatus == LiveMatchStatusCode.none ||
+          matchStatus == LiveMatchStatusCode.matched;
+      ghost = LiveGhostSnapshot(
+        distanceMeters: dist,
+        timeDifferenceSeconds: diff,
+        ahead: diff < 0,
+        spatialGapMeters: ghostDist - dist,
+        confidence: conf,
+        matchStatus: matchStatus,
+        matchConfidence: matchConfidence,
+        reliable: conf >= 0.35 &&
+            matchOk &&
+            (matchStatus == LiveMatchStatusCode.none || matchConfidence >= 0.35),
+      );
     }
 
     return LiveEngineSnapshot(
@@ -1473,6 +1480,12 @@ class _FakeReplayRun implements ReplayHandle {
       }
     }
     final onRoute = route != null && route.length >= 2;
+    final matchStatus = onRoute
+        ? (offRoute != null
+            ? LiveMatchStatusCode.offRoute
+            : LiveMatchStatusCode.matched)
+        : LiveMatchStatusCode.none;
+    final matchConfidence = onRoute ? 1.0 : 0.0;
     LiveGhostSnapshot? ghost;
     final samples = _ghostSamples;
     if (samples != null && samples.isNotEmpty && (onRoute || dist > 0)) {
@@ -1488,6 +1501,12 @@ class _FakeReplayRun implements ReplayHandle {
         ahead: timeDiff < 0,
         spatialGapMeters: ghostDist - refDistance,
         confidence: conf,
+        matchStatus: matchStatus,
+        matchConfidence: matchConfidence,
+        reliable: conf >= 0.35 &&
+            (matchStatus == LiveMatchStatusCode.none ||
+                matchStatus == LiveMatchStatusCode.matched) &&
+            (matchStatus == LiveMatchStatusCode.none || matchConfidence >= 0.35),
       );
     }
     return ReplaySnapshot(
@@ -1505,12 +1524,8 @@ class _FakeReplayRun implements ReplayHandle {
       routeProgress: routeProgress,
       offRouteMeters: offRoute,
       ghost: ghost,
-      matchStatus: onRoute
-          ? (offRoute != null
-              ? LiveMatchStatusCode.offRoute
-              : LiveMatchStatusCode.matched)
-          : LiveMatchStatusCode.none,
-      matchConfidence: onRoute ? 1.0 : 0.0,
+      matchStatus: matchStatus,
+      matchConfidence: matchConfidence,
     );
   }
 

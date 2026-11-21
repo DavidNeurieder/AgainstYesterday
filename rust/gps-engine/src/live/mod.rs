@@ -20,7 +20,9 @@
 //! bridge, and [`LiveRecorder::resume`] re-anchors on the next fix so the
 //! pause window never becomes distance or moving time.
 
-use crate::estimate::{DistanceBreakdown, MotionState, PositionEstimate, VelocityEstimate};
+use crate::estimate::{
+    Confidence, DistanceBreakdown, MotionState, PositionEstimate, VelocityEstimate,
+};
 use crate::filtering::{AdaptiveCursor, EstimatorConfig};
 use crate::geo::{Coordinate, distance};
 use crate::ghost::{GhostState, confidence_for_spacing};
@@ -60,8 +62,14 @@ impl LiveConfig {
 /// full length.
 const FINISH_SNAP_M: f64 = 30.0;
 
-/// A ghost comparison bundled with the gap's confidence (the live analogue of
-/// [`crate::ghost::GhostSnapshot`], produced without a current [`Attempt`]).
+/// Minimum independent confidence required before a ghost gap is shown as
+/// AHEAD/BEHIND. Kept intentionally equal to the matcher's "not poor" floor so
+/// a degraded match cannot make a noisy gap look decisive.
+pub const MIN_TRUSTED_GHOST_CONFIDENCE: f64 = 0.35;
+
+/// A ghost comparison bundled with its confidence evidence (the live analogue
+/// of [`crate::ghost::GhostSnapshot`], produced without a current
+/// [`crate::attempt::Attempt`]).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LiveGhostSnapshot {
     /// The duel state at the comparison point.
@@ -69,9 +77,49 @@ pub struct LiveGhostSnapshot {
     /// Spatial separation at the same moving time:
     /// `ghost.distance_at(moving) - current_distance`. Positive = behind.
     pub spatial_gap: Distance,
-    /// Trust in the comparison, derived from the ghost's sample spacing near
-    /// the current distance (`1.0` dense, `0.0` sparse).
+    /// Trust in the reference spacing near the current distance
+    /// (`1.0` dense, `0.0` sparse). Retained under its original name for the v1
+    /// FFI field; it is now only one of several independent signals.
     pub confidence: f64,
+    /// Live route-match state at the comparison point. `None` for a free run.
+    pub match_status: LiveMatchStatus,
+    /// Confidence in the live route match, when a route is active.
+    pub match_confidence: Option<Confidence>,
+    /// Confidence in the live position estimate, when an estimator supplied one.
+    pub position_confidence: Option<Confidence>,
+}
+
+impl LiveGhostSnapshot {
+    /// Whether the comparison has enough independent evidence to drive an
+    /// AHEAD/BEHIND display change.
+    ///
+    /// All present signals must clear [`MIN_TRUSTED_GHOST_CONFIDENCE`]. A free
+    /// run has no match evidence, so `None` match status/confidence is neutral
+    /// rather than disqualifying.
+    pub fn reliable(&self) -> bool {
+        if self.confidence < MIN_TRUSTED_GHOST_CONFIDENCE {
+            return false;
+        }
+        if !matches!(
+            self.match_status,
+            LiveMatchStatus::None | LiveMatchStatus::Matched
+        ) {
+            return false;
+        }
+        if self
+            .match_confidence
+            .is_some_and(|c| c.value() < MIN_TRUSTED_GHOST_CONFIDENCE)
+        {
+            return false;
+        }
+        if self
+            .position_confidence
+            .is_some_and(|c| c.value() < MIN_TRUSTED_GHOST_CONFIDENCE)
+        {
+            return false;
+        }
+        true
+    }
 }
 
 /// Route-matching state surfaced to the UI (additive).
@@ -241,7 +289,7 @@ impl LiveGhost {
 
     /// Ghost time at `distance` (first time reaching it), or its finish time
     /// once the runner is past the ghost's coverage — the same rule
-    /// [`live_ghost_gap`] uses.
+    /// [`crate::ghost::live_ghost_gap`] uses.
     pub fn time_at(&self, distance: Distance) -> Duration {
         let d = distance.meters();
         if self.samples.is_empty() || d <= 0.0 || !d.is_finite() {
@@ -279,6 +327,11 @@ impl LiveGhost {
             state,
             spatial_gap: Distance::from_meters(ghost_distance.meters() - current_distance.meters()),
             confidence: confidence_for_spacing(spacing),
+            // A bare `LiveGhost` has no live match/position context; the
+            // recorder attaches those signals when it publishes a snapshot.
+            match_status: LiveMatchStatus::None,
+            match_confidence: None,
+            position_confidence: None,
         }
     }
 
@@ -608,6 +661,17 @@ impl LiveRecorder {
             .unwrap_or(Distance::ZERO)
     }
 
+    fn match_status(&self) -> LiveMatchStatus {
+        match self.matcher.as_ref().map(|m| m.status()) {
+            None => LiveMatchStatus::None,
+            Some(MatchStatus::Initializing) => LiveMatchStatus::Initializing,
+            Some(MatchStatus::Matched) => LiveMatchStatus::Matched,
+            Some(MatchStatus::Uncertain) => LiveMatchStatus::Uncertain,
+            Some(MatchStatus::OffRoute) => LiveMatchStatus::OffRoute,
+            Some(MatchStatus::Reacquiring) => LiveMatchStatus::Reacquiring,
+        }
+    }
+
     /// A point-in-time snapshot of the run.
     pub fn snapshot(&self) -> LiveSnapshot {
         let route_progress = self
@@ -630,14 +694,7 @@ impl LiveRecorder {
             None
         };
 
-        let match_status = match self.matcher.as_ref().map(|m| m.status()) {
-            None => LiveMatchStatus::None,
-            Some(MatchStatus::Initializing) => LiveMatchStatus::Initializing,
-            Some(MatchStatus::Matched) => LiveMatchStatus::Matched,
-            Some(MatchStatus::Uncertain) => LiveMatchStatus::Uncertain,
-            Some(MatchStatus::OffRoute) => LiveMatchStatus::OffRoute,
-            Some(MatchStatus::Reacquiring) => LiveMatchStatus::Reacquiring,
-        };
+        let match_status = self.match_status();
 
         let (position_estimate, velocity_estimate, motion_state) = self
             .cursor
@@ -673,10 +730,20 @@ impl LiveRecorder {
     }
 
     /// The ghost comparison at the runner's current progress, if a ghost is
-    /// set.
+    /// set. Confidence evidence is attached without changing the gap itself.
     pub fn ghost_snapshot(&self) -> Option<LiveGhostSnapshot> {
         let ghost = self.ghost.as_ref()?;
-        Some(ghost.snapshot(self.distance(), self.elapsed_for_gap()))
+        let mut snapshot = ghost.snapshot(self.distance(), self.elapsed_for_gap());
+        snapshot.match_status = self.match_status();
+        snapshot.match_confidence = self
+            .route
+            .as_ref()
+            .map(|_| Confidence::new(self.last_match_confidence));
+        snapshot.position_confidence = self
+            .cursor
+            .last_fix()
+            .map(|row| row.position_estimate.confidence());
+        Some(snapshot)
     }
 
     /// Active elapsed time used for ghost comparisons. It advances with fix
@@ -925,6 +992,44 @@ mod tests {
         // snapshot is well-formed.
         assert!(snap.confidence > 0.0 && snap.confidence <= 1.0);
         let _ = snap.state;
+    }
+
+    #[test]
+    fn ghost_reliability_requires_every_present_signal() {
+        let snapshot = |spacing: f64,
+                        status: LiveMatchStatus,
+                        match_conf: Option<f64>,
+                        position_conf: Option<f64>| LiveGhostSnapshot {
+            state: GhostState {
+                distance: Distance::ZERO,
+                time_difference: Duration::ZERO,
+                ahead: false,
+            },
+            spatial_gap: Distance::ZERO,
+            confidence: spacing,
+            match_status: status,
+            match_confidence: match_conf.map(Confidence::new),
+            position_confidence: position_conf.map(Confidence::new),
+        };
+
+        assert!(snapshot(1.0, LiveMatchStatus::None, None, None).reliable());
+        assert!(snapshot(1.0, LiveMatchStatus::Matched, Some(0.9), Some(0.9)).reliable());
+        assert!(
+            !snapshot(0.2, LiveMatchStatus::Matched, Some(0.9), Some(0.9)).reliable(),
+            "sparse reference must veto"
+        );
+        assert!(
+            !snapshot(1.0, LiveMatchStatus::Uncertain, Some(0.9), Some(0.9)).reliable(),
+            "uncertain match must veto"
+        );
+        assert!(
+            !snapshot(1.0, LiveMatchStatus::Matched, Some(0.2), Some(0.9)).reliable(),
+            "poor match confidence must veto"
+        );
+        assert!(
+            !snapshot(1.0, LiveMatchStatus::Matched, Some(0.9), Some(0.2)).reliable(),
+            "poor position confidence must veto"
+        );
     }
 
     #[test]

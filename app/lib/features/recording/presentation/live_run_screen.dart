@@ -93,6 +93,7 @@ class LiveRunScreen extends ConsumerWidget {
                 distance: state.distance,
                 units: units,
                 ghostGap: state.ghostGap,
+                gapReliable: state.ghostReliable,
                 routeProgress: state.routeProgress,
               ),
               const SizedBox(height: AppSpacing.md),

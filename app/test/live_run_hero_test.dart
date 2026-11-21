@@ -23,6 +23,7 @@ import 'package:against_yesterday/features/recording/presentation/live_run_scree
 LiveRunState racing({
   double gapSeconds = 12,
   bool ahead = false,
+  bool gapReliable = true,
   double meters = 800,
 }) => LiveRunState(
   status: RunStatus.running,
@@ -30,6 +31,7 @@ LiveRunState racing({
   distance: Distance.meters(meters),
   pace: const Speed.metersPerSecond(3.2),
   routeProgress: 0.16,
+  ghostReliable: gapReliable,
   ghostGap: GhostState(
     distance: Distance.meters(meters),
     timeDifference: Elapsed.seconds(gapSeconds),
@@ -69,6 +71,15 @@ void main() {
     // ahead/behind digits.
     expect(distance.style!.color, AppColors.textSecondary);
     expect(gapDigits(tester).style!.color, isNot(AppColors.textSecondary));
+  });
+
+  testWidgets('a degraded match mutes the gap instead of flipping the label', (tester) async {
+    await _pump(tester, racing(gapReliable: false));
+
+    expect(find.byKey(const ValueKey('live-gap')), findsOneWidget);
+    expect(find.text('+0:12'), findsNothing);
+    expect(find.text('—'), findsOneWidget);
+    expect(find.textContaining('— · at 800'), findsOneWidget);
   });
 
   testWidgets('without a ghost, distance stays the hero', (tester) async {

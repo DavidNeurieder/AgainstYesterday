@@ -856,6 +856,29 @@ fn live_snapshot(bytes: &[u8]) -> Result<Vec<u8>, String> {
     }
     w.u8(snap.match_status as u8);
     w.f64(snap.match_confidence);
+    // Append-only ghost evidence. The v1 prefix above is byte-stable; older
+    // readers that ignore trailing bytes keep working unchanged.
+    if let Some(g) = ghost {
+        w.u8(g.match_status as u8);
+        w.f64(g.match_confidence.map(|c| c.value()).unwrap_or(0.0));
+        match g.position_confidence {
+            Some(confidence) => {
+                w.u8(1);
+                w.f64(confidence.value());
+            }
+            None => {
+                w.u8(0);
+                w.f64(0.0);
+            }
+        }
+        w.u8(g.reliable() as u8);
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+        w.u8(0);
+        w.f64(0.0);
+        w.u8(0);
+    }
     Ok(w.data)
 }
 
@@ -1197,6 +1220,39 @@ fn write_replay_snapshot(w: &mut Wr, snap: &crate::replay::ReplaySnapshot) {
     }
     w.u8(snap.match_status as u8);
     w.f64(snap.match_confidence);
+    // Append-only ghost evidence, mirroring the live snapshot suffix.
+    if let Some(g) = &snap.ghost {
+        w.u8(snap.match_status as u8);
+        w.f64(g.match_confidence.map(|c| c.value()).unwrap_or(0.0));
+        match g.position_confidence {
+            Some(confidence) => {
+                w.u8(1);
+                w.f64(confidence.value());
+            }
+            None => {
+                w.u8(0);
+                w.f64(0.0);
+            }
+        }
+        // Replay has no live matcher; its existing match status is the only
+        // match evidence available to the ghost.
+        let reliable = g.confidence >= crate::live::MIN_TRUSTED_GHOST_CONFIDENCE
+            && matches!(
+                snap.match_status,
+                crate::live::LiveMatchStatus::None | crate::live::LiveMatchStatus::Matched
+            )
+            && g.match_confidence
+                .is_none_or(|c| c.value() >= crate::live::MIN_TRUSTED_GHOST_CONFIDENCE)
+            && g.position_confidence
+                .is_none_or(|c| c.value() >= crate::live::MIN_TRUSTED_GHOST_CONFIDENCE);
+        w.u8(reliable as u8);
+    } else {
+        w.u8(0);
+        w.f64(0.0);
+        w.u8(0);
+        w.f64(0.0);
+        w.u8(0);
+    }
 }
 
 fn replay_play(bytes: &[u8]) -> Result<Vec<u8>, String> {
@@ -1580,6 +1636,62 @@ mod tests {
             process_track,
         );
         assert_eq!(status, ST_ERROR);
+    }
+
+    #[test]
+    fn live_snapshot_appends_ghost_evidence_after_the_v1_prefix() {
+        // Live handle: no route, ghost with two dense samples.
+        let mut input = Wr::default();
+        input.u8(0);
+        input.u8(1);
+        input.u32(2);
+        input.f64(0.0);
+        input.f64(0.0);
+        input.f64(100.0);
+        input.f64(50.0);
+        let handle_bytes = live_new(&input.data).expect("live_new succeeds");
+        let mut handle_rd = Rd::new(&handle_bytes);
+        let handle = handle_rd.u64().expect("handle");
+        handle_rd.done("live_new").expect("handle prefix only");
+
+        let mut request = Wr::default();
+        request.u64(handle);
+        let output = live_snapshot(&request.data).expect("live_snapshot succeeds");
+        // SAFETY: `handle` came from `live_new` and is consumed exactly once.
+        unsafe { gps_live_free(handle) };
+
+        let mut rd = Rd::new(&output);
+        for _ in 0..4 {
+            rd.f64().expect("distance/moving/pace/progress");
+        }
+        assert_eq!(rd.u8().expect("has off"), 0);
+        rd.f64().expect("off");
+        assert_eq!(rd.u8().expect("has accuracy"), 0);
+        rd.f64().expect("accuracy");
+        assert_eq!(rd.u8().expect("has position"), 0);
+        rd.f64().expect("latitude");
+        rd.f64().expect("longitude");
+        assert_eq!(rd.u8().expect("has ghost"), 1);
+        rd.f64().expect("ghost distance");
+        rd.f64().expect("ghost difference");
+        rd.u8().expect("ghost ahead");
+        rd.f64().expect("ghost spatial gap");
+        let spacing_confidence = rd.f64().expect("ghost spacing confidence");
+        assert_eq!(rd.u8().expect("match status"), 0);
+        assert_eq!(rd.f64().expect("match confidence"), 0.0);
+
+        // Append-only evidence: status, match confidence, optional position
+        // confidence (presence + value), reliable flag.
+        assert_eq!(
+            rd.u8().expect("ghost match status"),
+            crate::live::LiveMatchStatus::None as u8
+        );
+        assert_eq!(rd.f64().expect("ghost match confidence"), 0.0);
+        assert_eq!(rd.u8().expect("has ghost position confidence"), 0);
+        assert_eq!(rd.f64().expect("ghost position confidence"), 0.0);
+        assert_eq!(rd.u8().expect("ghost reliable"), 1);
+        rd.done("live_snapshot").expect("no trailing bytes");
+        assert!(spacing_confidence > 0.0 && spacing_confidence <= 1.0);
     }
 
     #[test]
