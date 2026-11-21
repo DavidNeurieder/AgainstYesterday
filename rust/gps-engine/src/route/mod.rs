@@ -25,6 +25,7 @@ pub use matching::{
 
 use crate::Track;
 use crate::error::RouteError;
+use crate::estimate::{MotionState, PositionEstimate, VelocityEstimate};
 use crate::geo::{
     self, Bearing, Coordinate, Projection, distance, interpolate, project_to_polyline,
     project_to_segment,
@@ -513,6 +514,47 @@ pub struct MatchStep {
     pub status: MatchStatus,
     /// Whether this step's progress was accepted as reliable coverage.
     pub accepted: bool,
+    /// Estimated position, when an estimator supplied one (additive).
+    pub position_estimate: Option<PositionEstimate>,
+    /// Estimated velocity, when an estimator supplied one (additive).
+    pub velocity_estimate: Option<VelocityEstimate>,
+    /// Motion classification, when an estimator supplied one (additive).
+    pub motion_state: Option<MotionState>,
+}
+
+impl MatchStep {
+    /// Attaches a position estimate without changing projection or status.
+    pub fn with_position_estimate(mut self, estimate: PositionEstimate) -> Self {
+        self.position_estimate = Some(estimate);
+        self
+    }
+
+    /// Attaches a velocity estimate without changing projection or status.
+    pub fn with_velocity_estimate(mut self, estimate: VelocityEstimate) -> Self {
+        self.velocity_estimate = Some(estimate);
+        self
+    }
+
+    /// Attaches a motion classification without changing projection or status.
+    pub fn with_motion_state(mut self, state: MotionState) -> Self {
+        self.motion_state = Some(state);
+        self
+    }
+
+    /// The attached position estimate, if any.
+    pub fn position_estimate(&self) -> Option<PositionEstimate> {
+        self.position_estimate
+    }
+
+    /// The attached velocity estimate, if any.
+    pub fn velocity_estimate(&self) -> Option<VelocityEstimate> {
+        self.velocity_estimate
+    }
+
+    /// The attached motion classification, if any.
+    pub fn motion_state(&self) -> Option<MotionState> {
+        self.motion_state
+    }
 }
 
 const OFF_ROUTE_ENTER_COUNT: u32 = 3;
@@ -723,6 +765,9 @@ impl RouteMatcher {
             confidence,
             status,
             accepted,
+            position_estimate: None,
+            velocity_estimate: None,
+            motion_state: None,
         }
     }
 

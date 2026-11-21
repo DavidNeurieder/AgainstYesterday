@@ -14,6 +14,7 @@
 //! ```
 
 use crate::attempt::{Attempt, AttemptSample};
+use crate::estimate::Confidence;
 use crate::units::{Distance, Duration};
 
 /// Reference-sample spacing (m) at or below which a ghost comparison is rated
@@ -67,6 +68,37 @@ pub struct GhostSnapshot {
     /// the reference is sampled at least every [`MIN_HIGH_CONFIDENCE_SPACING_M`];
     /// `0.0` when gaps reach [`LOW_CONFIDENCE_SPACING_M`], linearly in between.
     pub confidence: f64,
+    /// Confidence in the live position estimate, when one is available
+    /// (additive; the existing spacing confidence is unchanged).
+    pub position_confidence: Option<Confidence>,
+    /// Confidence in the live route match, when one is available (additive).
+    pub match_confidence: Option<Confidence>,
+}
+
+impl GhostSnapshot {
+    /// Attaches a position confidence without changing the gap or its spacing
+    /// confidence.
+    pub fn with_position_confidence(mut self, confidence: Confidence) -> Self {
+        self.position_confidence = Some(confidence);
+        self
+    }
+
+    /// Attaches a route-match confidence without changing the gap or its
+    /// spacing confidence.
+    pub fn with_match_confidence(mut self, confidence: Confidence) -> Self {
+        self.match_confidence = Some(confidence);
+        self
+    }
+
+    /// The attached position confidence, if any.
+    pub fn position_confidence(&self) -> Option<Confidence> {
+        self.position_confidence
+    }
+
+    /// The attached route-match confidence, if any.
+    pub fn match_confidence(&self) -> Option<Confidence> {
+        self.match_confidence
+    }
 }
 
 /// A ghost built from a reference (PB) attempt, competing against a live
@@ -136,6 +168,8 @@ impl Ghost {
                 reference_distance.meters() - state.distance.meters(),
             ),
             confidence: self.confidence_at(state.distance.meters()),
+            position_confidence: None,
+            match_confidence: None,
             state,
         })
     }
@@ -154,6 +188,8 @@ impl Ghost {
         Some(GhostSnapshot {
             spatial_gap: Distance::from_meters(reference_distance.meters() - distance.meters()),
             confidence: self.confidence_at(distance.meters()),
+            position_confidence: None,
+            match_confidence: None,
             state,
         })
     }
@@ -218,6 +254,8 @@ pub fn live_ghost_snapshot(
             &reference.samples,
             current_distance.meters(),
         )),
+        position_confidence: None,
+        match_confidence: None,
     }
 }
 

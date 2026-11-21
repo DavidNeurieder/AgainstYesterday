@@ -6,6 +6,10 @@
 //! All numerical analysis lives here so the Flutter client, route statistics,
 //! and ghost racing share one definition. Raw GPS data is never modified; this
 //! module only produces derived, annotated results.
+//!
+//! The top-level distance and pace fields keep their current meanings. The
+//! additive uncertainty contracts in [`crate::estimate`] are deliberately not
+//! serialized here yet, so existing JSON consumers see no new keys.
 
 use crate::geo::{Coordinate, distance};
 use crate::track::MovingConfig;

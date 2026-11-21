@@ -5,7 +5,7 @@
 
 use gps_engine::Track;
 use gps_engine::geo::{Coordinate, project_to_polyline};
-use gps_engine::synthetic::{self, SyntheticConfig, generate};
+use gps_engine::synthetic::{self, SyntheticConfig, generate, generate_with_truth};
 use gps_engine::units::{Distance, Timestamp};
 
 /// A ~200 m meridian route with a slight west/east wiggle in the middle so
@@ -191,6 +191,81 @@ fn reverse_preserves_duration() {
     for p in reversed.points() {
         assert!(p.timestamp() >= prev);
         prev = p.timestamp();
+    }
+}
+
+#[test]
+fn generate_with_truth_preserves_legacy_observed_track() {
+    let presets = [
+        SyntheticConfig::clean(1),
+        SyntheticConfig::noisy(2, 12.0),
+        SyntheticConfig::sparse(3),
+        SyntheticConfig::dense(4),
+        SyntheticConfig::gapped(5),
+        SyntheticConfig::stopped(6),
+        SyntheticConfig::outliers(7),
+        SyntheticConfig {
+            reverse: true,
+            ..SyntheticConfig::clean(8)
+        },
+    ];
+    for config in presets {
+        assert_eq!(
+            generate(&route(), &config),
+            generate_with_truth(&route(), &config).observed,
+            "truth must not perturb the observed track: {config:?}"
+        );
+    }
+}
+
+#[test]
+fn truth_is_monotone_and_covers_every_nominal_sample() {
+    let result = generate_with_truth(&route(), &SyntheticConfig::clean(11));
+    assert!(result.truth.len() >= result.observed.points().len());
+    let mut previous_distance = -1.0;
+    let mut previous_time = Timestamp::from_unix_ms(i64::MIN);
+    for sample in &result.truth {
+        assert!(sample.timestamp >= previous_time);
+        assert!(sample.route_distance >= previous_distance - 1e-9);
+        assert!(!sample.stationary || sample.speed.mps() == 0.0);
+        assert!(sample.route_distance.is_finite());
+        previous_time = sample.timestamp;
+        previous_distance = sample.route_distance;
+    }
+}
+
+#[test]
+fn truth_records_dropped_samples_and_stationary_periods() {
+    let gapped = generate_with_truth(&route(), &SyntheticConfig::gapped(21));
+    assert!(
+        gapped.truth.iter().any(|sample| sample.outage),
+        "gapped preset must expose its dropped samples as truth rows"
+    );
+    let observed_times: std::collections::HashSet<_> = gapped
+        .observed
+        .points()
+        .iter()
+        .map(|p| p.timestamp().unix_ms())
+        .collect();
+    assert!(
+        gapped
+            .truth
+            .iter()
+            .filter(|sample| sample.outage)
+            .all(|sample| !observed_times.contains(&sample.timestamp.unix_ms())),
+        "outage truth rows must not appear in the observed track"
+    );
+
+    let stopped = generate_with_truth(&route(), &SyntheticConfig::stopped(22));
+    assert!(
+        stopped.truth.iter().any(|sample| sample.stationary),
+        "stopped preset must expose stationary truth"
+    );
+    for pair in stopped.truth.windows(2) {
+        if pair[1].stationary {
+            assert_eq!(pair[0].coordinate, pair[1].coordinate);
+            assert_eq!(pair[0].route_distance, pair[1].route_distance);
+        }
     }
 }
 

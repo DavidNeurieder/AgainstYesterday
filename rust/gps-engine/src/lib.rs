@@ -32,8 +32,14 @@
 // FFI boundary; every unsafe block there carries a documented SAFETY note,
 // enforced by `clippy::undocumented_unsafe_blocks`.
 
+/// Uncertainty-aware estimation contracts (additive, no behavior change).
+pub mod estimate;
+
 /// Typed errors produced by the engine.
 pub mod error;
+
+/// Optional constant-velocity estimation and shadow-mode outlier gating.
+pub mod filtering;
 
 /// Raw GPS ingestion and per-sample quality (M15).
 pub mod gps;
@@ -76,6 +82,9 @@ pub mod synthetic;
 /// Standard processing pipeline and labeled-corpus evaluation (§33/§38–40).
 pub mod evaluate;
 
+/// Quantitative GPS quality metrics scored against synthetic ground truth.
+pub mod quality_metrics;
+
 /// Deterministic replay of recorded GPS traces.
 pub mod replay;
 
@@ -92,7 +101,14 @@ pub use attempt::{
     },
 };
 pub use error::{GeoError, GpxError, RouteError, TrackError, TrackField};
+pub use estimate::{
+    Confidence, DistanceBreakdown, MotionState, PositionEstimate, TangentCovariance,
+    VelocityEstimate,
+};
 pub use evaluate::{ConfusionMatrix, LabeledPair, evaluate, parse_manifest, standard_pipeline};
+pub use filtering::{
+    AdaptiveEstimator, AdaptiveReport, AdaptiveResult, EstimatedFix, EstimatorConfig,
+};
 pub use geo::{Bearing, Coordinate, PolylineBounds, Projection};
 pub use ghost::{
     Ghost, GhostSnapshot, GhostState, confidence_for_spacing, live_ghost_gap, live_ghost_snapshot,
@@ -105,6 +121,10 @@ pub use gpx::{parse_gpx, read_gpx, read_gpx_file, write_gpx, write_gpx_file};
 pub use live::{
     LiveConfig, LiveGhost, LiveGhostSnapshot, LiveMatchStatus, LiveRecorder, LiveSnapshot,
 };
+pub use quality_metrics::{
+    QualityMetrics, QualityReport, QualityScenario, ShadowQualityMetrics, benchmark_scenarios,
+    score as score_quality,
+};
 pub use replay::{ReplaySession, ReplaySnapshot, ReplayState};
 pub use route::{
     CanonicalError, CanonicalizeConfig, ContinuityConfig, ContinuousProjection, DiscoveredRoute,
@@ -112,6 +132,7 @@ pub use route::{
     RouteCatalog, RouteMatcher, RouteObservation, RoutePoint, TrackAddition, canonicalize, compare,
     compare_either_direction, compare_either_direction_prepared, compare_prepared, compare_with,
 };
+pub use synthetic::{GroundTruthSample, SyntheticResult};
 pub use track::{
     CursorConfig, FilterConfig, FilterCursor, FilterReason, MovingConfig, ProcessingReport,
     RouteSegment, RouteSegmentComparison, SegmentComparison, SegmentError, SimplifyConfig, Track,

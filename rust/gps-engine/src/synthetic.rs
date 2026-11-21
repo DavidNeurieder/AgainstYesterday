@@ -28,6 +28,48 @@ use crate::geo::{Bearing, Coordinate, bearing, destination, distance, interpolat
 use crate::track::{Track, TrackPoint};
 use crate::units::{Distance, Duration, Speed, Timestamp};
 
+/// The uncorrupted state of the runner at one nominal sample time.
+///
+/// `observed` fixtures deliberately throw this information away: once noise,
+/// jumps, stops and gaps are applied, only the damaged fix remains. The
+/// quality benchmark needs the clean trajectory as well, so it can score
+/// distance, position, pace, false movement and recovery against ground truth.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GroundTruthSample {
+    /// Nominal observation time. It exists even when the observed fix was
+    /// dropped by a configured gap.
+    pub timestamp: Timestamp,
+    /// Where the runner actually was at `timestamp`, on the route corridor.
+    pub coordinate: Coordinate,
+    /// Distance already covered along the oriented route, in meters.
+    pub route_distance: f64,
+    /// True ground speed at this instant. Zero while stationary.
+    pub speed: Speed,
+    /// Whether the runner was genuinely stationary.
+    pub stationary: bool,
+    /// Whether no observed fix was emitted at this nominal time.
+    pub outage: bool,
+}
+
+/// A generated observation together with the truth it was derived from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SyntheticResult {
+    /// The noisy observed track, identical to [`generate`]'s output.
+    pub observed: Track,
+    /// One truth row per nominal sample, including rows for dropped fixes.
+    pub truth: Vec<GroundTruthSample>,
+}
+
+impl SyntheticResult {
+    /// Looks up ground truth by exact timestamp.
+    pub fn truth_at(&self, timestamp: Timestamp) -> Option<GroundTruthSample> {
+        self.truth
+            .iter()
+            .find(|sample| sample.timestamp == timestamp)
+            .copied()
+    }
+}
+
 /// A deterministic 64-bit PRNG (SplitMix64).
 ///
 /// Not cryptographically secure — explicitly a test utility.
@@ -83,6 +125,11 @@ pub struct SyntheticConfig {
     pub outlier_probability: f64,
     /// Probability that a sample is stationary (time passes, no movement).
     pub stop_probability: f64,
+    /// Positional drift applied to stationary samples, in meters.
+    ///
+    /// `ZERO` (the default) keeps the legacy behaviour where a stationary
+    /// sample repeats the previous observed coordinate exactly.
+    pub stationary_drift: Distance,
     /// How far outliers are displaced, in meters.
     pub outlier_distance: Distance,
     /// Traverse the route from finish to start instead.
@@ -100,6 +147,7 @@ impl Default for SyntheticConfig {
             gap_probability: 0.02,
             outlier_probability: 0.004,
             stop_probability: 0.01,
+            stationary_drift: Distance::ZERO,
             outlier_distance: Distance::from_meters(500.0),
             reverse: false,
             seed: 42,
@@ -184,28 +232,41 @@ impl SyntheticConfig {
 /// increase and coordinates are clamped to valid ranges. Sample positions
 /// (outliers excluded) stay within `position_noise` of the route.
 pub fn generate(route: &[Coordinate], config: &SyntheticConfig) -> Track {
+    generate_with_truth(route, config).observed
+}
+
+/// Generates a synthetic track plus the clean trajectory it was derived from.
+///
+/// The observed track is exactly the same as [`generate`]. The truth rows are
+/// additional diagnostics: one row per nominal sample time, including rows for
+/// fixes suppressed by `gap_probability`.
+pub fn generate_with_truth(route: &[Coordinate], config: &SyntheticConfig) -> SyntheticResult {
     let mut rng = Rng::new(config.seed);
     let mut walk = route.to_vec();
     if config.reverse {
         walk.reverse();
     }
-    let steps = forward(&walk, config, &mut rng);
+    let (steps, truth) = forward(&walk, config, &mut rng);
 
     let points = steps
         .into_iter()
         .map(|(t, c)| TrackPoint::new(t, c))
         .collect::<Vec<_>>();
 
-    Track::new(points).expect("synthetic generator produced an invalid track")
+    SyntheticResult {
+        observed: Track::new(points).expect("synthetic generator produced an invalid track"),
+        truth,
+    }
 }
 
 /// Walks a route (already oriented) at the configured speed, sampling with
-/// the configured defects. Returns `(timestamp, coordinate)` pairs.
+/// the configured defects. Returns observed `(timestamp, coordinate)` pairs
+/// and the matching ground-truth rows.
 fn forward(
     route: &[Coordinate],
     config: &SyntheticConfig,
     rng: &mut Rng,
-) -> Vec<(Timestamp, Coordinate)> {
+) -> (Vec<(Timestamp, Coordinate)>, Vec<GroundTruthSample>) {
     debug_assert!(
         route.len() >= 2,
         "synthetic generator needs a route polyline"
@@ -226,15 +287,46 @@ fn forward(
     if total < 1e-9 {
         // Degenerate (all-coincident) route: a short stationary "track".
         let end_ms = (config.sampling_interval.as_secs() * 1000.0).round() as i64;
-        return vec![
-            (Timestamp::from_unix_ms(0), route[0]),
-            (Timestamp::from_unix_ms(end_ms), route[0]),
-        ];
+        let start = Timestamp::from_unix_ms(0);
+        let end = Timestamp::from_unix_ms(end_ms);
+        return (
+            vec![(start, route[0]), (end, route[0])],
+            vec![
+                GroundTruthSample {
+                    timestamp: start,
+                    coordinate: route[0],
+                    route_distance: 0.0,
+                    speed: config.speed,
+                    stationary: false,
+                    outage: false,
+                },
+                GroundTruthSample {
+                    timestamp: end,
+                    coordinate: route[0],
+                    route_distance: 0.0,
+                    speed: Speed::ZERO,
+                    stationary: true,
+                    outage: false,
+                },
+            ],
+        );
     }
 
     let mut points: Vec<(Timestamp, Coordinate)> = Vec::new();
+    let mut truth: Vec<GroundTruthSample> = Vec::new();
     let mut sample_no = 0i64;
     let mut prev_coord = route[0];
+    let mut prev_truth = GroundTruthSample {
+        timestamp: Timestamp::from_unix_ms(0),
+        coordinate: route[0],
+        route_distance: 0.0,
+        speed: config.speed,
+        stationary: false,
+        outage: false,
+    };
+    // A gap after nominal sample `k` suppresses `k + 1` and `k + 2`, matching
+    // the legacy `sample_no += 3` behaviour without skipping their truth rows.
+    let mut skipped = 0u8;
 
     loop {
         let target = sample_no as f64 * step_meters;
@@ -244,16 +336,30 @@ fn forward(
         let t_ms = (sample_no as f64 * config.sampling_interval.as_secs() * 1000.0).round() as i64;
         let timestamp = Timestamp::from_unix_ms(t_ms);
 
-        let stopped = rng.chance(config.stop_probability);
-        let outlier = !stopped && rng.chance(config.outlier_probability);
-        let gap_after = rng.chance(config.gap_probability);
-
-        // Sample position on the route at `target`.
         let base = if target >= total - 1e-9 {
             *route.last().expect("non-empty")
         } else {
             coord_at(route, &cumulative, target)
         };
+
+        if skipped > 0 {
+            skipped -= 1;
+            truth.push(GroundTruthSample {
+                timestamp,
+                coordinate: base,
+                route_distance: target.min(total),
+                speed: config.speed,
+                stationary: false,
+                outage: true,
+            });
+            prev_truth = *truth.last().expect("just pushed");
+            sample_no += 1;
+            continue;
+        }
+
+        let stopped = rng.chance(config.stop_probability);
+        let outlier = !stopped && rng.chance(config.outlier_probability);
+        let gap_after = rng.chance(config.gap_probability);
 
         let coordinate = if outlier {
             offset(
@@ -262,7 +368,15 @@ fn forward(
                 rng.range(0.0, 360.0),
             )
         } else if stopped {
-            prev_coord
+            if config.stationary_drift.meters() > 0.0 {
+                offset(
+                    prev_coord,
+                    config.stationary_drift.meters(),
+                    rng.range(0.0, 360.0),
+                )
+            } else {
+                prev_coord
+            }
         } else if config.position_noise.meters() > 0.0 {
             offset(base, config.position_noise.meters(), rng.range(0.0, 360.0))
         } else {
@@ -272,12 +386,32 @@ fn forward(
         points.push((timestamp, coordinate));
         prev_coord = coordinate;
 
-        if gap_after {
-            // A batch of lost samples: time advances without emitting.
-            sample_no += 3;
+        let truth_sample = if stopped {
+            GroundTruthSample {
+                timestamp,
+                coordinate: prev_truth.coordinate,
+                route_distance: prev_truth.route_distance,
+                speed: Speed::ZERO,
+                stationary: true,
+                outage: false,
+            }
         } else {
-            sample_no += 1;
+            GroundTruthSample {
+                timestamp,
+                coordinate: base,
+                route_distance: target.min(total),
+                speed: config.speed,
+                stationary: false,
+                outage: false,
+            }
+        };
+        truth.push(truth_sample);
+        prev_truth = truth_sample;
+
+        if gap_after {
+            skipped = 2;
         }
+        sample_no += 1;
     }
 
     // Always end exactly at the route finish unless the final sample already
@@ -286,17 +420,23 @@ fn forward(
     if distance(last_coord, *route.last().expect("non-empty")).meters() > 1e-9 {
         let end_t_ms =
             (sample_no as f64 * config.sampling_interval.as_secs() * 1000.0).round() as i64;
-        points.push((
-            Timestamp::from_unix_ms(end_t_ms),
-            *route.last().expect("non-empty"),
-        ));
+        let timestamp = Timestamp::from_unix_ms(end_t_ms);
+        points.push((timestamp, *route.last().expect("non-empty")));
+        truth.push(GroundTruthSample {
+            timestamp,
+            coordinate: *route.last().expect("non-empty"),
+            route_distance: total,
+            speed: config.speed,
+            stationary: false,
+            outage: false,
+        });
     }
 
     debug_assert!(
         points.len() >= 2 && points[points.len() - 1].0 >= points[points.len() - 2].0,
         "synthetic timestamps must be ordered"
     );
-    points
+    (points, truth)
 }
 
 /// Coordinate at distance `target` along a polyline via `cumulative` offsets.

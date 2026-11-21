@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use crate::error::{TrackError, TrackField};
+use crate::estimate::{MotionState, PositionEstimate, VelocityEstimate};
 use crate::geo::{Bearing, Coordinate};
 use crate::units::Timestamp;
 
@@ -18,6 +19,9 @@ pub struct TrackPoint {
     speed: Option<f64>,
     accuracy: Option<f64>,
     bearing: Option<Bearing>,
+    position_estimate: Option<PositionEstimate>,
+    velocity_estimate: Option<VelocityEstimate>,
+    motion_state: Option<MotionState>,
 }
 
 impl TrackPoint {
@@ -31,6 +35,9 @@ impl TrackPoint {
             speed: None,
             accuracy: None,
             bearing: None,
+            position_estimate: None,
+            velocity_estimate: None,
+            motion_state: None,
         }
     }
 
@@ -79,6 +86,24 @@ impl TrackPoint {
         self
     }
 
+    /// Attaches a position estimate (additive; raw fields stay untouched).
+    pub fn with_position_estimate(mut self, estimate: PositionEstimate) -> Self {
+        self.position_estimate = Some(estimate);
+        self
+    }
+
+    /// Attaches a velocity estimate (additive; raw fields stay untouched).
+    pub fn with_velocity_estimate(mut self, estimate: VelocityEstimate) -> Self {
+        self.velocity_estimate = Some(estimate);
+        self
+    }
+
+    /// Attaches a motion classification (additive; raw fields stay untouched).
+    pub fn with_motion_state(mut self, state: MotionState) -> Self {
+        self.motion_state = Some(state);
+        self
+    }
+
     /// The observation timestamp.
     pub fn timestamp(self) -> Timestamp {
         self.timestamp
@@ -107,6 +132,21 @@ impl TrackPoint {
     /// Travel bearing (clockwise from north), if reported.
     pub fn bearing(self) -> Option<Bearing> {
         self.bearing
+    }
+
+    /// The attached position estimate, if any.
+    pub fn position_estimate(self) -> Option<PositionEstimate> {
+        self.position_estimate
+    }
+
+    /// The attached velocity estimate, if any.
+    pub fn velocity_estimate(self) -> Option<VelocityEstimate> {
+        self.velocity_estimate
+    }
+
+    /// The attached motion classification, if any.
+    pub fn motion_state(self) -> Option<MotionState> {
+        self.motion_state
     }
 
     /// Validates all numeric fields for finiteness; used by [`Track::new`].

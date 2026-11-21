@@ -1,0 +1,541 @@
+<!-- Copyright (C) 2026 David Neurieder
+SPDX-License-Identifier: AGPL-3.0-or-later -->
+
+# Rust GPS engine implementation plan
+
+Date: 2026-11-21
+
+Sources reviewed:
+
+- `ideas/rust_impro2.txt`
+- `ideas/rust_improvements.txt`
+
+Scope: `rust/gps-engine` and the contracts consumed by
+`app/lib/engine/gps_ffi.dart`, `app/lib/engine/rust_engine_service.dart`,
+`app/lib/engine/engine_service.dart`, `app/lib/engine/models.dart`, and
+`app/lib/engine/fake_engine.dart`.
+
+Status: phases 0.1–0.2, 0.3, and the Phase 1 shadow estimator are implemented.
+Gate A passed and Gate B has been measured below. The adaptive filter is still
+default-off (`EstimatorConfig::default().enabled == false`); production behavior,
+the C ABI, and Dart code are unchanged. Phases 2–5 are not started.
+
+## 1. Review conclusion
+
+Both documents propose the same three ambitions, and both lean toward “all
+three” with GPS estimation and ghost racing first. That is the right target:
+
+1. accuracy of recorded distance/pace/position;
+2. stability and fairness of PB/ghost comparison;
+3. deterministic, measurable, dependency-light production quality.
+
+The documents were written partly from README-level knowledge. The current
+crate is further along than they assume. It already has:
+
+- validated `Coordinate`, `TrackPoint`, and `Track` types with monotone
+  timestamps;
+- raw-fix preservation, quality grading, and explicit rejection reasons in
+  `gps::GpsTrace::process`;
+- deterministic filters with jump/speed/accuracy checks and a live
+  `FilterCursor` that suppresses stationary jitter;
+- a stateful, continuity-aware `RouteMatcher` with bounded candidate windows,
+  heading/progress/speed scoring, hysteresis, and `MatchConfidence`;
+- monotone route coverage, attempt interpolation, and ghost snapshots with a
+  spacing-based confidence;
+- deterministic replay with seek/speed and ghost support;
+- a labeled corpus, confusion matrix, and pinned precision/recall floors;
+- a deterministic synthetic generator and GPS torture fixtures;
+- a wall-clock benchmark example and CLI;
+- a positional, length-prefixed C ABI with `gps_capi_version` and `gps_free`.
+
+Therefore this plan is **incremental and benchmark-gated**. Do not rewrite the
+pipeline, replace the matcher with an HMM, add a navigation framework, or add
+IMU fusion until measurement shows the need.
+
+## 2. Non-negotiable constraints
+
+- Raw fixes are the source of truth. Never overwrite or discard them merely
+  because they are suspicious; every decision remains auditable.
+- Keep the core crate deterministic, pure, synchronous, and `unsafe`-free
+  outside `capi.rs`.
+- Keep `FilterConfig::matching()` and the existing labeled-corpus floors
+  unchanged unless a benchmark explicitly justifies a versioned replacement.
+- Keep the Flutter C ABI append-only. Existing field order, widths, status
+  codes, and `gps_free` ownership stay unchanged. Bump `gps_capi_version` when
+  output fields are appended and update Dart decoders plus `FakeEngineService`
+  in the same change.
+- Keep JSON/CLI additions additive. Existing keys and semantics stay stable;
+  new keys get new names.
+- Preserve the three existing distance meanings during any refactor: free-run
+  recorded distance uses the filtered ground axis; on-route progress uses
+  monotone route coverage; raw geodesic distance remains diagnostic.
+- No new runtime dependencies. Criterion, if used at all, is a dev-dependency
+  introduced only in phase 5.
+- Do not implement sensor fusion before phases 0–3 show a quantified residual
+  error that GPS-only processing cannot fix.
+
+## 3. Phase 0 — quantitative baseline and stable contracts
+
+Goal: make “the new filter feels better” unnecessary. Establish ground truth,
+metrics, and additive data contracts before changing behavior.
+
+### 0.1 Expose synthetic ground truth without changing generated output
+
+Files:
+
+- `rust/gps-engine/src/synthetic.rs`
+- `rust/gps-engine/examples/generate_corpus.rs`
+- `rust/gps-engine/tests/synthetic.rs`
+
+Changes:
+
+- Add `GroundTruthSample { timestamp, coordinate, route_distance, speed,
+  stationary, outage }` and `SyntheticResult { observed, truth }`.
+- Implement `generate_with_truth()` using the exact base coordinate already
+  computed in `synthetic::forward()` before noise/jumps/gaps are applied.
+- Keep `generate()` as a byte-for-byte compatible wrapper.
+- Prefer a sidecar `*.truth.json` for raw fixtures. Bump the fixture schema
+  only if embedded truth is unavoidable; version 1 must keep parsing.
+
+Acceptance:
+
+- Regenerating the current corpus produces no diff in existing GPX files or
+  `manifest.json`.
+- Truth samples align 1:1 with nominal observed samples; dropped fixes keep a
+  truth row so outages and recovery can be scored.
+- Existing `tests/evaluate.rs`, `tests/roundtrip.rs`, and `tests/cli.rs` stay
+  green.
+
+### 0.2 Add a GPS quality benchmark
+
+Files:
+
+- new `rust/gps-engine/src/quality_metrics.rs`
+- new `rust/gps-engine/examples/quality_benchmark.rs`
+- `rust/gps-engine/src/main.rs`
+- `rust/gps-engine/src/lib.rs`
+- `rust/gps-engine/tests/quality_benchmark.rs`
+- new `rust/gps-engine/testdata/baselines/gps_quality_v1.json`
+
+Keep `evaluate.rs` focused on route identity. Add a separate quality report
+with these metrics:
+
+| Metric | Definition |
+| --- | --- |
+| Distance error (%) | `abs(measured - truth) / truth_length` for raw, filtered, and route axes |
+| Position RMSE (m) | Haversine error against truth at truth timestamps |
+| Route-projection error (m) | `abs(projected_distance - truth_route_distance)` |
+| Pace error (s/km) | MAE/RMSE of smoothed pace versus truth speed |
+| Ghost-gap error (s) | Error versus analytically known constant-pace gaps |
+| False movement (m/%) | Distance accepted while truth is stationary |
+| Recovery time (s) | Outage end → first `Matched` sample with progress error under a fixed threshold |
+| Match identity | Existing precision/recall/F1/FPR, unchanged |
+| Processing latency | Wall time reported separately, never mixed into accuracy scores |
+
+Seed the baseline with the existing five raw JSON torture fixtures and the
+nine synthetic GPX variants. Add named deterministic profiles for urban
+canyon/multipath, forest/sharp turns, running-track overlap, cycling at higher
+speed with coarse cadence, stationary drift, 5/15/30 s outages, poor accuracy,
+and variable sampling. The report must contain only deterministic values plus
+explicit toolchain/corpus metadata; wall-clock output belongs in a separate
+performance report.
+
+Add `gps-engine quality <corpus>` and document how to regenerate the baseline.
+
+Acceptance:
+
+- Two runs produce byte-identical deterministic output.
+- All scenarios produce finite metrics and a per-scenario breakdown.
+- Clean fixtures score ~0 false movement; jump/outage fixtures show measurable
+  error, so later phases have signal.
+- Pinned regression floors are added, not substituted for the existing
+  route-match floors.
+
+### 0.3 Define uncertainty-aware contracts, with no behavior change yet
+
+Files:
+
+- new `rust/gps-engine/src/estimate.rs`
+- `rust/gps-engine/src/gps/mod.rs`
+- `rust/gps-engine/src/track/point.rs`
+- `rust/gps-engine/src/route/mod.rs`
+- `rust/gps-engine/src/live/mod.rs`
+- `rust/gps-engine/src/ghost/mod.rs`
+- `rust/gps-engine/src/analytics.rs`
+
+Add types that make invalid states hard to represent:
+
+- `PositionEstimate`: timestamp, coordinate, reported accuracy in meters, and
+  statistical `confidence` in `0..=1`. Keep accuracy and confidence distinct.
+- `VelocityEstimate`: speed/bearing with confidence; optional covariance in a
+  local tangent plane when needed by the estimator.
+- `MotionState`: `Moving`, `Stationary`, `Unknown`, with confidence.
+- `DistanceBreakdown`: `raw`, `filtered`, `route`, each optional where the
+  context has no such axis.
+- Optional estimate fields on `ProcessedSample`, `TrackPoint`, `MatchStep`,
+  `LiveSnapshot`, and `GhostSnapshot`, exposed through builders/accessors
+  rather than replacing existing fields.
+
+Acceptance:
+
+- No numerical output changes; this is a contract-only commit.
+- All new numeric fields are finite and clamped.
+- Existing public constructors and JSON fields remain valid.
+- `cargo doc --no-deps` passes with `missing_docs` still enabled.
+
+**Gate A:** continue only if the baseline is stable and at least one target
+metric shows a real, reproducible error worth fixing. If not, stop after
+phase 0 and keep the benchmark as a regression guard.
+
+## 4. Phase 1 — adaptive GPS estimation
+
+Goal: improve noisy-GPS accuracy without destroying corners, distance, or the
+auditing guarantees.
+
+### 1.1 Add an optional constant-velocity estimator
+
+Files:
+
+- new `rust/gps-engine/src/filtering/mod.rs`
+- new `rust/gps-engine/src/filtering/kalman.rs`
+- new `rust/gps-engine/src/filtering/outlier.rs`
+- new `rust/gps-engine/src/filtering/stationary.rs`
+- new `rust/gps-engine/src/filtering/cadence.rs`
+- `rust/gps-engine/src/track/filtering.rs`
+- `rust/gps-engine/src/gps/mod.rs`
+- `rust/gps-engine/src/lib.rs`
+- re-exports from `track` so existing callers keep working
+
+Algorithm:
+
+- State `[x, y, vx, vy]` in a local east/north tangent plane, with covariance
+  `P`; predict using `dt` from timestamps, not a fixed 1 Hz cadence.
+- Measurement noise `R` follows reported accuracy and quality; process noise
+  follows `dt`, cadence, and the current motion state.
+- Replace the spike heuristic with a Mahalanobis innovation residual, but keep
+  the existing hard accuracy/speed/jump ceilings as a safety net.
+- Add an explicit stationary state with hysteresis. While stationary, do not
+  accumulate distance from drift; exit the state when innovation and speed
+  corroborate movement.
+- Detect sharp turns/corners through bearing change plus innovation gating and
+  reduce smoothing there. Do not synthesize intermediate points in this phase;
+  the cleaned track remains a subsequence of raw fixes.
+- Propagate `PositionEstimate`/`VelocityEstimate` into `ProcessedSample` and
+  `TrackPoint`.
+
+### 1.2 Shadow mode before promotion
+
+Add `EstimatorConfig` with a default-off adaptive mode. Run the estimator
+alongside the existing filter, record both results in the quality report, and
+compare per-scenario metrics first.
+
+Acceptance for promotion:
+
+- Every existing invariant still passes: endpoint survival, car/train
+  preservation, 60 s pause handling, one decision per raw fix, non-empty
+  rejection reasons, monotone timestamps, and filtering-as-subsequence
+  properties.
+- Stationary jitter still earns zero distance, and isolated spikes are still
+  rejected or withheld.
+- Distance error, position RMSE, or recovery time improves on noisy/outage
+  scenarios by a documented threshold.
+- No regression beyond an agreed tolerance in clean distance error, corner
+  error, false movement, or recovery time.
+- Live `FilterCursor` and batch filtering use the same estimator semantics;
+  `LiveSnapshot` exposes the new motion state without changing existing
+  distance behavior.
+
+**Gate B:** promote the adaptive filter to the default only after the shadow
+report justifies it. If it does not, keep it as an opt-in diagnostic and do not
+continue smoothing work.
+
+### 4.3 Implementation status and gate results (2026-11-21)
+
+Phases 0.1–0.3 are implemented: synthetic truth, the deterministic quality
+benchmark with a committed baseline, and additive uncertainty types. Phase 1
+adds a constant-velocity Kalman estimator in a local east/north plane, with
+reported-accuracy noise, cadence-aware process noise, Mahalanobis innovation
+gating behind the existing hard accuracy/speed/jump ceilings, stationary
+hysteresis, corner-aware smoothing, distance staging, and bounded rejection
+recovery. All estimator output is additive; raw fixes and legacy decisions are
+preserved.
+
+**Gate A result — passed.** The pinned baseline showed real, reproducible error
+worth fixing: `jitter_5m` filtered distance error 50.84%, `stationary_drift`
+420 m of false movement, `gps_jumps` 2577.01% raw distance error, and
+`urban_canyon` 458.09% filtered distance error.
+
+**Gate B rule applied.** Promotion is justified when the existing invariants
+remain green, at least four noisy/outage scenarios improve filtered distance
+error by ≥25 percentage points or ≥50% relative without material RMSE
+regression, clean distance error stays ≤1%, stationary false movement and
+recovery time do not increase, and any coarse-cadence distance regression is
+bounded and documented.
+
+Final shadow comparison against the same ground truth:
+
+| Scenario | Filtered dist% | Shadow dist% | Filtered RMSE m | Shadow RMSE m | Filtered drift m | Shadow drift m |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| clean | 0.10 | 0.01 | 0.00 | 0.61 | 0.00 | 0.00 |
+| jitter_5m | 50.84 | 0.46 | 23.26 | 5.89 | 0.00 | 0.83 |
+| jitter_12m | 208.87 | 63.10 | 19.98 | 8.78 | 0.00 | 0.00 |
+| sparse | 2.25 | 10.42 | 4.94 | 4.94 | 0.00 | 0.00 |
+| outage_25pct | 0.12 | 0.04 | 27.46 | 1.47 | 0.00 | 0.00 |
+| stationary_drift | 55.29 | 3.66 | 22.88 | 5.13 | 420.00 | 248.46 |
+| gps_jumps | 19.02 | 2.24 | 189.46 | 48.07 | 0.00 | 0.00 |
+| urban_canyon | 458.09 | 104.42 | 30.11 | 8.24 | 0.00 | 0.00 |
+| forest_trail | 94.56 | 19.30 | 11.08 | 8.40 | 0.00 | 0.00 |
+| reverse | 51.75 | 0.32 | 32.54 | 5.85 | 0.00 | 0.00 |
+
+Seven noisy scenarios clear the distance threshold; outage also improves
+relatively.
+Recovery time is unchanged, stationary false movement drops from 420 m to
+248.46 m, and clean distance stays below 1%. The only distance regression is
+`sparse` (2.25% → 10.42%, +8.17 percentage points): its 45 s cadence is too
+coarse for a stale-velocity prediction to be trusted, so one interval is staged
+until the next accepted fix. Clean position RMSE rises from 0 to 0.61 m; every
+noisy/outage RMSE improves or stays equal. The shadow report is therefore
+recommended for promotion, with live/batch semantic parity and ABI versioning
+handled as part of the promotion change, not in the shadow phase.
+
+`rust/gps-engine/testdata/baselines/gps_quality_v1.json` was regenerated from
+the final tuning with:
+
+```text
+cargo run -q -p gps-engine --bin gps-engine -- quality --json \
+  rust/gps-engine/testdata/baselines/gps_quality_v1.json
+```
+
+`rust/gps-engine/tests/quality_benchmark.rs` now checks that every scenario has
+finite shadow metrics, a nested `"shadow"` JSON object, and exactly one
+accepted or rejected decision per observed fix.
+
+## 5. Phase 2 — matching and ghost confidence
+
+Goal: make AHEAD/BEHIND reflect real performance changes, not GPS ambiguity.
+
+The live matcher is already progress- and continuity-aware. Refine and expose
+it; do not replace it with a full HMM yet.
+
+### 2.1 Make matcher evidence explicit
+
+Files:
+
+- `rust/gps-engine/src/route/mod.rs` → extract the stateful matcher into
+  `rust/gps-engine/src/route/live_matching.rs` while keeping re-exports
+- new `rust/gps-engine/src/route/candidate.rs`
+- `rust/gps-engine/src/route/matching.rs` for the existing pairwise API
+- `rust/gps-engine/src/live/mod.rs`
+- `rust/gps-engine/src/capi.rs`
+
+Changes:
+
+- Represent each candidate with projection, lateral error, heading delta,
+  expected-progress prior, speed plausibility, ambiguity margin, and
+  confidence.
+- Feed `PositionEstimate` accuracy/confidence into candidate scoring instead
+  of re-deriving sigma from raw accuracy alone.
+- Add an explicit ambiguity signal when two nearby segments have comparable
+  cost; use it to enter `Uncertain` rather than snapping confidently.
+- Keep monotone reliable coverage. `Uncertain`, `OffRoute`, and `Reacquiring`
+  continue to preserve the last reliable progress.
+- Add typed route-association result (best route, score components, margin,
+  eligibility, ambiguity reason) behind `EngineService`; keep the Dart
+  controller as a thin adapter and mirror it in `FakeEngineService`.
+
+### 2.2 Make ghost confidence honest
+
+Files:
+
+- `rust/gps-engine/src/ghost/mod.rs`
+- `rust/gps-engine/src/live/mod.rs`
+- `rust/gps-engine/src/capi.rs`
+- `app/lib/engine/rust_engine_service.dart`
+- `app/lib/engine/models.dart`
+- `app/lib/engine/fake_engine.dart`
+
+Changes:
+
+- Keep the three concerns separate: spatial alignment, temporal alignment,
+  performance gap.
+- Combine existing reference-spacing confidence with live match confidence,
+  position confidence, and candidate ambiguity. Expose them as separate
+  additive values, not one opaque number.
+- Flag or suppress AHEAD/BEHIND display changes when match status is uncertain
+  or off-route, while preserving the existing sign convention and the
+  stationary time-gap growth behavior.
+- Continue using route progress only for ghost comparison; never feed raw or
+  filtered ground distance into the PB gap.
+- Keep first-reach interpolation and saturation at the PB finish; do not
+  extrapolate. Evaluate monotone/adaptive interpolation only if the benchmark
+  shows spacing error remains material.
+
+Acceptance:
+
+- Existing route-match floors remain pinned: false positives 0, precision
+  ≥ 0.99, recall ≥ 0.75, F1 ≥ 0.85, with the known `outliers` false negatives
+  documented.
+- All repeated-loop, figure-eight, out-and-back, reverse, detour, jitter, and
+  dropout tests continue to pass.
+- Ghost-gap error improves in the quality benchmark; a GPS jump no longer
+  produces a large confident lead.
+- Confidence values stay in `0..=1` and are independently finite when either
+  the ghost samples or the live match are missing.
+- New FFI fields are appended only; `gps_capi_version` and Dart fake/Rust
+  parity tests are updated.
+
+**Gate C:** do not add sector comparisons, multiple-PB racing, split
+prediction, or HMM/Viterbi topology until confidence and gap error are measured
+as still insufficient.
+
+## 6. Phase 3 — distance, pace, and elevation
+
+Goal: make the three distance meanings first-class and remove misleading pace
+readouts.
+
+Files:
+
+- `rust/gps-engine/src/gps/mod.rs`
+- `rust/gps-engine/src/track/statistics.rs`
+- `rust/gps-engine/src/analytics.rs`
+- `rust/gps-engine/src/live/mod.rs`
+- `rust/gps-engine/src/track/elevation.rs` (new)
+- `rust/gps-engine/src/capi.rs`
+- Dart service/model/fake parity files
+
+Changes:
+
+- Surface `DistanceBreakdown` from `TrackProcessing`, `LiveSnapshot`, and
+  analytics JSON. Keep current top-level `distance` semantics untouched.
+- Add rolling pace over configurable time/distance windows: a short
+  responsive window, a 10–15 s stable window, and cumulative average pace.
+  Require a minimum movement threshold and attach confidence. Do not compute
+  pace from two consecutive fixes.
+- Add new rolling-best fields rather than silently redefining the existing
+  `best_pace_ms_per_km`, whose current implementation is a single-segment
+  minimum. Deprecate old names only after a measuring release.
+- Add typed outage summaries and pace confidence to diagnostics.
+- Keep haversine as the default distance primitive. Evaluate a WGS-84 geodesic
+  against truth before considering a dependency or replacement.
+- Process elevation separately: raw gain/loss, a robust median or low-pass
+  filtered altitude, and a noise threshold so tiny fluctuations do not count
+  as climbing. Offline DEM correction stays optional and later.
+
+Acceptance:
+
+- Clean/out-and-back distance does not regress; stationary false movement does
+  not increase.
+- Pace error improves in the benchmark, with confidence lower during gaps and
+  low-speed periods.
+- All analytics JSON additions are additive and fake/Rust snapshots agree.
+
+## 7. Phase 4 — optional sensor fusion
+
+Only start this phase after gates A–C show remaining error in dropouts,
+stationary detection, or high-frequency motion that GPS-only processing cannot
+resolve.
+
+Files:
+
+- new `rust/gps-engine/src/sensors/imu.rs`
+- new `rust/gps-engine/src/sensors/fusion.rs`
+- `rust/gps-engine/src/filtering/kalman.rs`
+- Android platform-channel/Dart ingestion in `app/`
+- `rust/gps-engine/src/capi.rs`
+- fake-engine deterministic IMU source
+
+Changes:
+
+- Treat accelerometer/gyroscope samples as optional observations with their
+  own timestamps, bias state, and confidence. Missing sensors are explicit;
+  the engine still works with GPS only.
+- Use an error-state Kalman filter or equivalent only if the simpler
+  estimator cannot meet the measured targets.
+- Grow position uncertainty during a GPS outage, cap dead-reckoning duration,
+  and require GPS re-acquisition before confidence returns.
+- Keep raw sensor samples and raw GPS fixes preserved for replay.
+- Measure battery/latency cost on device. Disable by default until the
+  benchmark proves a material improvement.
+
+Acceptance:
+
+- A documented reduction in position RMSE or recovery time, with no distance,
+  pace, ghost, or false-movement regression.
+- Deterministic replay of sensor samples produces identical output.
+- Android/F-Droid builds and foreground recording behavior are unchanged
+  unless the feature is explicitly enabled.
+
+## 8. Phase 5 — performance and production hardening
+
+Goal: make regressions visible and keep the engine stable for Flutter, Python,
+and F-Droid consumers.
+
+Files:
+
+- `rust/gps-engine/Cargo.toml` and workspace `Cargo.toml`/`Cargo.lock`
+- new `rust/gps-engine/benches/`
+- `.github/workflows/ci.yml`
+- `rust/gps-engine/README.md`
+- `docs/route_match_v3_audit.md`
+- `Makefile` if a new quality command is added
+
+Changes:
+
+- Add Criterion as a dev-dependency only now. Port the existing
+  `examples/bench.rs` cases into benches for filtering, projection, ghost
+  matching, distance, and GPX parsing. Keep the `Instant` example as a quick
+  smoke tool.
+- CI compiles benches with `cargo bench --no-run`; saved numeric baselines
+  belong in a dedicated/nightly job with toolchain and runner metadata. Do not
+  gate PRs on wall-clock numbers from shared runners.
+- Profile allocations in the per-fix hot path; prefer in-place state updates
+  and bounded candidate buffers.
+- Expand property tests around uncertainty clamping, monotone route progress,
+  estimator stability under irregular `dt`, and arbitrary JSON/GPX bytes.
+- Add golden ABI-layout tests across Rust, Dart, and Python decoders. Every
+  appended field has a documented version and a fake-engine equivalent.
+- Refresh stale docs: `rust/gps-engine/README.md` still says FFI is planned,
+  and `docs/route_match_v3_audit.md` still says free-run live recognition is
+  absent.
+- Keep the F-Droid recipe, Rust cdylib ABI, and `REPRO_BUILD_ROOT` flow in sync
+  whenever the native library is rebuilt.
+
+Acceptance:
+
+- `cargo test --all-features`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo fmt --all --check`
+- `cargo doc --no-deps`
+- `cargo bench --no-run`
+- `flutter analyze` and `flutter test`
+- `make full-test` where the Android toolchain is available
+
+## 9. Suggested PR sequence
+
+1. `engine-quality-baseline` — phase 0.1–0.2, no behavior change.
+2. `engine-uncertainty-contracts` — phase 0.3, additive types only.
+3. `engine-adaptive-filter-shadow` — phase 1, default off.
+4. `engine-promote-adaptive-filter` — only if gate B passes.
+5. `engine-match-evidence` — phase 2.1.
+6. `engine-ghost-confidence` — phase 2.2.
+7. `engine-distance-pace-breakdown` — phase 3.
+8. `engine-elevation-threshold` — phase 3 follow-up.
+9. `engine-imu-optional` — only if gates A–C justify it.
+10. `engine-perf-ffi-hardening` — phase 5.
+
+Each PR must leave the full verification command set green and must not change
+the Flutter default build behavior without an explicit decision.
+
+## 10. Explicit non-goals for this roadmap
+
+- No full navigation framework or geospatial dependency stack.
+- No HMM/Viterbi matcher before bounded candidate scoring is measured as
+  insufficient.
+- No PCHIP/spline ghost interpolation before sample-spacing error is measured
+  as material.
+- No “beautiful track at any cost” smoothing that shortens corners or
+  distorts distance.
+- No process-death survival; the Android foreground service remains
+  `START_NOT_STICKY` and recording still does not survive a kill.
+- No change to the raw-fix audit model: every raw observation keeps a quality
+  grade and a decision reason.

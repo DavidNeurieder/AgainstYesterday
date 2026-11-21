@@ -20,6 +20,7 @@
 //! bridge, and [`LiveRecorder::resume`] re-anchors on the next fix so the
 //! pause window never becomes distance or moving time.
 
+use crate::estimate::{DistanceBreakdown, MotionState, PositionEstimate, VelocityEstimate};
 use crate::geo::{Coordinate, distance};
 use crate::ghost::{GhostState, confidence_for_spacing};
 use crate::gps::GpsFix;
@@ -105,6 +106,60 @@ pub struct LiveSnapshot {
     pub match_status: LiveMatchStatus,
     /// Confidence in the current route match, `0.0..=1.0` (additive).
     pub match_confidence: f64,
+    /// Estimated position, when an estimator supplied one (additive).
+    pub position_estimate: Option<PositionEstimate>,
+    /// Estimated velocity, when an estimator supplied one (additive).
+    pub velocity_estimate: Option<VelocityEstimate>,
+    /// Motion classification, when an estimator supplied one (additive).
+    pub motion_state: Option<MotionState>,
+    /// The three distance axes, when this context supplies them (additive).
+    pub distance_breakdown: Option<DistanceBreakdown>,
+}
+
+impl LiveSnapshot {
+    /// Attaches a position estimate without changing any live totals.
+    pub fn with_position_estimate(mut self, estimate: PositionEstimate) -> Self {
+        self.position_estimate = Some(estimate);
+        self
+    }
+
+    /// Attaches a velocity estimate without changing any live totals.
+    pub fn with_velocity_estimate(mut self, estimate: VelocityEstimate) -> Self {
+        self.velocity_estimate = Some(estimate);
+        self
+    }
+
+    /// Attaches a motion classification without changing any live totals.
+    pub fn with_motion_state(mut self, state: MotionState) -> Self {
+        self.motion_state = Some(state);
+        self
+    }
+
+    /// Attaches a distance breakdown without changing the top-level distance.
+    pub fn with_distance_breakdown(mut self, breakdown: DistanceBreakdown) -> Self {
+        self.distance_breakdown = Some(breakdown);
+        self
+    }
+
+    /// The attached position estimate, if any.
+    pub fn position_estimate(&self) -> Option<PositionEstimate> {
+        self.position_estimate
+    }
+
+    /// The attached velocity estimate, if any.
+    pub fn velocity_estimate(&self) -> Option<VelocityEstimate> {
+        self.velocity_estimate
+    }
+
+    /// The attached motion classification, if any.
+    pub fn motion_state(&self) -> Option<MotionState> {
+        self.motion_state
+    }
+
+    /// The attached distance breakdown, if any.
+    pub fn distance_breakdown(&self) -> Option<DistanceBreakdown> {
+        self.distance_breakdown
+    }
 }
 
 /// The ghost a live run races against.
@@ -590,6 +645,10 @@ impl LiveRecorder {
             } else {
                 0.0
             },
+            position_estimate: None,
+            velocity_estimate: None,
+            motion_state: None,
+            distance_breakdown: None,
         }
     }
 

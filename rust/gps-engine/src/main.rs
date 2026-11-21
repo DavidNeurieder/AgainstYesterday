@@ -12,6 +12,7 @@
 //! gps-engine map     a.gpx [more.gpx|dirs...]
 //! gps-engine discover ./tracks/
 //! gps-engine evaluate ./testdata/synthetic/
+//! gps-engine quality
 //! gps-engine benchmark ./tracks/
 //! ```
 //!
@@ -43,6 +44,7 @@ fn main() {
         "map" => cmd_map(&args[2..]),
         "discover" => cmd_discover(&args[2..]),
         "evaluate" => cmd_evaluate(&args[2..]),
+        "quality" => cmd_quality(&args[2..]),
         "benchmark" => cmd_benchmark(&args[2..]),
         "group" | "organize" | "cluster" | "arrange" | "partition" | "bucket" => {
             cmd_group(&args[2..])
@@ -74,6 +76,7 @@ usage:
   gps-engine group      file.gpx [more.gpx|dirs...] [--out dir] [--move]
   gps-engine segments   file.gpx [more.gpx|dirs...] [--segments N]
   gps-engine evaluate   ./testdata/synthetic/
+  gps-engine quality    [--json path]
   gps-engine benchmark  ./tracks/
 
 `map` writes a self-contained HTML page that overlays the tracks on a
@@ -811,6 +814,40 @@ fn cmd_evaluate(args: &[String]) -> CmdResult {
     println!("──────────────────────────────────────────────");
     let matrix = gps_engine::evaluate(&labels, &tracks, &MatchConfig::default());
     println!("{}", matrix.report());
+    Ok(())
+}
+
+fn cmd_quality(args: &[String]) -> CmdResult {
+    let mut json_path: Option<&str> = None;
+    let mut index = 0usize;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--json" => {
+                json_path = Some(
+                    args.get(index + 1)
+                        .ok_or_else(|| "--json needs a path".to_string())?,
+                );
+                index += 1;
+            }
+            flag if flag.starts_with('-') => return Err(format!("unknown argument: {flag}")),
+            value => return Err(format!("unexpected argument: {value}")),
+        }
+        index += 1;
+    }
+
+    let scenarios = gps_engine::quality_metrics::benchmark_scenarios();
+    let report = gps_engine::quality_metrics::QualityReport::from_scenarios(&scenarios);
+    println!(
+        "GPS quality   {} deterministic scenarios",
+        report.scenarios.len()
+    );
+    println!("──────────────────────────────────────────────");
+    print!("{}", report.report());
+    if let Some(path) = json_path {
+        std::fs::write(path, report.to_json())
+            .map_err(|e| format!("{}: {e}", Path::new(path).display()))?;
+        println!("wrote {path}");
+    }
     Ok(())
 }
 

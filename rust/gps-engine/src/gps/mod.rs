@@ -30,6 +30,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::error::{GpsError, TrackError};
+use crate::estimate::{MotionState, PositionEstimate, VelocityEstimate};
 use crate::geo::{Bearing, Coordinate};
 use crate::route::Route;
 use crate::track::{
@@ -189,6 +190,47 @@ pub struct ProcessedSample {
     pub accepted: bool,
     /// Why it was rejected, when it was.
     pub reason: Option<RejectionReason>,
+    /// Estimated position, when an estimator supplied one (additive).
+    pub position_estimate: Option<PositionEstimate>,
+    /// Estimated velocity, when an estimator supplied one (additive).
+    pub velocity_estimate: Option<VelocityEstimate>,
+    /// Motion classification, when an estimator supplied one (additive).
+    pub motion_state: Option<MotionState>,
+}
+
+impl ProcessedSample {
+    /// Attaches a position estimate without touching the raw fix or decision.
+    pub fn with_position_estimate(mut self, estimate: PositionEstimate) -> Self {
+        self.position_estimate = Some(estimate);
+        self
+    }
+
+    /// Attaches a velocity estimate without touching the raw fix or decision.
+    pub fn with_velocity_estimate(mut self, estimate: VelocityEstimate) -> Self {
+        self.velocity_estimate = Some(estimate);
+        self
+    }
+
+    /// Attaches a motion classification without touching the raw fix or decision.
+    pub fn with_motion_state(mut self, state: MotionState) -> Self {
+        self.motion_state = Some(state);
+        self
+    }
+
+    /// The attached position estimate, if any.
+    pub fn position_estimate(&self) -> Option<PositionEstimate> {
+        self.position_estimate
+    }
+
+    /// The attached velocity estimate, if any.
+    pub fn velocity_estimate(&self) -> Option<VelocityEstimate> {
+        self.velocity_estimate
+    }
+
+    /// The attached motion classification, if any.
+    pub fn motion_state(&self) -> Option<MotionState> {
+        self.motion_state
+    }
 }
 
 /// The auditable output of [`GpsTrace::process`].
@@ -365,6 +407,9 @@ impl GpsTrace {
                 quality: fix.quality(config),
                 accepted,
                 reason,
+                position_estimate: None,
+                velocity_estimate: None,
+                motion_state: None,
             });
         }
 

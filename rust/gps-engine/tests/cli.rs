@@ -491,6 +491,32 @@ fn unknown_flag_is_rejected() {
 }
 
 #[test]
+fn quality_writes_a_deterministic_json_baseline() {
+    let dir = temp_dir("quality");
+    let out = dir.join("baseline.json");
+    let output = Command::new(BIN)
+        .args(["quality", "--json"])
+        .arg(&out)
+        .output()
+        .expect("binary runs");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json = std::fs::read_to_string(&out).expect("baseline written");
+    assert!(json.contains("\"schema_version\": 1"));
+    assert!(json.contains("\"urban_canyon\""));
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("deterministic scenarios"),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    std::fs::remove_dir_all(dir).expect("cleanup");
+}
+
+#[test]
 fn missing_directory_has_no_gpx_files() {
     let dir = temp_dir("empty");
     let output = Command::new(BIN)
