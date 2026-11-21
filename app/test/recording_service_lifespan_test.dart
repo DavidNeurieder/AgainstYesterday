@@ -118,6 +118,9 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
+            // Keep the recording assertions independent of the native
+            // estimator CI wires into host tests.
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
             persistenceStoreProvider.overrideWithValue(
@@ -172,6 +175,9 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
+            // Keep the recording assertions independent of the native
+            // estimator CI wires into host tests.
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
             persistenceStoreProvider.overrideWithValue(
@@ -240,6 +246,9 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
+            // Keep the recording assertions independent of the native
+            // estimator CI wires into host tests.
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
             persistenceStoreProvider.overrideWithValue(
@@ -279,6 +288,9 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
+            // Keep the recording assertions independent of the native
+            // estimator CI wires into host tests.
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
             persistenceStoreProvider.overrideWithValue(
@@ -317,6 +329,7 @@ void main() {
         final lifespan = _RecordingLifespan();
         final c = ProviderContainer(
           overrides: [
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             runForegroundLifespanProvider.overrideWithValue(lifespan),
             persistenceStoreProvider.overrideWithValue(
               MemoryPersistenceStore(),

@@ -92,6 +92,9 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
+            // These fixtures pin the fake engine's deterministic arithmetic,
+            // even when CI builds with the native engine available.
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             persistenceStoreProvider.overrideWithValue(
               MemoryPersistenceStore(),
@@ -169,6 +172,9 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
+            // These fixtures pin the fake engine's deterministic arithmetic,
+            // even when CI builds with the native engine available.
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             persistenceStoreProvider.overrideWithValue(
               MemoryPersistenceStore(),
@@ -234,6 +240,9 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
+            // These fixtures pin the fake engine's deterministic arithmetic,
+            // even when CI builds with the native engine available.
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
             persistenceStoreProvider.overrideWithValue(
               MemoryPersistenceStore(),
@@ -276,6 +285,7 @@ void main() {
         final stream = StreamController<GpsFix>.broadcast();
         final c = ProviderContainer(
           overrides: [
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
             deviceGpsProvider.overrideWithValue(_FakeGpsSource(stream.stream)),
           ],
         );
@@ -326,7 +336,10 @@ void main() {
               'again.',
         );
         final c = ProviderContainer(
-          overrides: [deviceGpsProvider.overrideWithValue(source)],
+          overrides: [
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
+            deviceGpsProvider.overrideWithValue(source),
+          ],
         );
         addTearDown(c.dispose);
         keepAlive(c);
@@ -359,7 +372,11 @@ void main() {
 
     test('no device source keeps the deterministic scenario timeline', () {
       fakeAsync((async) {
-        final c = ProviderContainer();
+        final c = ProviderContainer(
+          overrides: [
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
+          ],
+        );
         addTearDown(c.dispose);
         keepAlive(c);
 

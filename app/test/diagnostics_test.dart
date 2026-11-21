@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/app/router.dart';
 import 'package:against_yesterday/core/theme/app_theme.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/features/dev/application/fixture_export.dart';
 import 'package:against_yesterday/features/dev/presentation/diagnostics_screen.dart';
 import 'package:against_yesterday/features/routes/presentation/routes_screen.dart';
@@ -31,6 +32,9 @@ void main() {
   ProviderScope enabledApp() => ProviderScope(
     overrides: [
       devToolsEnabledProvider.overrideWithValue(true),
+      // The readouts are pinned to demo values, so keep the deterministic
+      // engine even when CI builds with a native library available.
+      engineServiceProvider.overrideWithValue(FakeEngineService()),
       // Seed a route so a live run has geometry and a PB ghost to race —
       // the shipped app starts with an empty catalog.
       persistenceStoreProvider.overrideWithValue(

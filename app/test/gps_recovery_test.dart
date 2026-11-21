@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/engine/device_gps_source.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
@@ -91,6 +92,9 @@ void main() {
     final source = _ManualGpsSource();
     final container = ProviderContainer(
       overrides: [
+        // The gap arithmetic is defined on raw fixes; keep it independent of
+        // the native estimator that CI otherwise wires into host tests.
+        engineServiceProvider.overrideWithValue(FakeEngineService()),
         deviceGpsProvider.overrideWithValue(source),
         persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
       ],

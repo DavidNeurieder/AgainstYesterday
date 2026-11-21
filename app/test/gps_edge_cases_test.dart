@@ -20,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/core/units.dart';
+import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
 import 'package:against_yesterday/features/recording/application/recording_controller.dart';
 import 'package:against_yesterday/persistence/persistence.dart';
@@ -46,6 +47,9 @@ void main() {
     final source = ScriptedGpsSource(acquisition: acquisition);
     final container = ProviderContainer(
       overrides: [
+        // These fixtures pin raw-fix arithmetic, not engine filtering. Keep
+        // them deterministic even when CI wires in the native engine.
+        engineServiceProvider.overrideWithValue(FakeEngineService()),
         deviceGpsProvider.overrideWithValue(source),
         persistenceStoreProvider.overrideWithValue(MemoryPersistenceStore()),
       ],

@@ -4,6 +4,7 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
@@ -34,7 +35,11 @@ void main() {
 
   test('pre-run flow: preparing → gpsAcquiring → ready', () {
     fakeAsync((async) {
-      final c = ProviderContainer();
+      final c = ProviderContainer(
+        overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+        ],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
       c.read(recordingControllerProvider.notifier).ensureSession([_route]);
@@ -53,7 +58,11 @@ void main() {
 
   test('running advances distance and moving time', () {
     fakeAsync((async) {
-      final c = ProviderContainer();
+      final c = ProviderContainer(
+        overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+        ],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
       final notifier = c.read(recordingControllerProvider.notifier);
@@ -76,7 +85,11 @@ void main() {
 
   test('paused time does not count toward performance', () {
     fakeAsync((async) {
-      final c = ProviderContainer();
+      final c = ProviderContainer(
+        overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+        ],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
       final notifier = c.read(recordingControllerProvider.notifier);
@@ -103,7 +116,11 @@ void main() {
 
   test('finish completes the run and leaves a gap vs PB', () {
     fakeAsync((async) {
-      final c = ProviderContainer();
+      final c = ProviderContainer(
+        overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+        ],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
       final notifier = c.read(recordingControllerProvider.notifier);
@@ -139,6 +156,7 @@ void main() {
       // catalog, so seed River Loop into the repository.
       final c = ProviderContainer(
         overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
           persistenceStoreProvider.overrideWithValue(
             seededStore(routes: [riverLoopRoute]),
           ),
@@ -165,7 +183,11 @@ void main() {
 
   test('dismissing resets the session', () {
     fakeAsync((async) {
-      final c = ProviderContainer();
+      final c = ProviderContainer(
+        overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+        ],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
       final notifier = c.read(recordingControllerProvider.notifier);
@@ -183,7 +205,11 @@ void main() {
 
   test('ghost marks the PB distance at the live elapsed time', () {
     fakeAsync((async) {
-      final c = ProviderContainer();
+      final c = ProviderContainer(
+        overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+        ],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
       final notifier = c.read(recordingControllerProvider.notifier);
@@ -216,7 +242,11 @@ void main() {
 
   test('continue without route clears the ghost', () {
     fakeAsync((async) {
-      final c = ProviderContainer();
+      final c = ProviderContainer(
+        overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+        ],
+      );
       addTearDown(c.dispose);
       keepAlive(c);
       final notifier = c.read(recordingControllerProvider.notifier);

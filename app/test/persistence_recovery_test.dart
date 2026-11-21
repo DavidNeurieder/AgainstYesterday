@@ -15,6 +15,7 @@ import 'package:flutter/material.dart' hide Route;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:against_yesterday/app/app.dart';
+import 'package:against_yesterday/app/dependencies.dart';
 import 'package:against_yesterday/core/units.dart';
 import 'package:against_yesterday/engine/fake_engine.dart';
 import 'package:against_yesterday/engine/models.dart';
@@ -45,7 +46,10 @@ void main() {
       fakeAsync((async) {
         final store = MemoryPersistenceStore();
         final c = ProviderContainer(
-          overrides: [persistenceStoreProvider.overrideWithValue(store)],
+          overrides: [
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
+            persistenceStoreProvider.overrideWithValue(store),
+          ],
         );
         addTearDown(c.dispose);
         keepAlive(c);
@@ -72,7 +76,10 @@ void main() {
   group('resumeFromSnapshot recovery', () {
     ProviderContainer container(FakeAsync async, PersistenceStore store) {
       final c = ProviderContainer(
-        overrides: [persistenceStoreProvider.overrideWithValue(store)],
+        overrides: [
+          engineServiceProvider.overrideWithValue(FakeEngineService()),
+          persistenceStoreProvider.overrideWithValue(store),
+        ],
       );
       addTearDown(c.dispose);
       keepAlive(c);
@@ -384,7 +391,10 @@ void main() {
         File('${dir.path}/activities.json').writeAsStringSync('{oops');
 
         final c = ProviderContainer(
-          overrides: [persistenceStoreProvider.overrideWithValue(store)],
+          overrides: [
+            engineServiceProvider.overrideWithValue(FakeEngineService()),
+            persistenceStoreProvider.overrideWithValue(store),
+          ],
         );
         addTearDown(c.dispose);
 
