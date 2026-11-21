@@ -31,7 +31,9 @@ use std::fmt;
 
 use crate::error::{GpsError, TrackError};
 use crate::estimate::{MotionState, PositionEstimate, VelocityEstimate};
-use crate::filtering::{EstimatedFix, EstimatorConfig, ShadowRejection, estimate_fixes};
+use crate::filtering::{
+    AdaptiveResult, EstimatedFix, EstimatorConfig, ShadowRejection, estimate_fixes,
+};
 use crate::geo::{Bearing, Coordinate};
 use crate::route::Route;
 use crate::track::{
@@ -463,6 +465,14 @@ impl GpsTrace {
         config: &FilterConfig,
         estimator_config: &EstimatorConfig,
     ) -> Result<TrackProcessing, GpsError> {
+        Ok(self.process_adaptive_result(config, estimator_config)?.0)
+    }
+
+    pub(crate) fn process_adaptive_result(
+        &self,
+        config: &FilterConfig,
+        estimator_config: &EstimatorConfig,
+    ) -> Result<(TrackProcessing, AdaptiveResult), GpsError> {
         let normalized = self.normalized();
         let raw_track = self.to_track().map_err(map_too_few_points)?;
         let adaptive = estimate_fixes(&normalized.fixes, estimator_config);
@@ -566,11 +576,14 @@ impl GpsTrace {
             });
         }
 
-        Ok(TrackProcessing {
-            track: cleaned,
-            report,
-            samples,
-        })
+        Ok((
+            TrackProcessing {
+                track: cleaned,
+                report,
+                samples,
+            },
+            adaptive,
+        ))
     }
 }
 

@@ -29,7 +29,9 @@ use std::slice;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use crate::attempt::{Attempt, AttemptAxis, AttemptSample, MovingAxisConfig};
-use crate::filtering::{EstimatorConfig, estimate_fixes};
+use crate::filtering::EstimatorConfig;
+#[cfg(test)]
+use crate::filtering::estimate_fixes;
 use crate::geo::{Coordinate, polyline_length};
 use crate::ghost::Ghost;
 use crate::gps::{GpsFix, GpsTrace};
@@ -549,10 +551,9 @@ fn process_track(bytes: &[u8]) -> Result<Vec<u8>, String> {
         })
         .collect();
     let estimator_config = EstimatorConfig::production();
-    let adaptive = estimate_fixes(&fixes, &estimator_config);
-    let audit = GpsTrace::new(fixes)
+    let (audit, adaptive) = GpsTrace::new(fixes)
         .map_err(|e| e.to_string())?
-        .process_with(&FilterConfig::default(), &estimator_config)
+        .process_adaptive_result(&FilterConfig::default(), &estimator_config)
         .map_err(|e| e.to_string())?;
     let processed = audit
         .track
