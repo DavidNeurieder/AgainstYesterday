@@ -54,7 +54,7 @@ jobs:
           cache: true
       - name: Install the Rust Android target
         if: matrix.suite == 'engine'
-        uses: dtolnay/rust-toolchain@stable
+        uses: ./.github/actions/setup-pinned-rust
         with:
           targets: x86_64-linux-android
       - name: Install the pinned Android NDK

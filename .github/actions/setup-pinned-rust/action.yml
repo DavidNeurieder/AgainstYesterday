@@ -1,0 +1,69 @@
+# Copyright (C) 2026 David Neurieder
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: setup-pinned-rust
+description: Install the exact Rust toolchain declared in rust-toolchain.toml
+
+# Installing the exact toolchain up front matters. If CI only sets up `stable`,
+# the first cargo/rustc call inside the checkout sees rust-toolchain.toml and
+# rustup performs a second, deferred install of the pinned toolchain. On hosted
+# runners that can collide with the preinstalled clippy binaries:
+#   failed to install component: 'clippy-preview', detected conflict: 'bin/cargo-clippy'
+# Reading the version from rust-toolchain.toml keeps that file the single source
+# of truth for compiler upgrades.
+
+inputs:
+  components:
+    description: Extra rustup components to install on top of rust-toolchain.toml
+    required: false
+    default: ''
+  targets:
+    description: Extra rustup targets to install on top of rust-toolchain.toml
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - id: pinned
+      name: Read rust-toolchain.toml
+      shell: bash
+      run: |
+        set -euo pipefail
+        yaml_array() {
+          sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\[\(.*\)\].*/\\1/p" rust-toolchain.toml \
+            | tr -d ' "' | tr -d '\015' | tr '\012' ',' | sed 's/,$//'
+        }
+        dedup_csv() {
+          printf '%s' "$1" | tr ',' '\012' | sed '/^$/d' \
+            | awk '!seen[$0]++ { printf "%s%s", sep, $0; sep="," } END { print "" }'
+        }
+        channel="$(sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml \
+          | tr -d '\015')"
+        if [ -z "$channel" ]; then
+          echo "::error::rust-toolchain.toml has no channel"
+          exit 1
+        fi
+        components="$(yaml_array components)"
+        targets="$(yaml_array targets)"
+        if [ -n "$INPUT_COMPONENTS" ]; then
+          components="${components:+$components,}$INPUT_COMPONENTS"
+        fi
+        if [ -n "$INPUT_TARGETS" ]; then
+          targets="${targets:+$targets,}$INPUT_TARGETS"
+        fi
+        components="$(dedup_csv "$components")"
+        targets="$(dedup_csv "$targets")"
+        echo "toolchain=$channel" >> "$GITHUB_OUTPUT"
+        echo "components=$components" >> "$GITHUB_OUTPUT"
+        echo "targets=$targets" >> "$GITHUB_OUTPUT"
+      env:
+        INPUT_COMPONENTS: ${{ inputs.components }}
+        INPUT_TARGETS: ${{ inputs.targets }}
+
+    - name: Install pinned toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ steps.pinned.outputs.toolchain }}
+        components: ${{ steps.pinned.outputs.components }}
+        targets: ${{ steps.pinned.outputs.targets }}

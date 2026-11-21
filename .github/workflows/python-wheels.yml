@@ -47,8 +47,8 @@ jobs:
         with:
           python-version: '3.12'
       # maturin-action adds the target(s) it needs (including both darwin
-      # targets for universal2), so no explicit rustup target list here.
-      - uses: dtolnay/rust-toolchain@stable
+      # targets for universal2), so no extra rustup target list here.
+      - uses: ./.github/actions/setup-pinned-rust
 
       - name: Build wheel
         uses: PyO3/maturin-action@v1
@@ -100,7 +100,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-pinned-rust
       - name: Build and verify sdist
         run: |
           set -euo pipefail

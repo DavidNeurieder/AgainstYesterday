@@ -9,9 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      - uses: ./.github/actions/setup-pinned-rust
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-features
@@ -26,7 +24,7 @@ jobs:
           flutter-version: '3.41.2'
           channel: stable
           cache: true
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-pinned-rust
       # Build the cdylib so rust_engine_test.dart and rust_engine_widget_test.dart
       # exercise the real engine instead of skipping.
       - run: cargo build --release -p gps-engine
@@ -90,7 +88,7 @@ jobs:
           test -d "$ndk" || { echo "::error::NDK missing after install: $ndk"; exit 1; }
           # Exported for every later step, including the cross-compile script.
           echo "ANDROID_NDK_HOME=$ndk" >> "$GITHUB_ENV"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/setup-pinned-rust
         with:
           targets: ${{ matrix.rust-target }}
       - name: Report toolchain versions

@@ -27,6 +27,11 @@ root. App name/IDs: package `against_yesterday`, Android applicationId
   to cargo/rustc calls made from this workspace, so local, CI and F-Droid
   builds use the same compiler regardless of the user's default toolchain.
   Bump the version there; do not add toolchain overrides to recipes or CI.
+  CI preinstalls that exact toolchain via `.github/actions/setup-pinned-rust`,
+  which reads `rust-toolchain.toml`. Keep using that action instead of installing
+  `stable`: otherwise rustup defers the pinned install to the first
+  cargo/maturin call, which can fail with a clippy component conflict on hosted
+  runners.
 - Android builds need **JDK 21** (MapLibre compiles with Java 21) even though
   the app targets Java 17. CI's Android job pins Temurin 21; the Makefile exports
   a detected JDK 21 as `JAVA_HOME` when one is not already set.
