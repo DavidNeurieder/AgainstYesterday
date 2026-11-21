@@ -26,16 +26,17 @@ use std::slice;
 use std::sync::Arc;
 
 use crate::attempt::{Attempt, AttemptAxis, AttemptSample, MovingAxisConfig};
+use crate::filtering::{EstimatorConfig, estimate_fixes};
 use crate::geo::{Coordinate, polyline_length};
 use crate::ghost::Ghost;
-use crate::gps::GpsFix;
+use crate::gps::{GpsFix, GpsTrace};
 use crate::live::{LiveConfig, LiveGhost, LiveRecorder};
 use crate::replay::{ReplaySession, ReplayState};
 use crate::route::{MatchConfig, Route, compare, compare_either_direction};
 use crate::synthetic::Rng;
 use crate::track::segments::compare_route_segments;
 use crate::track::{FilterConfig, MovingConfig, Track, TrackPoint};
-use crate::units::{Distance, Duration, Timestamp};
+use crate::units::{Distance, Duration, Speed, Timestamp};
 
 /// Success.
 const ST_OK: c_int = 0;
@@ -393,20 +394,42 @@ fn process_track(bytes: &[u8]) -> Result<Vec<u8>, String> {
 
     let track = Track::new(points).map_err(|e| e.to_string())?;
     let original = track.distance().meters();
-    let (filtered, _report) = track.filter(&FilterConfig::default());
-    let processed = filtered
+
+    // The FFI's point encoding has no accuracy/speed fields, so each point is
+    // offered to the promoted estimator as a bare fix with default accuracy.
+    // The layout and field order below are unchanged; only the values reflect
+    // the new production filter.
+    let fixes: Vec<GpsFix> = track
+        .points()
+        .iter()
+        .map(|point| GpsFix {
+            timestamp: point.timestamp(),
+            coordinate: point.coordinate(),
+            accuracy: point.accuracy().map(Distance::from_meters),
+            altitude: point.altitude(),
+            speed: point.speed().map(Speed::from_mps),
+            bearing: point.bearing(),
+        })
+        .collect();
+    let estimator_config = EstimatorConfig::production();
+    let adaptive = estimate_fixes(&fixes, &estimator_config);
+    let audit = GpsTrace::new(fixes)
+        .map_err(|e| e.to_string())?
+        .process_with(&FilterConfig::default(), &estimator_config)
+        .map_err(|e| e.to_string())?;
+    let processed = audit
+        .track
         .resample_by_distance(Distance::from_meters(25.0))
         .map_err(|e| e.to_string())?;
     let duration = track.duration().as_secs();
-    let moving = track.moving_duration(&MovingConfig::default()).as_secs();
 
     let mut w = Wr::default();
     w.u32(track.len() as u32);
     w.u32(processed.len() as u32);
     w.f64(original);
-    w.f64(processed.distance().meters());
+    w.f64(adaptive.distance.meters());
     w.f64(duration);
-    w.f64(moving);
+    w.f64(adaptive.moving.as_secs());
     Ok(w.data)
 }
 
@@ -1557,5 +1580,87 @@ mod tests {
             process_track,
         );
         assert_eq!(status, ST_ERROR);
+    }
+
+    #[test]
+    fn process_track_keeps_the_v1_layout_and_promoted_values() {
+        let id = "legacy-layout";
+        let raw = [
+            (52.5_f64, 13.4_f64, 0_i64),
+            (52.501, 13.4, 10_000),
+            (52.502, 13.4, 20_000),
+        ];
+
+        // In: str id, [points] where each point is lat, lon, has_altitude, ms.
+        let mut input = Wr::default();
+        input.u32(id.len() as u32);
+        input.data.extend_from_slice(id.as_bytes());
+        input.u32(raw.len() as u32);
+        for (lat, lon, ms) in raw {
+            input.f64(lat);
+            input.f64(lon);
+            input.u8(0);
+            input.i64(ms);
+        }
+
+        let output = process_track(&input.data).expect("process_track succeeds");
+        assert_eq!(output.len(), 40, "v1 output layout changed");
+
+        // Out: u32 input, u32 output, then four f64 axes in the original order.
+        let mut rd = Rd::new(&output);
+        let input_points = rd.u32().expect("input count");
+        let output_points = rd.u32().expect("output count");
+        let original = rd.f64().expect("original distance");
+        let processed = rd.f64().expect("processed distance");
+        let duration = rd.f64().expect("duration");
+        let moving = rd.f64().expect("moving time");
+        rd.done("process_track").expect("no trailing bytes");
+
+        let track = Track::new(
+            raw.iter()
+                .map(|&(lat, lon, ms)| {
+                    TrackPoint::new(
+                        Timestamp::from_unix_ms(ms),
+                        Coordinate::new(lat, lon).expect("valid coordinate"),
+                    )
+                })
+                .collect(),
+        )
+        .expect("valid track");
+        let fixes: Vec<GpsFix> = track
+            .points()
+            .iter()
+            .map(|point| GpsFix {
+                timestamp: point.timestamp(),
+                coordinate: point.coordinate(),
+                accuracy: None,
+                altitude: None,
+                speed: None,
+                bearing: None,
+            })
+            .collect();
+        let adaptive = estimate_fixes(&fixes, &EstimatorConfig::production());
+
+        assert_eq!(input_points, track.len() as u32);
+        // The resampled point count may exceed the input count; only the
+        // field's position and type are part of the v1 contract.
+        assert!(output_points > 0);
+        assert_eq!(original, track.distance().meters());
+        assert_eq!(processed, adaptive.distance.meters());
+        assert_eq!(duration, track.duration().as_secs());
+        assert_eq!(moving, adaptive.moving.as_secs());
+
+        // The promoted axis is genuinely different from the old resampled
+        // geodesic; a byte-stable layout must not hide value drift.
+        let (filtered, _) = track.filter(&FilterConfig::default());
+        let legacy = filtered
+            .resample_by_distance(Distance::from_meters(25.0))
+            .expect("resample")
+            .distance()
+            .meters();
+        assert!(
+            (processed - legacy).abs() > 1.0,
+            "processed={processed} legacy={legacy}"
+        );
     }
 }

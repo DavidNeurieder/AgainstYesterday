@@ -391,7 +391,10 @@ mod tests {
         let snap = s.advance(Duration::from_secs(15.0));
         assert_eq!(snap.state, ReplayState::Playing);
         assert_eq!(snap.applied_fixes, 2); // t=0, t=10
-        assert!(snap.distance.meters() > 40.0);
+        // The promoted estimator stages the first smoothed step, so neither
+        // distance nor moving time is banked yet. The raw position still proves
+        // the fixes were applied in time order; a third fix commits the step.
+        assert_eq!(snap.position, Some(coord(52.50050, 13.40000)));
     }
 
     #[test]

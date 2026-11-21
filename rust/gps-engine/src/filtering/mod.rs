@@ -1,12 +1,12 @@
 // Copyright (C) 2026 David Neurieder
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Optional adaptive GPS estimation, running in shadow mode by default.
+//! Adaptive GPS estimation, promoted to the production path after Gate B.
 //!
-//! The engine's existing filter stays the production path. This module adds a
-//! deterministic constant-velocity estimator that can be scored against ground
-//! truth before any promotion decision. Nothing here mutates raw fixes: each
-//! observation keeps its raw coordinate, quality input, and rejection reason.
+//! The estimator is deterministic and keeps raw fixes untouched: every
+//! observation retains its raw coordinate, quality input, and rejection reason.
+//! [`EstimatorConfig::legacy`] restores the pre-promotion filter semantics for
+//! diagnostics and contract tests; the default configuration uses the estimator.
 
 pub mod cadence;
 pub mod kalman;
@@ -23,13 +23,13 @@ pub use stationary::StationaryDetector;
 use crate::estimate::{Confidence, MotionState, PositionEstimate, VelocityEstimate};
 use crate::geo::{Coordinate, distance as geo_distance};
 use crate::gps::GpsFix;
-use crate::track::TrackPoint;
+use crate::track::{CursorConfig, FilterConfig, TrackPoint};
 use crate::units::{Distance, Duration, Speed, Timestamp};
 
 /// Configuration for the adaptive estimator.
 ///
-/// `enabled` is `false` by default: enabling it never changes the legacy
-/// filter, only calls to [`estimate_fixes`] use these settings.
+/// The default configuration is enabled after Gate B. [`EstimatorConfig::legacy`]
+/// is the opt-out diagnostic configuration that returns raw positions unchanged.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EstimatorConfig {
     /// Whether [`estimate_fixes`] smooths positions instead of passing them
@@ -65,7 +65,7 @@ pub struct EstimatorConfig {
 impl Default for EstimatorConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             max_accuracy: Distance::from_meters(50.0),
             max_speed: Speed::from_kmh(500.0),
             max_jump: Distance::from_meters(200.0),
@@ -83,11 +83,48 @@ impl Default for EstimatorConfig {
 }
 
 impl EstimatorConfig {
-    /// The shadow configuration used by the quality benchmark.
-    pub fn shadow() -> Self {
+    /// The promoted production configuration used by the engine's defaults.
+    pub fn production() -> Self {
+        Self::default()
+    }
+
+    /// The default-off diagnostic configuration used before Gate B.
+    pub fn legacy() -> Self {
         Self {
-            enabled: true,
+            enabled: false,
             ..Self::default()
+        }
+    }
+
+    /// The adaptive configuration used by the quality benchmark.
+    pub fn shadow() -> Self {
+        Self::production()
+    }
+
+    /// Adopts the hard safety ceilings of a legacy [`FilterConfig`].
+    ///
+    /// Quality grading and old callers express their limits as `Option`s where
+    /// `None` means "unlimited"; the estimator always needs a finite value, so
+    /// absent limits keep the production defaults.
+    pub fn from_filter(config: &FilterConfig) -> Self {
+        let mut adaptive = Self::production();
+        if let Some(max) = config.max_accuracy {
+            adaptive.max_accuracy = max;
+        }
+        if let Some(max) = config.max_speed {
+            adaptive.max_speed = max;
+        }
+        if let Some(max) = config.max_jump {
+            adaptive.max_jump = max;
+        }
+        adaptive
+    }
+
+    /// Adopts a live cursor's safety ceilings and motion floor.
+    pub fn from_cursor(config: &CursorConfig) -> Self {
+        Self {
+            motion_floor: config.motion_floor,
+            ..Self::from_filter(&config.filter)
         }
     }
 
@@ -212,8 +249,8 @@ pub struct AdaptiveResult {
 ///
 /// With [`EstimatorConfig::enabled`] set to `false` the result is a documented
 /// passthrough: positions are the raw coordinates, no innovation gating runs,
-/// and the distance axis is the plain geodesic sum. This keeps the shadow API
-/// safe to call from any consumer while leaving production behavior untouched.
+/// and the distance axis is the plain geodesic sum. That path is retained for
+/// diagnostics and contract tests; production uses the promoted default.
 pub fn estimate_fixes(fixes: &[GpsFix], config: &EstimatorConfig) -> AdaptiveResult {
     if fixes.is_empty() {
         return AdaptiveResult {
@@ -423,11 +460,53 @@ impl AdaptiveEstimator {
         self.previous_time = fix.timestamp;
     }
 
+    /// Distance on the adaptive axis, including the undecided final window.
+    pub fn distance(&self) -> Distance {
+        Distance::from_meters(self.accumulated_m + self.pending_distance_m)
+    }
+
+    /// Moving time on the adaptive axis, including the undecided final window.
+    pub fn moving(&self) -> Duration {
+        Duration::from_secs(self.moving_seconds + self.pending_seconds)
+    }
+
+    /// The most recent decision, with its raw position and estimate fields.
+    pub fn last_fix(&self) -> Option<&EstimatedFix> {
+        self.fixes.last()
+    }
+
+    /// Decision counts for this estimator instance.
+    pub fn report(&self) -> &AdaptiveReport {
+        &self.report
+    }
+
+    /// Adds previously banked totals, e.g. when resuming a paused live run.
+    pub fn seed_totals(&mut self, distance: Distance, moving: Duration) {
+        self.accumulated_m = distance.meters().max(0.0);
+        self.moving_seconds = moving.as_secs().max(0.0);
+    }
+
+    /// Credits a final `Unknown` window without consuming the estimator.
+    pub fn flush(&mut self) {
+        self.flush_pending();
+    }
+
     /// Consumes the estimator and returns all auditable output.
     ///
     /// Any final `Unknown` window is credited on the last fix so the sum of
     /// per-fix distances always matches the aggregate axis.
     pub fn finish(mut self) -> AdaptiveResult {
+        self.flush_pending();
+        AdaptiveResult {
+            fixes: self.fixes,
+            points: self.points,
+            distance: Distance::from_meters(self.accumulated_m),
+            moving: Duration::from_secs(self.moving_seconds),
+            report: self.report,
+        }
+    }
+
+    fn flush_pending(&mut self) {
         if self.pending_distance_m > 0.0 && self.pending_seconds > 0.0 {
             self.accumulated_m += self.pending_distance_m;
             self.moving_seconds += self.pending_seconds;
@@ -437,13 +516,6 @@ impl AdaptiveEstimator {
             }
             self.pending_distance_m = 0.0;
             self.pending_seconds = 0.0;
-        }
-        AdaptiveResult {
-            fixes: self.fixes,
-            points: self.points,
-            distance: Distance::from_meters(self.accumulated_m),
-            moving: Duration::from_secs(self.moving_seconds),
-            report: self.report,
         }
     }
 
@@ -555,6 +627,128 @@ impl AdaptiveEstimator {
     }
 }
 
+/// Incremental estimator for the live recorder.
+///
+/// It preserves the [`FilterCursor`](crate::track::FilterCursor) lifecycle —
+/// `add`, `flush`, `reset_chain`, `reset`, `seed` — while using the same
+/// estimator as the batch path after Gate B.
+#[derive(Debug, Clone)]
+pub struct AdaptiveCursor {
+    config: EstimatorConfig,
+    estimator: Option<AdaptiveEstimator>,
+    banked_distance_m: f64,
+    banked_moving_s: f64,
+    last_speed: Speed,
+}
+
+impl AdaptiveCursor {
+    /// Creates an empty cursor with banked totals of zero.
+    pub fn new(config: EstimatorConfig) -> Self {
+        AdaptiveCursor {
+            config,
+            estimator: None,
+            banked_distance_m: 0.0,
+            banked_moving_s: 0.0,
+            last_speed: Speed::ZERO,
+        }
+    }
+
+    /// Distance on the adaptive axis, including the undecided final window.
+    pub fn distance(&self) -> Distance {
+        let meters = self
+            .estimator
+            .as_ref()
+            .map_or(self.banked_distance_m, |estimator| {
+                estimator.distance().meters()
+            });
+        Distance::from_meters(meters)
+    }
+
+    /// Moving time on the adaptive axis, including the undecided final window.
+    pub fn moving(&self) -> Duration {
+        let seconds = self
+            .estimator
+            .as_ref()
+            .map_or(self.banked_moving_s, |estimator| {
+                estimator.moving().as_secs()
+            });
+        Duration::from_secs(seconds)
+    }
+
+    /// Speed of the most recent segment that earned ground, or zero.
+    pub fn last_speed(&self) -> Speed {
+        self.last_speed
+    }
+
+    /// Latest decision, for additive estimate fields on a live snapshot.
+    pub fn last_fix(&self) -> Option<&EstimatedFix> {
+        self.estimator.as_ref()?.last_fix()
+    }
+
+    /// Feeds one raw fix in timestamp order.
+    pub fn add(&mut self, fix: GpsFix) {
+        let config = self.config;
+        let banked = (self.banked_distance_m, self.banked_moving_s);
+        if let Some(estimator) = self.estimator.as_mut() {
+            estimator.add(fix);
+        } else {
+            let mut estimator = AdaptiveEstimator::new(fix, &config);
+            estimator.seed_totals(
+                Distance::from_meters(banked.0),
+                Duration::from_secs(banked.1),
+            );
+            self.estimator = Some(estimator);
+            self.banked_distance_m = 0.0;
+            self.banked_moving_s = 0.0;
+        }
+        self.update_speed();
+    }
+
+    /// Credits the final undecided window, mirroring a batch `finish`.
+    pub fn flush(&mut self) {
+        if let Some(estimator) = self.estimator.as_mut() {
+            estimator.flush();
+            self.update_speed();
+        }
+    }
+
+    /// Banks the current totals and forgets the chain, as a pause requires.
+    pub fn reset_chain(&mut self) {
+        if let Some(estimator) = self.estimator.take() {
+            self.banked_distance_m += estimator.distance().meters();
+            self.banked_moving_s += estimator.moving().as_secs();
+        }
+        self.last_speed = Speed::ZERO;
+    }
+
+    /// Clears both the chain and all banked totals.
+    pub fn reset(&mut self) {
+        self.banked_distance_m = 0.0;
+        self.banked_moving_s = 0.0;
+        self.estimator = None;
+        self.last_speed = Speed::ZERO;
+    }
+
+    /// Restores banked totals from a snapshot and drops any partial chain.
+    pub fn seed(&mut self, distance: Distance, moving: Duration) {
+        self.banked_distance_m = distance.meters().max(0.0);
+        self.banked_moving_s = moving.as_secs().max(0.0);
+        self.estimator = None;
+        self.last_speed = Speed::ZERO;
+    }
+
+    fn update_speed(&mut self) {
+        let last = self
+            .estimator
+            .as_ref()
+            .and_then(|estimator| estimator.last_fix());
+        self.last_speed = last
+            .filter(|fix| fix.distance_earned.meters() > 0.0)
+            .and_then(|fix| fix.velocity_estimate)
+            .map_or(Speed::ZERO, |velocity| velocity.speed());
+    }
+}
+
 /// Converts a raw fix to a track point at an estimated coordinate.
 fn track_point(fix: GpsFix, coordinate: Coordinate) -> Option<TrackPoint> {
     let mut point = TrackPoint::new(fix.timestamp, coordinate);
@@ -643,11 +837,13 @@ mod tests {
     }
 
     #[test]
-    fn default_config_is_a_documentary_passthrough() {
-        assert!(!EstimatorConfig::default().enabled);
+    fn default_config_is_promoted_and_legacy_still_passes_through() {
+        assert!(EstimatorConfig::default().enabled);
+        assert!(EstimatorConfig::production().enabled);
         assert!(EstimatorConfig::shadow().enabled);
+        assert!(!EstimatorConfig::legacy().enabled);
         let fixes = [fix(52.5, 13.4, 0), fix(52.501, 13.4, 2)];
-        let result = run(&fixes, EstimatorConfig::default());
+        let result = run(&fixes, EstimatorConfig::legacy());
         assert_eq!(result.fixes[0].coordinate, fixes[0].coordinate);
         assert_eq!(result.fixes[1].coordinate, fixes[1].coordinate);
         assert!(result.fixes.iter().all(|row| row.accepted));
@@ -716,5 +912,31 @@ mod tests {
         let result = run(&fixes, EstimatorConfig::shadow());
         assert!(result.report.gap_resets > 0);
         assert!(result.distance.meters() > 50.0);
+    }
+
+    #[test]
+    fn adaptive_cursor_matches_the_batch_estimator() {
+        let config = EstimatorConfig::shadow();
+        let mut fixes: Vec<GpsFix> = (0..12)
+            .map(|i| fix(52.5 + i as f64 * 0.000_05, 13.4, i))
+            .collect();
+        fixes.push(fix(52.5, 13.42, 12)); // rejected spike
+        fixes.extend((13..20).map(|i| fix(52.5 + i as f64 * 0.000_05, 13.4, i)));
+        fixes.push(fix(52.5 + 20.0 * 0.000_05, 13.4, 130)); // cadence gap
+        fixes.push(fix(52.5 + 21.0 * 0.000_05, 13.4, 131));
+
+        let batch = run(&fixes, config);
+        assert!(batch.report.rejected() > 0);
+        assert!(batch.report.gap_resets > 0);
+
+        let mut cursor = AdaptiveCursor::new(config);
+        for fix in &fixes {
+            cursor.add(*fix);
+        }
+        cursor.flush();
+
+        assert_eq!(cursor.distance(), batch.distance);
+        assert_eq!(cursor.moving(), batch.moving);
+        assert_eq!(cursor.last_fix(), batch.fixes.last());
     }
 }

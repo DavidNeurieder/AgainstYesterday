@@ -45,14 +45,27 @@ fn breakdown() -> DistanceBreakdown {
         .with_route(Distance::from_meters(97.0))
 }
 
-fn processed_sample() -> ProcessedSample {
-    let trace = GpsTrace::new(vec![
+fn trace() -> GpsTrace {
+    GpsTrace::new(vec![
         GpsFix::new(timestamp(0.0), coordinate()),
         GpsFix::new(timestamp(2.0), coordinate()),
     ])
-    .expect("two fixes");
-    trace
+    .expect("two fixes")
+}
+
+fn processed_sample() -> ProcessedSample {
+    trace()
         .process(&FilterConfig::matching())
+        .expect("process")
+        .samples
+        .into_iter()
+        .next()
+        .expect("one audit per fix")
+}
+
+fn legacy_processed_sample() -> ProcessedSample {
+    trace()
+        .process_legacy(&FilterConfig::matching())
         .expect("process")
         .samples
         .into_iter()
@@ -103,8 +116,8 @@ fn ghost_snapshot() -> GhostSnapshot {
 }
 
 #[test]
-fn host_types_start_without_estimates() {
-    let sample = processed_sample();
+fn unestimated_host_types_start_without_estimates() {
+    let sample = legacy_processed_sample();
     assert_eq!(sample.position_estimate(), None);
     assert_eq!(sample.velocity_estimate(), None);
     assert_eq!(sample.motion_state(), None);
@@ -131,8 +144,27 @@ fn host_types_start_without_estimates() {
 }
 
 #[test]
-fn builders_attach_estimates_without_touching_existing_fields() {
+fn production_paths_attach_estimates_without_replacing_raw_fields() {
     let sample = processed_sample();
+    assert_eq!(sample.sample.coordinate, coordinate());
+    assert!(sample.position_estimate().is_some());
+    assert!(sample.velocity_estimate().is_some());
+    assert!(sample.motion_state().is_some());
+
+    let mut recorder = LiveRecorder::new(LiveConfig::default(), None);
+    assert_eq!(recorder.snapshot().position_estimate(), None);
+    let fix = GpsFix::new(timestamp(0.0), coordinate());
+    recorder.push(fix);
+    let snapshot = recorder.snapshot();
+    assert_eq!(snapshot.position, Some(fix.coordinate));
+    assert!(snapshot.position_estimate().is_some());
+    assert!(snapshot.velocity_estimate().is_some());
+    assert!(snapshot.motion_state().is_some());
+}
+
+#[test]
+fn builders_attach_estimates_without_touching_existing_fields() {
+    let sample = legacy_processed_sample();
     let raw_fix = sample.sample;
     let attached = sample
         .with_position_estimate(position())

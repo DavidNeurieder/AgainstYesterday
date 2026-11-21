@@ -31,6 +31,7 @@ use std::fmt;
 
 use crate::error::{GpsError, TrackError};
 use crate::estimate::{MotionState, PositionEstimate, VelocityEstimate};
+use crate::filtering::{EstimatedFix, EstimatorConfig, ShadowRejection, estimate_fixes};
 use crate::geo::{Bearing, Coordinate};
 use crate::route::Route;
 use crate::track::{
@@ -73,7 +74,16 @@ impl GpsFix {
     /// Non-finite optional fields surface as [`TrackError`] rather than
     /// panicking.
     pub fn track_point(&self) -> Result<TrackPoint, TrackError> {
-        let mut point = TrackPoint::new(self.timestamp, self.coordinate);
+        self.track_point_at(self.coordinate)
+    }
+
+    /// Converts this fix into a point at a different (usually estimated)
+    /// coordinate while retaining every raw sensor field.
+    ///
+    /// Non-finite optional fields surface as [`TrackError`] rather than
+    /// panicking.
+    pub fn track_point_at(&self, coordinate: Coordinate) -> Result<TrackPoint, TrackError> {
+        let mut point = TrackPoint::new(self.timestamp, coordinate);
         if let Some(altitude) = self.altitude {
             point = point.with_altitude(altitude)?;
         }
@@ -354,11 +364,42 @@ impl GpsTrace {
         Ok(Track::new(points)?)
     }
 
-    /// Runs the full M15 pipeline: normalize → track → detailed filter.
+    /// Runs the full production pipeline: normalize → adaptive estimate →
+    /// auditable cleaned track.
     ///
     /// The returned [`TrackProcessing`] records a decision for every raw fix,
-    /// so nothing is silently erased.
+    /// so nothing is silently erased. [`FilterConfig`] still grades quality and
+    /// supplies the hard safety ceilings; the estimator's own motion rules
+    /// decide which fixes enter the cleaned track.
     pub fn process(&self, config: &FilterConfig) -> Result<TrackProcessing, GpsError> {
+        self.process_with(config, &EstimatorConfig::from_filter(config))
+    }
+
+    /// Runs the pre-promotion filter pipeline for contract tests and
+    /// diagnostics. Raw-fix auditing is identical; only the decision rule
+    /// changes.
+    pub fn process_legacy(&self, config: &FilterConfig) -> Result<TrackProcessing, GpsError> {
+        self.process_with(config, &EstimatorConfig::legacy())
+    }
+
+    /// Runs the audit pipeline with an explicit estimator configuration.
+    ///
+    /// A disabled estimator selects the legacy filter path unchanged. Enabled
+    /// estimators emit position, velocity and motion estimates on every sample
+    /// they evaluated.
+    pub fn process_with(
+        &self,
+        config: &FilterConfig,
+        estimator_config: &EstimatorConfig,
+    ) -> Result<TrackProcessing, GpsError> {
+        if estimator_config.enabled {
+            self.process_adaptive(config, estimator_config)
+        } else {
+            self.process_legacy_filter(config)
+        }
+    }
+
+    fn process_legacy_filter(&self, config: &FilterConfig) -> Result<TrackProcessing, GpsError> {
         // Every normalized (sorted + deduplicated) fix maps back to its index.
         // A raw fix that is absent here was an exact duplicate: rejected.
         let normalized = self.normalized();
@@ -369,10 +410,7 @@ impl GpsTrace {
             .map(|(index, fix)| ((fix.timestamp, fix.coordinate), index))
             .collect();
 
-        let track = self.to_track().map_err(|err| match err {
-            GpsError::Track(TrackError::TooFewPoints(_)) => GpsError::NoUsableTrack,
-            other => other,
-        })?;
+        let track = self.to_track().map_err(map_too_few_points)?;
         let (cleaned, mut report, filter_reasons) = filter_detailed(&track, config);
         // The filter reported on the *normalized* input; restate it in terms of
         // the raw stream so the log and the report always agree.
@@ -420,6 +458,147 @@ impl GpsTrace {
         })
     }
 
+    fn process_adaptive(
+        &self,
+        config: &FilterConfig,
+        estimator_config: &EstimatorConfig,
+    ) -> Result<TrackProcessing, GpsError> {
+        let normalized = self.normalized();
+        let raw_track = self.to_track().map_err(map_too_few_points)?;
+        let adaptive = estimate_fixes(&normalized.fixes, estimator_config);
+
+        let kept: HashSet<(Timestamp, Coordinate)> = normalized
+            .fixes
+            .iter()
+            .map(|fix| (fix.timestamp, fix.coordinate))
+            .collect();
+        let raw_by_key: HashMap<(Timestamp, Coordinate), &GpsFix> = normalized
+            .fixes
+            .iter()
+            .map(|fix| ((fix.timestamp, fix.coordinate), fix))
+            .collect();
+        let adaptive_by_key: HashMap<(Timestamp, Coordinate), &EstimatedFix> = adaptive
+            .fixes
+            .iter()
+            .map(|row| ((row.timestamp, row.raw_coordinate), row))
+            .collect();
+        let endpoint_key = normalized
+            .fixes
+            .last()
+            .map(|fix| (fix.timestamp, fix.coordinate));
+
+        // The endpoint is always preserved, even when the estimator rejects it:
+        // a recording must neither lose its finish nor depend on the last GPS
+        // wobble for the ghost gap.
+        let mut accepted_keys: HashSet<(Timestamp, Coordinate)> = HashSet::new();
+        let mut cleaned_points = Vec::with_capacity(adaptive.fixes.len());
+        for row in &adaptive.fixes {
+            let key = (row.timestamp, row.raw_coordinate);
+            let Some(raw) = raw_by_key.get(&key) else {
+                continue;
+            };
+            if !row.accepted && Some(key) != endpoint_key {
+                continue;
+            }
+            let point = raw
+                .track_point_at(row.coordinate)
+                .map_err(GpsError::Track)?
+                .with_position_estimate(row.position_estimate)
+                .with_velocity_estimate(row.velocity_estimate.unwrap_or_else(|| {
+                    // `emit` always supplies a velocity; keep the fallback
+                    // explicit so a future constructor change cannot break
+                    // the additive annotation contract.
+                    crate::estimate::VelocityEstimate::new(
+                        crate::units::Speed::ZERO,
+                        None,
+                        row.position_estimate.confidence(),
+                    )
+                }))
+                .with_motion_state(row.motion_state);
+            cleaned_points.push(point);
+            accepted_keys.insert(key);
+        }
+        if let Some(key) = endpoint_key
+            && !accepted_keys.contains(&key)
+        {
+            let raw = raw_by_key[&key];
+            cleaned_points.push(
+                raw.track_point_at(raw.coordinate)
+                    .map_err(GpsError::Track)?,
+            );
+            accepted_keys.insert(key);
+        }
+
+        let cleaned = Track::new(cleaned_points).map_err(map_track_too_few_points)?;
+        let report = ProcessingReport {
+            input_points: self.fixes.len(),
+            output_points: cleaned.len(),
+            // An exact duplicate is still an explicit rejection; it has no
+            // estimator row of its own.
+            removed_points: self.fixes.len().saturating_sub(cleaned.len()),
+            distance_before: raw_track.distance(),
+            distance_after: cleaned.distance(),
+        };
+
+        let mut samples = Vec::with_capacity(self.fixes.len());
+        for fix in &self.fixes {
+            let key = (fix.timestamp, fix.coordinate);
+            let row = adaptive_by_key.get(&key).copied();
+            let accepted = kept.contains(&key) && accepted_keys.contains(&key);
+            let reason = if !kept.contains(&key) {
+                Some(RejectionReason::Duplicate)
+            } else if accepted {
+                None
+            } else {
+                Some(RejectionReason::Filter(
+                    row.and_then(adaptive_rejection_reason)
+                        .unwrap_or(FilterReason::Invalid),
+                ))
+            };
+            samples.push(ProcessedSample {
+                sample: *fix,
+                quality: fix.quality(config),
+                accepted,
+                reason,
+                position_estimate: row.map(|row| row.position_estimate),
+                velocity_estimate: row.and_then(|row| row.velocity_estimate),
+                motion_state: row.map(|row| row.motion_state),
+            });
+        }
+
+        Ok(TrackProcessing {
+            track: cleaned,
+            report,
+            samples,
+        })
+    }
+}
+
+fn map_too_few_points(err: GpsError) -> GpsError {
+    match err {
+        GpsError::Track(TrackError::TooFewPoints(_)) => GpsError::NoUsableTrack,
+        other => other,
+    }
+}
+
+fn map_track_too_few_points(err: TrackError) -> GpsError {
+    match err {
+        TrackError::TooFewPoints(_) => GpsError::NoUsableTrack,
+        other => GpsError::Track(other),
+    }
+}
+
+fn adaptive_rejection_reason(row: &EstimatedFix) -> Option<FilterReason> {
+    match row.reason? {
+        ShadowRejection::TooInaccurate => Some(FilterReason::TooInaccurate),
+        ShadowRejection::ImpossibleSpeed => Some(FilterReason::ImpossibleSpeed),
+        ShadowRejection::Jump => Some(FilterReason::Jump),
+        ShadowRejection::Innovation => Some(FilterReason::Innovation),
+        ShadowRejection::NonMonotonicTime => Some(FilterReason::Invalid),
+    }
+}
+
+impl GpsTrace {
     /// Serializes the trace to the JSON fixture schema
     /// (`{"schema_version": 1, "fixes": [...]}`).
     pub fn to_json(&self) -> String {

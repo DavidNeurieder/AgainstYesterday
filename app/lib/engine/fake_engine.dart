@@ -20,6 +20,11 @@ import 'models.dart';
 /// All generated recordings follow one shared "river loop" route so matching
 /// results stay sensible and repeatable. Numerically this is a demo
 /// approximation, never a replacement for the real engine.
+///
+/// Its live cursor intentionally keeps the pre-promotion geodesic semantics.
+/// The Rust engine now uses the adaptive estimator on the same raw fixes, so
+/// smoothed distances may differ; only the C ABI wire layout is kept in parity.
+/// See `docs/rust_engine_implementation_plan.md` for the promotion record.
 class FakeEngineService implements EngineService {
   FakeEngineService({int seed = 42}) : _random = _SeededRandom(seed);
 

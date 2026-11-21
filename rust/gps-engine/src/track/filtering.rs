@@ -93,6 +93,10 @@ pub enum FilterReason {
     ImpossibleSpeed,
     /// Adjacent segments imply a faster-than-threshold movement (a spike).
     Jump,
+    /// The adaptive estimator's innovation gate rejected the observation.
+    Innovation,
+    /// The observation could not be converted to a valid track point.
+    Invalid,
 }
 
 impl std::fmt::Display for FilterReason {
@@ -101,6 +105,8 @@ impl std::fmt::Display for FilterReason {
             FilterReason::TooInaccurate => write!(f, "accuracy exceeded limit"),
             FilterReason::ImpossibleSpeed => write!(f, "speed exceeded limit"),
             FilterReason::Jump => write!(f, "impossible jump between neighbours"),
+            FilterReason::Innovation => write!(f, "innovation gate rejected the position"),
+            FilterReason::Invalid => write!(f, "observation was not a valid track point"),
         }
     }
 }

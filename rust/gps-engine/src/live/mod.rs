@@ -9,8 +9,8 @@
 //! the raw-fix buffer and rendering.
 //!
 //! Two distance axes are supported:
-//! - **free run** (no route): the engine-filtered geodesic axis, the same
-//!   `distance_after`/moving semantics as [`FilterCursor`].
+//! - **free run** (no route): the adaptive geodesic axis, fed incrementally by
+//!   [`AdaptiveCursor`] with the same estimator as the batch path.
 //! - **on route**: distance is the *coverage* of the recognised route, the
 //!   running maximum of each fix's projection along it (so a loop crossing or
 //!   receiver jump never rewinds progress). Moving time is gated by ground
@@ -21,12 +21,13 @@
 //! pause window never becomes distance or moving time.
 
 use crate::estimate::{DistanceBreakdown, MotionState, PositionEstimate, VelocityEstimate};
+use crate::filtering::{AdaptiveCursor, EstimatorConfig};
 use crate::geo::{Coordinate, distance};
 use crate::ghost::{GhostState, confidence_for_spacing};
 use crate::gps::GpsFix;
 use crate::route::{ContinuityConfig, MatchStatus, Route, RouteMatcher, RouteObservation};
 use crate::track::CursorConfig;
-use crate::track::filtering::{FilterCursor, fix_passes_sensor_checks};
+use crate::track::filtering::fix_passes_sensor_checks;
 use crate::units::{Distance, Duration, Speed};
 
 /// Configuration for a [`LiveRecorder`].
@@ -44,6 +45,13 @@ impl Default for LiveConfig {
             cursor: CursorConfig::default(),
             off_route_threshold: Distance::from_meters(30.0),
         }
+    }
+}
+
+impl LiveConfig {
+    /// The adaptive estimator settings derived from this run's live cursor.
+    fn estimator_config(&self) -> EstimatorConfig {
+        EstimatorConfig::from_cursor(&self.cursor)
     }
 }
 
@@ -320,9 +328,9 @@ pub struct LiveRecorder {
     route: Option<Route>,
     ghost: Option<LiveGhost>,
 
-    /// Free-run axis (also the engine's filter, used everywhere for sensor
-    /// acceptance and jump classification).
-    cursor: FilterCursor,
+    /// Free-run axis (also the engine's estimator, kept in sync in route mode
+    /// so snapshots always carry the latest estimate).
+    cursor: AdaptiveCursor,
 
     // Route-mode axes (independent of jump withholding, per the route rules).
     route_coverage: f64,
@@ -361,7 +369,7 @@ impl LiveRecorder {
             RouteMatcher::with_off_route(ContinuityConfig::default(), config.off_route_threshold)
         });
         LiveRecorder {
-            cursor: FilterCursor::new(config.cursor.clone()),
+            cursor: AdaptiveCursor::new(config.estimator_config()),
             config,
             route,
             ghost: None,
@@ -386,12 +394,19 @@ impl LiveRecorder {
         self.ghost = ghost;
     }
 
-    /// Feeds one raw fix. A sensor-rejected fix is ignored entirely.
+    /// Feeds one raw fix.
+    ///
+    /// Every fix goes to the estimator so its rejection is auditable and the
+    /// filter cannot be poisoned by an observation it never saw. Sensor-check
+    /// failures still do not advance route progress, active elapsed time, or
+    /// the reported raw position, matching the previous recorder contract.
     pub fn push(&mut self, fix: GpsFix) {
         if self.paused {
             return;
         }
-        if !fix_passes_sensor_checks(&fix, &self.config.cursor.filter) {
+        let sensor_ok = fix_passes_sensor_checks(&fix, &self.config.cursor.filter);
+        self.cursor.add(fix);
+        if !sensor_ok {
             return;
         }
 
@@ -405,8 +420,6 @@ impl LiveRecorder {
 
         if self.route.is_some() {
             self.push_route(fix);
-        } else {
-            self.cursor.add(fix);
         }
         self.last_fix = Some(fix);
     }
@@ -466,11 +479,6 @@ impl LiveRecorder {
 
         self.route_last_ground = Some(fix.coordinate);
         self.route_last_time = Some(fix.timestamp);
-
-        // Keep the filter's sensor/jump view in sync for diagnostics (e.g.
-        // holding-jump is meaningless on-route, but the cursor state stays
-        // coherent if a caller inspects it).
-        self.cursor.add(fix);
     }
 
     /// Banks the pause point and breaks the bridge: the next fix anchors a
@@ -588,7 +596,7 @@ impl LiveRecorder {
         if self.route.is_some() {
             self.route_pace
         } else {
-            self.cursor.last_segment_speed()
+            self.cursor.last_speed()
         }
     }
 
@@ -631,6 +639,18 @@ impl LiveRecorder {
             Some(MatchStatus::Reacquiring) => LiveMatchStatus::Reacquiring,
         };
 
+        let (position_estimate, velocity_estimate, motion_state) = self
+            .cursor
+            .last_fix()
+            .map(|row| {
+                (
+                    Some(row.position_estimate),
+                    row.velocity_estimate,
+                    Some(row.motion_state),
+                )
+            })
+            .unwrap_or((None, None, None));
+
         LiveSnapshot {
             distance: self.distance(),
             moving: self.moving(),
@@ -645,9 +665,9 @@ impl LiveRecorder {
             } else {
                 0.0
             },
-            position_estimate: None,
-            velocity_estimate: None,
-            motion_state: None,
+            position_estimate,
+            velocity_estimate,
+            motion_state,
             distance_breakdown: None,
         }
     }
@@ -705,17 +725,26 @@ mod tests {
     }
 
     #[test]
-    fn free_run_fixtures_distance_and_moving() {
-        // First fix anchors: distance/moving stay 0. Second books its segment.
+    fn free_run_distance_stages_until_motion_is_confirmed() {
+        // The first fix anchors. A single moving fix is still staged while the
+        // classifier gathers evidence; a sustained stride then earns the axis.
         let mut rec = free_run();
         rec.push(fix(52.500_00, 13.400_00, 0));
         assert_eq!(rec.distance().meters(), 0.0);
         assert_eq!(rec.moving().as_secs(), 0.0);
 
-        rec.push(fix(52.500_04, 13.400_00, 1));
         let step = 0.000_04 * METERS_PER_DEGREE;
-        assert!((rec.distance().meters() - step).abs() < 0.5);
+        rec.push(fix(52.500_04, 13.400_00, 1));
+        assert!(rec.distance().meters() > 0.0);
+        assert!(rec.distance().meters() < step);
         assert!((rec.moving().as_secs() - 1.0).abs() < 1e-9);
+
+        for second in 2..8 {
+            let lat = 52.500_00 + (second as f64) * 0.000_04;
+            rec.push(fix(lat, 13.400_00, second));
+        }
+        assert!((rec.distance().meters() - 7.0 * step).abs() < 1.0);
+        assert!((rec.moving().as_secs() - 7.0).abs() < 1e-9);
     }
 
     #[test]
@@ -732,39 +761,50 @@ mod tests {
     }
 
     #[test]
-    fn gps_dropout_bridges_chord() {
-        // 1000 m chord over 90 s (110 s moving total including the stride).
+    fn gps_gap_reanchors_without_bridging_chord() {
+        // A 90 s outage is a new chain, not a 1000 m movement segment. The
+        // estimator re-anchors on the first post-gap fix, so only subsequent
+        // strides earn distance and moving time.
         let mut rec = free_run();
         let base = 52.500_00;
-        // 0.009 degrees ~ 1000 m
         let fixes = [
             fix(base, 13.400_00, 0),
             fix(base + 0.001_00, 13.400_00, 10),  // ~111 m
             fix(base + 0.010_00, 13.400_00, 100), // 90 s gap, ~1000 m chord
             fix(base + 0.011_00, 13.400_00, 110), // ~111 m
+            fix(base + 0.012_00, 13.400_00, 120), // ~111 m
         ];
         for sample in fixes {
             rec.push(sample);
         }
-        let expected = 0.011 * METERS_PER_DEGREE;
         assert!(
-            (rec.distance().meters() - expected).abs() < 2.0,
-            "got {} expected {expected}",
+            rec.distance().meters() < 300.0,
+            "the outage chord was credited: {}",
             rec.distance().meters()
         );
-        assert!((rec.moving().as_secs() - 110.0).abs() < 1e-6);
+        assert!((rec.distance().meters() - 2.0 * 0.001 * METERS_PER_DEGREE).abs() < 15.0);
+        assert!((rec.moving().as_secs() - 20.0).abs() < 1e-6);
     }
 
     #[test]
-    fn gps_spike_drops_680m_spike() {
+    fn gps_spike_is_gated_and_the_chain_recovers() {
         let mut rec = free_run();
         rec.push(fix(52.500_00, 13.400_00, 1));
         rec.push(fix(52.501_00, 13.400_00, 11));
         rec.push(fix(52.501_00, 13.410_00, 21)); // ~680 m spike
         rec.push(fix(52.502_00, 13.400_00, 31));
+        // The estimator needs a short run of consistent fixes to re-anchor
+        // after the jump, then resumes from the recovered position.
+        rec.push(fix(52.503_00, 13.400_00, 41));
+        rec.push(fix(52.504_00, 13.400_00, 51));
+        rec.push(fix(52.505_00, 13.400_00, 61));
+
         let expected = 2.0 * 0.001 * METERS_PER_DEGREE;
-        assert!((rec.distance().meters() - expected).abs() < 1.0);
-        assert!((rec.moving().as_secs() - 30.0).abs() < 1e-6);
+        assert!((rec.distance().meters() - expected).abs() < 2.0);
+        assert!(
+            rec.distance().meters() < 400.0,
+            "the 680 m spike was credited"
+        );
     }
 
     #[test]
@@ -804,12 +844,15 @@ mod tests {
         assert!((rec.distance().meters() - before).abs() < 1e-9);
 
         rec.resume();
-        // Re-anchor: first fix after resume starts a fresh segment.
+        // Re-anchor: the first fix after resume cannot earn the pause window.
         rec.push(fix(52.501_00, 13.400_00, 70));
         assert!((rec.distance().meters() - before).abs() < 1e-9);
         rec.push(fix(52.502_00, 13.400_00, 80));
+        rec.push(fix(52.503_00, 13.400_00, 90));
+        rec.push(fix(52.504_00, 13.400_00, 100));
         assert!(rec.distance().meters() > before + 100.0);
-        // Only the 10 s stride after resume, not the 70 s gap.
+        // Only the post-resume strides, not the 30 s pause, are banked; the
+        // first two fixes after resume anchor and stage before earning.
         assert!((rec.moving().as_secs() - 20.0).abs() < 1e-6);
     }
 
@@ -823,14 +866,17 @@ mod tests {
     }
 
     #[test]
-    fn finish_commits_withheld_closing_chord() {
+    fn finish_keeps_the_endpoint_without_crediting_a_rejected_jump() {
         let mut rec = free_run();
+        let endpoint = fix(52.502_00, 13.400_00, 3);
         rec.push(fix(52.500_00, 13.400_00, 1));
-        rec.push(fix(52.502_00, 13.400_00, 3)); // lone long jump, withheld
+        rec.push(endpoint); // lone long jump, rejected by the estimator
         assert_eq!(rec.distance().meters(), 0.0);
         rec.finish();
-        let expected = 0.002 * METERS_PER_DEGREE;
-        assert!((rec.distance().meters() - expected).abs() < 1.0);
+        // The raw endpoint remains observable, but an implausible closing
+        // chord does not become recorded distance.
+        assert_eq!(rec.snapshot().position, Some(endpoint.coordinate));
+        assert_eq!(rec.distance().meters(), 0.0);
     }
 
     #[test]

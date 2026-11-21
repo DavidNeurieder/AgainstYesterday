@@ -107,7 +107,8 @@ pub use estimate::{
 };
 pub use evaluate::{ConfusionMatrix, LabeledPair, evaluate, parse_manifest, standard_pipeline};
 pub use filtering::{
-    AdaptiveEstimator, AdaptiveReport, AdaptiveResult, EstimatedFix, EstimatorConfig,
+    AdaptiveCursor, AdaptiveEstimator, AdaptiveReport, AdaptiveResult, EstimatedFix,
+    EstimatorConfig,
 };
 pub use geo::{Bearing, Coordinate, PolylineBounds, Projection};
 pub use ghost::{

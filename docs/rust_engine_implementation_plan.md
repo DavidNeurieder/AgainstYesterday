@@ -15,10 +15,12 @@ Scope: `rust/gps-engine` and the contracts consumed by
 `app/lib/engine/engine_service.dart`, `app/lib/engine/models.dart`, and
 `app/lib/engine/fake_engine.dart`.
 
-Status: phases 0.1–0.2, 0.3, and the Phase 1 shadow estimator are implemented.
-Gate A passed and Gate B has been measured below. The adaptive filter is still
-default-off (`EstimatorConfig::default().enabled == false`); production behavior,
-the C ABI, and Dart code are unchanged. Phases 2–5 are not started.
+Status: phases 0.1–0.3 and Phase 1 are implemented, including Gate B promotion.
+`EstimatorConfig::default().enabled == true`; `EstimatorConfig::legacy()` keeps
+the old passthrough for diagnostics. The promoted estimator now drives batch
+processing, `gps_process_track`, and the live recorder. The C ABI v1 wire layout
+and Dart decoders are unchanged; `FakeEngineService` intentionally keeps the
+pre-promotion demo semantics. Phases 2–5 are not started.
 
 ## 1. Review conclusion
 
@@ -225,9 +227,10 @@ Algorithm:
 
 ### 1.2 Shadow mode before promotion
 
-Add `EstimatorConfig` with a default-off adaptive mode. Run the estimator
-alongside the existing filter, record both results in the quality report, and
-compare per-scenario metrics first.
+`EstimatorConfig` first shipped default-off: the estimator ran alongside the
+existing filter, both results were recorded in the quality report, and the
+per-scenario metrics below were compared before promotion. The default is now
+enabled; `legacy()` preserves the old path.
 
 Acceptance for promotion:
 
@@ -241,9 +244,9 @@ Acceptance for promotion:
   scenarios by a documented threshold.
 - No regression beyond an agreed tolerance in clean distance error, corner
   error, false movement, or recovery time.
-- Live `FilterCursor` and batch filtering use the same estimator semantics;
-  `LiveSnapshot` exposes the new motion state without changing existing
-  distance behavior.
+- Live `AdaptiveCursor` and batch filtering use the same estimator semantics;
+  `LiveSnapshot` exposes the new motion state, and the documented distance
+  axes now reflect the promoted estimator.
 
 **Gate B:** promote the adaptive filter to the default only after the shadow
 report justifies it. If it does not, keep it as an opt-in diagnostic and do not
@@ -294,9 +297,8 @@ Recovery time is unchanged, stationary false movement drops from 420 m to
 `sparse` (2.25% → 10.42%, +8.17 percentage points): its 45 s cadence is too
 coarse for a stale-velocity prediction to be trusted, so one interval is staged
 until the next accepted fix. Clean position RMSE rises from 0 to 0.61 m; every
-noisy/outage RMSE improves or stays equal. The shadow report is therefore
-recommended for promotion, with live/batch semantic parity and ABI versioning
-handled as part of the promotion change, not in the shadow phase.
+noisy/outage RMSE improves or stays equal. That justified the promotion
+recorded in §1.4.
 
 `rust/gps-engine/testdata/baselines/gps_quality_v1.json` was regenerated from
 the final tuning with:
@@ -308,7 +310,45 @@ cargo run -q -p gps-engine --bin gps-engine -- quality --json \
 
 `rust/gps-engine/tests/quality_benchmark.rs` now checks that every scenario has
 finite shadow metrics, a nested `"shadow"` JSON object, and exactly one
-accepted or rejected decision per observed fix.
+accepted or rejected decision per observed fix. The baseline file itself did
+not change at promotion: `quality_metrics` still scores with the same algorithm
+through `EstimatorConfig::shadow()`.
+
+### 1.4 Promotion integration (completed)
+
+- `GpsTrace::process()` now runs the adaptive estimator and attaches
+  position/velocity/motion estimates to audit rows and cleaned track points.
+  `process_legacy()` and `process_with()` keep the old filter and explicit
+  configuration available for diagnostics and contract tests. One decision per
+  raw fix and the rejection-reason model are unchanged.
+- A rejected interior fix is not a distance anchor; the final timestamp is
+  always kept at its estimated coordinate so a closing GPS wobble cannot create
+  a fake finish chord. `tests/promotion.rs` pins both behaviors.
+- `AdaptiveCursor` replaces `FilterCursor` in `LiveRecorder`. A unit test feeds
+  the same fixes (including a spike and a cadence gap) through the incremental
+  cursor and the batch estimator and compares their final distance, moving
+  time, and last decision exactly.
+- Live semantics that changed deliberately: the first moving segment is staged
+  until motion is confirmed; long gaps re-anchor without bridging the missing
+  chord; a rejected spike does not earn distance or moving time; and a
+  sensor-rejected fix is still fed to the estimator for audit but cannot
+  advance route coverage, active elapsed time, or the raw snapshot position.
+  Route coverage and its matching/ghost axes remain unchanged.
+- `gps_process_track` now returns adaptive distance and moving time while
+  keeping the exact v1 field order, widths, status codes, and buffer ownership.
+  `gps_capi_version` was not bumped because no field was added or reordered.
+  A golden test decodes all 40 output bytes and checks the values against a
+  direct `estimate_fixes` run.
+- `app/lib/engine/gps_ffi.dart` and `app/lib/engine/rust_engine_service.dart`
+  need no decoder change. `FakeEngineService` remains a deterministic demo
+  approximation with the pre-promotion cursor semantics; numeric parity with
+  the native estimator is intentionally not maintained. ABI layout parity is.
+
+Verification after promotion: `cargo fmt --all --check`,
+`cargo test --all-features`, `cargo clippy --all-targets --all-features -- -D
+warnings`, `cargo doc --no-deps`, `git diff --check`, `flutter analyze`, and
+`flutter test` all pass. No F-Droid or on-device E2E run was performed in this
+change.
 
 ## 5. Phase 2 — matching and ghost confidence
 
