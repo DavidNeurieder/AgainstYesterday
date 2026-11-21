@@ -182,11 +182,12 @@ jobs:
           name: libgps_engine-${{ matrix.abi }}
           path: app/android/app/src/main/jniLibs/${{ matrix.abi }}/libgps_engine.so
 
-  # One narrow native-engine smoke per PR. The wider device matrix (API 24/34/
-  # 36, real receiver, permissions, process death, MapLibre) stays in
-  # nightly.yml: hosted emulators were flaky when every PR ran all of it.
+  # The native-engine PR smoke stays disabled: the GitHub-hosted emulator again
+  # timed out before booting. The wider device matrix (API 24/34/36, real
+  # receiver, permissions, process death, MapLibre) remains in nightly.yml.
   android-engine-smoke:
     name: android engine smoke (API 34)
+    if: false  # disabled: GitHub-hosted emulator/adb is flaky; re-enable when stable
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:

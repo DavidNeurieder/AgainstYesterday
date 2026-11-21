@@ -2,8 +2,9 @@ name: nightly
 
 # The Android runs that are too slow for every PR: the full API matrix, the real
 # receiver, permissions, process death, MapLibre and a repeated full journey to
-# surface flakiness. PR CI keeps one narrow native-engine smoke; this workflow
-# keeps the whole matrix. Manual dispatch is available for on-demand checks.
+# surface flakiness. PR CI's native-engine smoke is currently disabled because
+# the hosted emulator times out; this workflow keeps the whole matrix. Manual
+# dispatch is available for on-demand checks.
 #
 # These jobs exercise the deterministic fake engine by default (USE_RUST_ENGINE
 # is left unset, so the app falls back when no cdylib is present). The `engine`
