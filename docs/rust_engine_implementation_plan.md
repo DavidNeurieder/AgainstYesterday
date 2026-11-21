@@ -21,14 +21,14 @@ true`; `EstimatorConfig::legacy()` keeps the old passthrough for diagnostics.
 The promoted estimator drives batch processing, `gps_process_track`, and the
 live recorder. Phase 2 fixed the stale recovery anchor and exposed independent
 ghost-confidence evidence. Rolling pace replaces the two-fix pace in the live
-snapshot and in benchmark scoring. A robust elevation estimator is available as
-an additive Rust API and is benchmark-gated, but analytics/Python/Dart/UI
-exposure remains a follow-up. The C ABI v1 prefix is unchanged: Phase 2 appended
-ghost evidence, and later work added only Rust-side fields. Dart decoders remain
-backward-compatible; `FakeEngineService` intentionally keeps the pre-promotion
-live-cursor numeric semantics. Remaining Phase 3 items (first-class
-`DistanceBreakdown` exposure, elevation exposure in analytics/UI, rolling-best
-pace, and typed outage summaries) and Phases 4–5 are not started.
+snapshot and in benchmark scoring. Robust elevation is exposed additively as
+`robust_elevation_gain_m`/`robust_elevation_loss_m` in analytics JSON, Python,
+Dart and the UI; raw sums remain available for audit. The C ABI v1 prefix is
+unchanged because analytics travels as an opaque JSON string. Dart decoders
+remain backward-compatible; `FakeEngineService` intentionally keeps the
+pre-promotion live-cursor numeric semantics. Remaining Phase 3 items
+(first-class `DistanceBreakdown` exposure, rolling-best pace, and typed outage
+summaries) and Phases 4–5 are not started.
 
 ## 1. Review conclusion
 
@@ -610,10 +610,12 @@ intervals reduced mean gain/loss error from 3041.6/3040.6 m to 177.6/171.0 m
 with maximum errors of 940.3/929.2 m. The initial 9-sample/3.0 m setting failed
 the 100 m gate at 117.609 m gain error; the selected setting passed.
 
-This is deliberately a Rust-side improvement. Analytics JSON, Python, Dart and
-the UI still expose the raw gain/loss fields, so no FFI payload, JSON key, or
-fake/Rust display parity changed. Exposing `ElevationBreakdown` additively in
-those layers is the remaining integration step.
+The estimator is exposed additively as `robust_elevation_gain_m` and
+`robust_elevation_loss_m` in analytics JSON, Python, Dart and the UI. The raw
+gain/loss fields remain unchanged for audit. Analytics travels as an opaque
+JSON string through the C ABI, so no FFI payload field was inserted or
+reordered; Dart decoders fall back to the raw fields for older engines, and the
+fake mirrors the Rust window/threshold.
 
 Verification after the combined rolling-pace and elevation work:
 `cargo fmt --all --check`, `cargo test --all-features`, `cargo clippy

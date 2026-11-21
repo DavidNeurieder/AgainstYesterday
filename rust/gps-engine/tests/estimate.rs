@@ -248,3 +248,39 @@ fn attaching_estimates_does_not_change_analytics() {
         TrackAnalytics::from_track(&annotated, &MovingConfig::default())
     );
 }
+
+#[test]
+fn analytics_exposes_robust_elevation_additively() {
+    let altitudes = [
+        0.0, 2.0, 0.0, 2.0, 0.0, 2.0, 0.0, 2.0, 10.0, 20.0, 30.0, 40.0, 40.0, 40.0, 30.0, 20.0,
+        10.0, 0.0, 0.0, 0.0,
+    ];
+    let points = altitudes
+        .iter()
+        .enumerate()
+        .map(|(index, altitude)| {
+            let latitude = 52.5 + index as f64 / 111_195.0;
+            TrackPoint::new(
+                timestamp(index as f64),
+                Coordinate::new(latitude, 13.4).expect("valid coordinate"),
+            )
+            .with_altitude(*altitude)
+            .expect("valid altitude")
+        })
+        .collect();
+    let track = Track::new(points).expect("valid track");
+    let analytics = TrackAnalytics::from_track(&track, &MovingConfig::default());
+
+    let raw_gain = analytics.elevation_gain_m.expect("raw gain");
+    let robust_gain = analytics.robust_elevation_gain_m.expect("robust gain");
+    assert!(
+        raw_gain > robust_gain,
+        "raw {raw_gain}, robust {robust_gain}"
+    );
+    assert!(robust_gain > 0.0);
+    assert!(analytics.robust_elevation_loss_m.expect("robust loss") > 0.0);
+
+    let json = analytics.to_json();
+    assert!(json.contains("\"robust_elevation_gain_m\":"));
+    assert!(json.contains("\"robust_elevation_loss_m\":"));
+}

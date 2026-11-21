@@ -652,10 +652,10 @@ class _ReplayAnalysisPanelState extends ConsumerState<ReplayAnalysisPanel> {
               'Max speed ${a.maxSpeedMps == null ? '—' : '${(a.maxSpeedMps! * 3.6).toStringAsFixed(1)} km/h'}',
               style: textTheme.bodySmall,
             ),
-            if (a.elevationGainMeters != null)
+            if (a.displayElevationGainMeters != null)
               Text(
-                'Elev +${a.elevationGainMeters!.toStringAsFixed(0)} / '
-                '-${a.elevationLossMeters?.toStringAsFixed(0) ?? '0'} m',
+                'Elev +${a.displayElevationGainMeters!.toStringAsFixed(0)} / '
+                '-${a.displayElevationLossMeters?.toStringAsFixed(0) ?? '0'} m',
                 style: textTheme.bodySmall?.copyWith(
                   color: AppColors.textSecondary,
                 ),

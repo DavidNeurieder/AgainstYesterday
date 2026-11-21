@@ -175,9 +175,11 @@ and read-only properties listed here.
 `elapsed_time_ms`, `moving_time_ms`, `paused_time_ms`, `stopped_time_ms`,
 `average_pace_ms_per_km`, `average_speed_mps`, `moving_speed_mps`,
 `max_speed_mps`, `best_pace_ms_per_km`, `smoothed_best_pace_ms_per_km`,
-`elevation_gain_m`, `elevation_loss_m`, `elevation_min_m`, `elevation_max_m`,
-`pace_samples`, `smoothed_pace_samples`, `elevation_samples`, `quality`, and
-`to_json() -> str`. `quality` is an `AnalyticsQuality` with `accepted_samples`,
+`elevation_gain_m`, `elevation_loss_m`, `robust_elevation_gain_m`,
+`robust_elevation_loss_m`, `elevation_min_m`, `elevation_max_m`, `pace_samples`,
+`smoothed_pace_samples`, `elevation_samples`, `quality`, and `to_json() -> str`.
+The `robust_*` fields use a median filter and a 1 m dead band; the raw sums stay
+available for audit. `quality` is an `AnalyticsQuality` with `accepted_samples`,
 `rejected_samples`, `coverage_ratio`, `gps_gap_count`,
 `has_sufficient_distance`, and `has_elevation_data`.
 

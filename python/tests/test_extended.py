@@ -1,6 +1,8 @@
 # Copyright (C) 2026 David Neurieder
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
+import json
+
 import pytest
 
 import against_yesterday as ay
@@ -14,6 +16,32 @@ def sample_gpx() -> str:
     <trkpt lat="52.50050" lon="13.40000"><time>2024-01-01T10:00:10.000Z</time></trkpt>
     <trkpt lat="52.50100" lon="13.40000"><time>2024-01-01T10:00:20.000Z</time></trkpt>
     <trkpt lat="52.50150" lon="13.40000"><time>2024-01-01T10:00:30.000Z</time></trkpt>
+  </trkseg></trk>
+</gpx>
+"""
+
+
+def noisy_altitude_gpx() -> str:
+    altitudes = [
+        0, 2, 0, 2, 0, 2, 0, 2, 10, 20, 30, 40,
+        40, 40, 30, 20, 10, 0, 0, 0,
+    ]
+    points = "\n".join(
+        '<trkpt lat="{lat:.5f}" lon="13.40000">'
+        "<ele>{alt}</ele>"
+        "<time>2024-01-01T10:{minute:02d}:{second:02d}.000Z</time>"
+        "</trkpt>".format(
+            lat=52.5 + index * 0.00001,
+            alt=alt,
+            minute=index // 60,
+            second=index % 60,
+        )
+        for index, alt in enumerate(altitudes)
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>altitude</name><trkseg>
+{points}
   </trkseg></trk>
 </gpx>
 """
@@ -61,6 +89,16 @@ def test_analytics():
     assert analytics.distance_m > 0
     assert isinstance(analytics.to_json(), str)
     assert analytics.quality.accepted_samples == track.point_count
+
+
+def test_analytics_reports_robust_elevation():
+    analytics = ay.parse_gpx(noisy_altitude_gpx()).analytics()
+    assert analytics.elevation_gain_m > analytics.robust_elevation_gain_m
+    assert analytics.robust_elevation_gain_m > 0
+    assert analytics.robust_elevation_loss_m > 0
+    payload = json.loads(analytics.to_json())
+    assert "robust_elevation_gain_m" in payload
+    assert "robust_elevation_loss_m" in payload
 
 
 def test_live_recorder_and_replay():

@@ -537,11 +537,11 @@ class _ElevationSummarySectionState
       if (s.elevationMaxMeters case final v?) {
         maxV = maxV == null ? v : (v > maxV ? v : maxV);
       }
-      if (s.elevationGainMeters case final v?) {
+      if (s.displayElevationGainMeters case final v?) {
         gainSum += v;
         gainCount++;
       }
-      if (s.elevationLossMeters case final v?) {
+      if (s.displayElevationLossMeters case final v?) {
         lossSum += v;
         lossCount++;
       }

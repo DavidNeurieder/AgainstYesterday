@@ -2311,6 +2311,10 @@ struct PyTrackAnalytics {
     #[pyo3(get)]
     elevation_loss_m: Option<f64>,
     #[pyo3(get)]
+    robust_elevation_gain_m: Option<f64>,
+    #[pyo3(get)]
+    robust_elevation_loss_m: Option<f64>,
+    #[pyo3(get)]
     elevation_min_m: Option<f64>,
     #[pyo3(get)]
     elevation_max_m: Option<f64>,
@@ -2356,6 +2360,8 @@ impl From<RustTrackAnalytics> for PyTrackAnalytics {
             smoothed_best_pace_ms_per_km: a.smoothed_best_pace_ms_per_km,
             elevation_gain_m: a.elevation_gain_m,
             elevation_loss_m: a.elevation_loss_m,
+            robust_elevation_gain_m: a.robust_elevation_gain_m,
+            robust_elevation_loss_m: a.robust_elevation_loss_m,
             elevation_min_m: a.elevation_min_m,
             elevation_max_m: a.elevation_max_m,
             pace_samples: a.pace_samples,

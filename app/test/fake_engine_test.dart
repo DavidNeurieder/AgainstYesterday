@@ -53,6 +53,41 @@ void main() {
       expect(first.duration.format(), second.duration.format());
     });
 
+    test('analytics keeps raw elevation and adds robust totals', () async {
+      final altitudes = [
+        0.0, 2.0, 0.0, 2.0, 0.0, 2.0, 0.0, 2.0, 10.0, 20.0, 30.0, 40.0,
+        40.0, 40.0, 30.0, 20.0, 10.0, 0.0, 0.0, 0.0,
+      ];
+      final points = [
+        for (var i = 0; i < altitudes.length; i++)
+          TrackPoint(
+            position: GeoPoint(
+              latitude: 52.5 + i * 0.00001,
+              longitude: 13.4,
+            ),
+            altitudeMeters: altitudes[i],
+            timestamp: DateTime.fromMillisecondsSinceEpoch(i * 1000),
+          ),
+      ];
+
+      final analytics = await FakeEngineService().analyzeTrack(points: points);
+      expect(analytics.elevationGainMeters, greaterThan(0));
+      expect(
+        analytics.robustElevationGainMeters,
+        lessThan(analytics.elevationGainMeters!),
+      );
+      expect(analytics.robustElevationGainMeters, greaterThan(0));
+      expect(analytics.robustElevationLossMeters, greaterThan(0));
+      expect(
+        analytics.displayElevationGainMeters,
+        analytics.robustElevationGainMeters,
+      );
+      expect(
+        analytics.displayElevationLossMeters,
+        analytics.robustElevationLossMeters,
+      );
+    });
+
     test('matching: same route matches, different geometry does not', () async {
       final engine = FakeEngineService();
       final a = engine.generateRecording();

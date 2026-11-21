@@ -261,6 +261,7 @@ class FakeEngineService implements EngineService {
       }
     }
     final hasAlt = points.any((p) => p.altitudeMeters != null);
+    final altitudes = [for (final p in points) p.altitudeMeters];
     return TrackAnalytics(
       distanceMeters: distance,
       elapsedTimeMs: (elapsed * 1000).round(),
@@ -286,6 +287,10 @@ class FakeEngineService implements EngineService {
       smoothedBestPaceMsPerKm: null,
       elevationGainMeters: hasAlt ? gain : null,
       elevationLossMeters: hasAlt ? loss : null,
+      robustElevationGainMeters:
+          hasAlt ? _robustElevationChange(altitudes, gain: true) : null,
+      robustElevationLossMeters:
+          hasAlt ? _robustElevationChange(altitudes, gain: false) : null,
       elevationMinMeters: minAlt,
       elevationMaxMeters: maxAlt,
       quality: TrackAnalyticsQuality(
@@ -1578,4 +1583,39 @@ double? _routeTrend(List<Activity> attempts) {
     return null;
   }
   return num / den;
+}
+
+const _robustElevationWindow = 13;
+const _robustElevationThresholdM = 1.0;
+
+/// Mirrors the Rust engine's median-filtered elevation breakdown so the fake
+/// and real services expose the same additive fields.
+double _robustElevationChange(List<double?> altitudes, {required bool gain}) {
+  final half = _robustElevationWindow ~/ 2;
+  var total = 0.0;
+  for (var i = 1; i < altitudes.length; i++) {
+    final previous = _windowMedian(altitudes, i - 1, half);
+    final current = _windowMedian(altitudes, i, half);
+    if (previous == null || current == null) continue;
+    final delta = current - previous;
+    if (gain && delta > _robustElevationThresholdM) {
+      total += delta;
+    } else if (!gain && delta < -_robustElevationThresholdM) {
+      total -= delta;
+    }
+  }
+  return total;
+}
+
+double? _windowMedian(List<double?> altitudes, int center, int half) {
+  final lo = (center - half).clamp(0, altitudes.length).toInt();
+  final hi = (center + half + 1).clamp(0, altitudes.length).toInt();
+  final values = [
+    for (var i = lo; i < hi; i++) altitudes[i],
+  ].whereType<double>().toList()..sort();
+  if (values.isEmpty) return null;
+  final mid = values.length ~/ 2;
+  return values.length.isOdd
+      ? values[mid]
+      : (values[mid - 1] + values[mid]) / 2.0;
 }

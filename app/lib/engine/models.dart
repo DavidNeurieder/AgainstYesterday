@@ -845,6 +845,8 @@ class TrackAnalytics {
     this.smoothedBestPaceMsPerKm,
     this.elevationGainMeters,
     this.elevationLossMeters,
+    this.robustElevationGainMeters,
+    this.robustElevationLossMeters,
     this.elevationMinMeters,
     this.elevationMaxMeters,
     this.paceSamples = const [],
@@ -865,6 +867,8 @@ class TrackAnalytics {
   final int? bestPaceMsPerKm;
   final double? elevationGainMeters;
   final double? elevationLossMeters;
+  final double? robustElevationGainMeters;
+  final double? robustElevationLossMeters;
   final double? elevationMinMeters;
   final double? elevationMaxMeters;
   final List<({double distanceMeters, int paceMsPerKm})> paceSamples;
@@ -872,6 +876,16 @@ class TrackAnalytics {
   final int? smoothedBestPaceMsPerKm;
   final List<({double distanceMeters, double elevationMeters})> elevationSamples;
   final TrackAnalyticsQuality quality;
+
+  /// Best available elevation gain: robust when the engine reported it, raw
+  /// when talking to an older engine or a minimal fake.
+  double? get displayElevationGainMeters =>
+      robustElevationGainMeters ?? elevationGainMeters;
+
+  /// Best available elevation loss: robust when the engine reported it, raw
+  /// when talking to an older engine or a minimal fake.
+  double? get displayElevationLossMeters =>
+      robustElevationLossMeters ?? elevationLossMeters;
 }
 
 class TrackAnalyticsQuality {

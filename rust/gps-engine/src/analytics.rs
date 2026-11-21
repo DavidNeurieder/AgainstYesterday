@@ -9,12 +9,11 @@
 //!
 //! The top-level distance and pace fields keep their current meanings. The
 //! additive uncertainty contracts in [`crate::estimate`] are deliberately not
-//! serialized here yet, so existing JSON consumers see no new keys.
+//! serialized here yet. Robust elevation totals are additive JSON keys; the
+//! raw gain/loss fields and all prior keys keep their existing meanings.
 
 use crate::geo::{Coordinate, distance};
-use crate::track::MovingConfig;
-use crate::track::Track;
-use crate::track::TrackPoint;
+use crate::track::{MovingConfig, Track, TrackPoint, elevation};
 use crate::units::Timestamp;
 
 /// Quality summary for a track's GPS observations.
@@ -63,10 +62,14 @@ pub struct TrackAnalytics {
     pub max_speed_mps: Option<f64>,
     /// Best pace in ms/km.
     pub best_pace_ms_per_km: Option<u64>,
-    /// Elevation gain in meters.
+    /// Elevation gain in meters, summing every positive altitude step.
     pub elevation_gain_m: Option<f64>,
-    /// Elevation loss in meters.
+    /// Elevation loss in meters, summing every negative altitude step.
     pub elevation_loss_m: Option<f64>,
+    /// Noise-tolerant elevation gain in meters, kept additive to the raw sum.
+    pub robust_elevation_gain_m: Option<f64>,
+    /// Noise-tolerant elevation loss in meters, kept additive to the raw sum.
+    pub robust_elevation_loss_m: Option<f64>,
     /// Minimum elevation in meters.
     pub elevation_min_m: Option<f64>,
     /// Maximum elevation in meters.
@@ -123,6 +126,8 @@ impl TrackAnalytics {
 
         let elevation_gain = Some(track.elevation_gain());
         let elevation_loss = Some(track.elevation_loss());
+        let robust_elevation_gain = Some(elevation::gain(track));
+        let robust_elevation_loss = Some(elevation::loss(track));
         let (elev_min, elev_max) = elevation_range(track);
 
         let pace_samples = pace_samples(track, 100.0);
@@ -166,6 +171,8 @@ impl TrackAnalytics {
             best_pace_ms_per_km: best_pace,
             elevation_gain_m: elevation_gain,
             elevation_loss_m: elevation_loss,
+            robust_elevation_gain_m: robust_elevation_gain,
+            robust_elevation_loss_m: robust_elevation_loss,
             elevation_min_m: elev_min,
             elevation_max_m: elev_max,
             pace_samples,
@@ -199,7 +206,7 @@ impl TrackAnalytics {
             .collect::<Vec<_>>()
             .join(",");
         format!(
-            r#"{{"distance_m":{d},"elapsed_time_ms":{et},"moving_time_ms":{mt},"paused_time_ms":{pt},"stopped_time_ms":{st},"average_pace_ms_per_km":{ap},"average_speed_mps":{as},"moving_speed_mps":{ms},"max_speed_mps":{mx},"best_pace_ms_per_km":{bp},"smoothed_best_pace_ms_per_km":{sbp},"elevation_gain_m":{eg},"elevation_loss_m":{el},"elevation_min_m":{emin},"elevation_max_m":{emax},"pace_samples":[{pace}],"smoothed_pace_samples":[{smoothed_pace}],"elevation_samples":[{elev}],"quality":{{"accepted_samples":{asmp},"rejected_samples":{rs},"coverage_ratio":{cr},"gps_gap_count":{gg},"has_sufficient_distance":{hsd},"has_elevation_data":{hed}}}}}"#,
+            r#"{{"distance_m":{d},"elapsed_time_ms":{et},"moving_time_ms":{mt},"paused_time_ms":{pt},"stopped_time_ms":{st},"average_pace_ms_per_km":{ap},"average_speed_mps":{as},"moving_speed_mps":{ms},"max_speed_mps":{mx},"best_pace_ms_per_km":{bp},"smoothed_best_pace_ms_per_km":{sbp},"elevation_gain_m":{eg},"elevation_loss_m":{el},"robust_elevation_gain_m":{reg},"robust_elevation_loss_m":{rel},"elevation_min_m":{emin},"elevation_max_m":{emax},"pace_samples":[{pace}],"smoothed_pace_samples":[{smoothed_pace}],"elevation_samples":[{elev}],"quality":{{"accepted_samples":{asmp},"rejected_samples":{rs},"coverage_ratio":{cr},"gps_gap_count":{gg},"has_sufficient_distance":{hsd},"has_elevation_data":{hed}}}}}"#,
             d = self.distance_m,
             et = self.elapsed_time_ms,
             mt = self.moving_time_ms,
@@ -213,6 +220,8 @@ impl TrackAnalytics {
             sbp = opt_u64(self.smoothed_best_pace_ms_per_km),
             eg = opt_f64(self.elevation_gain_m),
             el = opt_f64(self.elevation_loss_m),
+            reg = opt_f64(self.robust_elevation_gain_m),
+            rel = opt_f64(self.robust_elevation_loss_m),
             emin = opt_f64(self.elevation_min_m),
             emax = opt_f64(self.elevation_max_m),
             pace = pace,

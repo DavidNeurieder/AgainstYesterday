@@ -416,17 +416,17 @@ class TrackAnalyticsSection extends ConsumerWidget {
                       ? '—'
                       : '${(a.maxSpeedMps! * 3.6).toStringAsFixed(2)} km/h',
                 ),
-                if (a.elevationGainMeters != null)
+                if (a.displayElevationGainMeters != null)
                   _AnalyticsRow(
                     key: const ValueKey('analytics-elev-gain'),
                     label: 'Elevation gain',
-                    value: '${a.elevationGainMeters!.toStringAsFixed(1)} m',
+                    value: '${a.displayElevationGainMeters!.toStringAsFixed(1)} m',
                   ),
-                if (a.elevationLossMeters != null)
+                if (a.displayElevationLossMeters != null)
                   _AnalyticsRow(
                     key: const ValueKey('analytics-elev-loss'),
                     label: 'Elevation loss',
-                    value: '${a.elevationLossMeters!.toStringAsFixed(1)} m',
+                    value: '${a.displayElevationLossMeters!.toStringAsFixed(1)} m',
                   ),
                 if (a.elevationMinMeters != null)
                   _AnalyticsRow(
