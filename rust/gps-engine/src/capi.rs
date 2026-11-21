@@ -2277,8 +2277,15 @@ mod tests {
             .process_adaptive_result(&FilterConfig::default(), &EstimatorConfig::production())
             .expect("process succeeds");
 
-        assert_eq!(original, track.distance().meters());
-        assert_eq!(processed, adaptive.distance.meters());
+        // Miri interprets some platform-specific math rather than executing
+        // it, so identical sources can differ in the last bit there.
+        if cfg!(miri) {
+            assert!((original - track.distance().meters()).abs() < 1e-6);
+            assert!((processed - adaptive.distance.meters()).abs() < 1e-6);
+        } else {
+            assert_eq!(original, track.distance().meters());
+            assert_eq!(processed, adaptive.distance.meters());
+        }
         assert_eq!(duration, track.duration().as_secs());
         assert_eq!(moving, adaptive.moving.as_secs());
         assert!(output_points > 0);
