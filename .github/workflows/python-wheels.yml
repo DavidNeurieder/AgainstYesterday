@@ -70,7 +70,8 @@ jobs:
       - name: Smoke import in a clean virtualenv
         if: matrix.smoke
         shell: bash
-        working-directory: python
+        # Run outside the checkout so the source package cannot shadow the wheel.
+        working-directory: ${{ runner.temp }}
         run: |
           set -euo pipefail
           smoke="$RUNNER_TEMP/ay-wheel-smoke"
@@ -80,8 +81,9 @@ jobs:
           else
             py="$smoke/bin/python"
           fi
+          workspace="$(cygpath -u "$GITHUB_WORKSPACE" 2>/dev/null || printf '%s' "$GITHUB_WORKSPACE")"
           "$py" -m pip install --upgrade pip
-          "$py" -m pip install dist/*.whl
+          "$py" -m pip install "$workspace/python/dist/"*.whl
           "$py" -c "import against_yesterday as ay; print(ay.__version__)"
 
       - uses: actions/upload-artifact@v4

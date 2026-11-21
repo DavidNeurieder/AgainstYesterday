@@ -81,11 +81,12 @@ jobs:
           "$sdist_smoke/bin/python" -c "import against_yesterday as ay; print(ay.__version__)"
 
       - name: Smoke import the wheel in a clean virtualenv
-        working-directory: python
+        # Run outside the checkout so the source package cannot shadow the wheel.
+        working-directory: ${{ runner.temp }}
         run: |
           set -euo pipefail
           smoke="$RUNNER_TEMP/ay-smoke-${{ matrix.python-version }}"
           python -m venv "$smoke"
           "$smoke/bin/python" -m pip install --upgrade pip
-          "$smoke/bin/python" -m pip install dist/*.whl
+          "$smoke/bin/python" -m pip install "$GITHUB_WORKSPACE/python/dist/"*.whl
           "$smoke/bin/python" -c "import against_yesterday as ay; print(ay.__version__)"
