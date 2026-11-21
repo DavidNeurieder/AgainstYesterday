@@ -23,6 +23,10 @@ fn assert_finite_shadow_metrics(s: ShadowQualityMetrics, name: &str) {
         ("projection_mae_m", s.projection_mae_m),
         ("projection_max_error_m", s.projection_max_error_m),
         ("pace_mae_s_per_km", s.pace_mae_s_per_km),
+        (
+            "rolling_best_pace_error_s_per_km",
+            s.rolling_best_pace_error_s_per_km,
+        ),
         ("truth_elevation_gain_m", s.truth_elevation_gain_m),
         ("truth_elevation_loss_m", s.truth_elevation_loss_m),
         ("raw_elevation_gain_error_m", s.raw_elevation_gain_error_m),
@@ -116,6 +120,81 @@ fn rolling_pace_gate() {
 }
 
 #[test]
+fn rolling_best_pace_gate() {
+    let report = QualityReport::from_scenarios(&benchmark_scenarios());
+    let by_name = |name: &str| {
+        report
+            .scenarios
+            .iter()
+            .find(|s| s.name == name)
+            .unwrap_or_else(|| panic!("{name} scenario"))
+            .metrics
+    };
+
+    // The legacy single-segment minimum reports a few seconds per kilometre
+    // whenever one noisy segment is long enough, so every degraded scenario
+    // scores ~380-400 s/km of error here. A median-smoothed rolling window
+    // keeps both the raw and adaptive estimates within a minute of truth.
+    for name in [
+        "jitter_5m",
+        "jitter_12m",
+        "outage_25pct",
+        "stationary_drift",
+        "gps_jumps",
+        "urban_canyon",
+        "forest_trail",
+        "reverse",
+    ] {
+        let m = by_name(name);
+        assert!(
+            m.legacy_best_pace_error_s_per_km > 150.0,
+            "{name}: legacy {}",
+            m.legacy_best_pace_error_s_per_km
+        );
+        assert!(m.rolling_best_pace_available, "{name}: raw unavailable");
+        assert!(
+            m.shadow.rolling_best_pace_available,
+            "{name}: shadow unavailable"
+        );
+        assert!(
+            m.rolling_best_pace_error_s_per_km < 60.0,
+            "{name}: raw {}",
+            m.rolling_best_pace_error_s_per_km
+        );
+        assert!(
+            m.shadow.rolling_best_pace_error_s_per_km < 60.0,
+            "{name}: shadow {}",
+            m.shadow.rolling_best_pace_error_s_per_km
+        );
+    }
+
+    for name in ["clean", "elevation_noise"] {
+        let m = by_name(name);
+        assert!(m.rolling_best_pace_available, "{name}: raw unavailable");
+        assert!(
+            m.shadow.rolling_best_pace_available,
+            "{name}: shadow unavailable"
+        );
+        assert!(
+            m.rolling_best_pace_error_s_per_km < 5.0,
+            "{name}: raw {}",
+            m.rolling_best_pace_error_s_per_km
+        );
+        assert!(
+            m.shadow.rolling_best_pace_error_s_per_km < 5.0,
+            "{name}: shadow {}",
+            m.shadow.rolling_best_pace_error_s_per_km
+        );
+    }
+
+    // 45 s sampling has no 15 s rolling window within the 30 s fallback, so
+    // neither axis may invent a fastest split from isolated pairs.
+    let sparse = by_name("sparse");
+    assert!(!sparse.rolling_best_pace_available);
+    assert!(!sparse.shadow.rolling_best_pace_available);
+}
+
+#[test]
 fn elevation_noise_gate() {
     let report = QualityReport::from_scenarios(&benchmark_scenarios());
     let scenario = report
@@ -158,6 +237,10 @@ fn baseline_exposes_all_documented_metrics() {
         "every scenario exposes a nested shadow object"
     );
     assert!(json.contains("\"rejection_resets\":"));
+    assert!(json.contains("\"truth_best_pace_ms_per_km\":"));
+    assert!(json.contains("\"legacy_best_pace_error_s_per_km\":"));
+    assert!(json.contains("\"rolling_best_pace_error_s_per_km\":"));
+    assert!(json.contains("\"rolling_best_pace_available\":"));
     for scenario in &report.scenarios {
         let m = scenario.metrics;
         assert!(m.truth_distance_m > 0.0, "{}", scenario.name);
@@ -166,6 +249,17 @@ fn baseline_exposes_all_documented_metrics() {
         assert!(m.route_distance_m.is_finite(), "{}", scenario.name);
         assert!(m.position_rmse_m.is_finite(), "{}", scenario.name);
         assert!(m.pace_mae_s_per_km.is_finite(), "{}", scenario.name);
+        assert!(m.truth_best_pace_ms_per_km > 0.0, "{}", scenario.name);
+        assert!(
+            m.legacy_best_pace_error_s_per_km.is_finite(),
+            "{}",
+            scenario.name
+        );
+        assert!(
+            m.rolling_best_pace_error_s_per_km.is_finite(),
+            "{}",
+            scenario.name
+        );
         assert!(m.ghost_gap_mae_s.is_finite(), "{}", scenario.name);
         assert!(m.false_movement_m.is_finite(), "{}", scenario.name);
         assert_finite_shadow_metrics(m.shadow, &scenario.name);

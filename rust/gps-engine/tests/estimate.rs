@@ -284,3 +284,35 @@ fn analytics_exposes_robust_elevation_additively() {
     assert!(json.contains("\"robust_elevation_gain_m\":"));
     assert!(json.contains("\"robust_elevation_loss_m\":"));
 }
+
+#[test]
+fn analytics_exposes_rolling_best_pace_additively() {
+    let points = (0..80)
+        .map(|index| {
+            // A constant 2 m/s run (500_000 ms/km) with one corrupt fix. The
+            // legacy minimum treats that jump as a sprint; rolling medians do not.
+            let offset = if index == 40 { 500.0 } else { 0.0 };
+            let latitude = 52.5 + (index as f64 * 2.0 + offset) / 111_195.0;
+            TrackPoint::new(
+                timestamp(index as f64),
+                Coordinate::new(latitude, 13.4).expect("valid coordinate"),
+            )
+        })
+        .collect();
+    let track = Track::new(points).expect("valid track");
+    let analytics = TrackAnalytics::from_track(&track, &MovingConfig::default());
+
+    let legacy = analytics.best_pace_ms_per_km.expect("legacy best pace");
+    let rolling = analytics
+        .rolling_best_pace_ms_per_km
+        .expect("rolling best pace");
+    assert!(legacy * 10 < rolling, "legacy {legacy}, rolling {rolling}");
+    assert!(
+        (rolling as f64 - 500_000.0).abs() < 10_000.0,
+        "rolling {rolling}"
+    );
+
+    let json = analytics.to_json();
+    assert!(json.contains("\"rolling_best_pace_ms_per_km\":"));
+    assert!(json.contains(&format!("\"rolling_best_pace_ms_per_km\":{rolling}")));
+}

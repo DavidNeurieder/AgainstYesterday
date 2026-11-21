@@ -23,11 +23,13 @@ live recorder. Phase 2 fixed the stale recovery anchor and exposed independent
 ghost-confidence evidence. Rolling pace replaces the two-fix pace in the live
 snapshot and in benchmark scoring. Robust elevation is exposed additively as
 `robust_elevation_gain_m`/`robust_elevation_loss_m` in analytics JSON, Python,
-Dart and the UI; raw sums remain available for audit. The C ABI v1 prefix is
-unchanged because analytics travels as an opaque JSON string. Dart decoders
-remain backward-compatible; `FakeEngineService` intentionally keeps the
-pre-promotion live-cursor numeric semantics. Remaining Phase 3 items
-(first-class `DistanceBreakdown` exposure, rolling-best pace, and typed outage
+Dart and the UI; raw sums remain available for audit. Rolling-best pace is
+exposed additively as `rolling_best_pace_ms_per_km`, with the legacy
+single-segment field untouched and the UI preferring the rolling value when
+present. The C ABI v1 prefix is unchanged because analytics travels as an opaque
+JSON string. Dart decoders remain backward-compatible; `FakeEngineService`
+intentionally keeps the pre-promotion live-cursor numeric semantics. Remaining
+Phase 3 items (first-class `DistanceBreakdown` exposure and typed outage
 summaries) and Phases 4–5 are not started.
 
 ## 1. Review conclusion
@@ -578,9 +580,9 @@ The accepted tradeoffs are a clean adaptive pace increase of 1.856 → 3.452
 s/km, still below the 5 s/km gate, and a `sparse` pace of zero because 45 s
 sampling exceeds the fallback bound. `stationary_drift` remains worse on the
 adaptive axis than on raw samples, so the gate does not assert `shadow < raw`
-there. The remaining Phase 3 items above are still open; this change does not
-claim first-class distance breakdowns, rolling-best pace, or typed outage
-summaries.
+there. At that point the remaining Phase 3 items above were still open; that
+change did not claim first-class distance breakdowns, rolling-best pace, or
+typed outage summaries.
 
 ### 6.2 Robust elevation (Rust API and benchmark, done)
 
@@ -623,6 +625,46 @@ Verification after the combined rolling-pace and elevation work:
 `git diff --check`, `flutter analyze`, and `flutter test` all pass. `cargo doc`
 still reports seven pre-existing unresolved link warnings in `analytics.rs`.
 No F-Droid or on-device E2E run was performed.
+
+### 6.3 Rolling best pace (done)
+
+`track::RollingBestPaceConfig` adds a second, independent best-pace definition.
+It applies a 13-sample coordinate median with a 50 m maximum raw-to-median
+shift, requires 0.5 rolling-pace confidence from a 15 s / 15 m window with a
+30 s fallback bound, and takes the 0.25 quantile of valid window paces. The
+low quantile ignores the fastest noisy tail; the coordinate median and shift
+check stop one corrupt fix from masquerading as a sprint. A track with no
+usable window reports `None` rather than inventing a fastest split. The legacy
+`best_pace_ms_per_km` keeps its exact single-segment meaning for audit.
+
+The benchmark now records the fastest true non-stationary pace, legacy error,
+rolling error and availability for both the raw and adaptive axes. The
+`rolling_best_pace_gate` requires legacy error >150 s/km on every degraded
+scenario, rolling error <60 s/km on both axes, <5 s/km on clean scenarios, and
+no rolling result on `sparse` (45 s sampling exceeds the fallback bound).
+Measured errors in s/km against a 400_000 ms/km truth pace:
+
+| scenario | legacy | rolling raw | rolling adaptive |
+| --- | ---: | ---: | ---: |
+| `clean` | 0.014 | 0.001 | 0.003 |
+| `jitter_5m` | 396.08 | 30.40 | 40.70 |
+| `jitter_12m` | 396.02 | 45.47 | 51.24 |
+| `outage_25pct` | 396.04 | 0.00 | 0.01 |
+| `stationary_drift` | 396.00 | 17.94 | 29.08 |
+| `gps_jumps` | 397.99 | 50.00 | 49.02 |
+| `urban_canyon` | 394.89 | 42.96 | 46.10 |
+| `forest_trail` | 380.30 | 48.19 | 54.77 |
+| `reverse` | 396.04 | 30.41 | 37.12 |
+| `elevation_noise` | 0.014 | 0.001 | 0.003 |
+| `sparse` | 28.87 | unavailable | unavailable |
+
+The estimator is exposed as `rolling_best_pace_ms_per_km` in analytics JSON,
+Python, Dart and the activity UI. `TrackAnalytics.displayBestPaceMsPerKm`
+prefers the rolling value and falls back to the legacy field for older engines
+and the fake. No C ABI field was inserted or reordered; the JSON key is
+additive. The full verification set was rerun after this change, with the same
+seven pre-existing `cargo doc` link warnings. No F-Droid or on-device E2E run
+was performed.
 
 ## 7. Phase 4 — optional sensor fusion
 

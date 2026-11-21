@@ -2305,6 +2305,8 @@ struct PyTrackAnalytics {
     #[pyo3(get)]
     best_pace_ms_per_km: Option<u64>,
     #[pyo3(get)]
+    rolling_best_pace_ms_per_km: Option<u64>,
+    #[pyo3(get)]
     smoothed_best_pace_ms_per_km: Option<u64>,
     #[pyo3(get)]
     elevation_gain_m: Option<f64>,
@@ -2357,6 +2359,7 @@ impl From<RustTrackAnalytics> for PyTrackAnalytics {
             moving_speed_mps: a.moving_speed_mps,
             max_speed_mps: a.max_speed_mps,
             best_pace_ms_per_km: a.best_pace_ms_per_km,
+            rolling_best_pace_ms_per_km: a.rolling_best_pace_ms_per_km,
             smoothed_best_pace_ms_per_km: a.smoothed_best_pace_ms_per_km,
             elevation_gain_m: a.elevation_gain_m,
             elevation_loss_m: a.elevation_loss_m,

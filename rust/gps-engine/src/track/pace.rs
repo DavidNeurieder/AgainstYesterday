@@ -14,6 +14,7 @@ use std::collections::VecDeque;
 
 use crate::estimate::Confidence;
 use crate::geo::{Coordinate, distance};
+use crate::track::TrackPoint;
 use crate::units::{Distance, Duration, Speed, Timestamp};
 
 /// Bounds for [`RollingPace`].
@@ -146,9 +147,133 @@ impl RollingPace {
     }
 }
 
+/// Bounds for [`rolling_best_pace_ms_per_km`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RollingBestPaceConfig {
+    /// Odd median window applied to coordinates before timing a window. A
+    /// median removes isolated GPS outliers without smoothing away a real run.
+    pub smoothing_window: usize,
+    /// Skip a median position that has drifted farther than this from its raw
+    /// fix. That means outliers dominate the local median, so the sample is not
+    /// trustworthy enough to time.
+    pub max_median_shift: Distance,
+    /// Time window used to measure net displacement.
+    pub pace: RollingPaceConfig,
+    /// Minimum confidence required from a rolling-pace sample.
+    pub min_confidence: Confidence,
+    /// Quantile of the valid rolling samples used as the sustained best pace.
+    /// Lower values are faster; the default ignores the fastest tail.
+    pub best_quantile: f64,
+}
+
+impl Default for RollingBestPaceConfig {
+    fn default() -> Self {
+        Self {
+            smoothing_window: 13,
+            max_median_shift: Distance::from_meters(50.0),
+            pace: RollingPaceConfig::default(),
+            min_confidence: Confidence::new(0.5),
+            best_quantile: 0.25,
+        }
+    }
+}
+
+impl RollingBestPaceConfig {
+    /// Forces an odd, non-empty smoothing window.
+    #[must_use]
+    pub fn clamped(mut self) -> Self {
+        self.smoothing_window = self.smoothing_window.max(1) | 1;
+        self
+    }
+}
+
+/// Valid rolling-window paces over a track, in milliseconds per kilometre.
+///
+/// A short coordinate median removes isolated outliers before each window is
+/// timed. This is the evidence behind [`rolling_best_pace_ms_per_km`]; callers
+/// that need a different summary can use the samples directly.
+#[must_use]
+pub fn rolling_pace_samples_ms_per_km(
+    points: &[TrackPoint],
+    config: &RollingBestPaceConfig,
+) -> Vec<f64> {
+    let config = config.clamped();
+    let half = config.smoothing_window / 2;
+    let mut pace = RollingPace::new(config.pace);
+    let mut samples = Vec::new();
+
+    for (index, point) in points.iter().enumerate() {
+        let lo = index.saturating_sub(half);
+        let hi = (index + half + 1).min(points.len());
+        let smoothed = median_coordinate(&points[lo..hi]);
+        if distance(smoothed, point.coordinate()).meters() > config.max_median_shift.meters() {
+            continue;
+        }
+        pace.push(point.timestamp(), smoothed);
+        let sample = pace.sample();
+        if sample.confidence < config.min_confidence {
+            continue;
+        }
+        let Some(speed) = sample.speed else {
+            continue;
+        };
+        let mps = speed.mps();
+        if !mps.is_finite() || mps <= 0.0 {
+            continue;
+        }
+        let pace_ms = 1_000_000.0 / mps;
+        if pace_ms.is_finite() {
+            samples.push(pace_ms);
+        }
+    }
+    samples
+}
+
+/// Fastest sustained pace over a track, in milliseconds per kilometre.
+///
+/// Unlike the legacy single-segment minimum, this takes a low quantile of
+/// median-smoothed rolling windows. A single corrupt fix cannot masquerade as
+/// a personal best, and the fastest noisy tail is ignored. Sparse tracks with
+/// no usable rolling window report `None` instead of inventing a fastest split.
+#[must_use]
+pub fn rolling_best_pace_ms_per_km(
+    points: &[TrackPoint],
+    config: &RollingBestPaceConfig,
+) -> Option<u64> {
+    let config = config.clamped();
+    let mut samples = rolling_pace_samples_ms_per_km(points, &config);
+    if samples.is_empty() {
+        return None;
+    }
+    samples.sort_by(f64::total_cmp);
+    let quantile = config.best_quantile.clamp(0.0, 1.0);
+    let index = (quantile * (samples.len() - 1) as f64).round() as usize;
+    Some(samples[index] as u64)
+}
+
+fn median_coordinate(points: &[TrackPoint]) -> Coordinate {
+    let mut latitudes: Vec<f64> = points.iter().map(|p| p.coordinate().latitude()).collect();
+    let mut longitudes: Vec<f64> = points.iter().map(|p| p.coordinate().longitude()).collect();
+    latitudes.sort_by(f64::total_cmp);
+    longitudes.sort_by(f64::total_cmp);
+    Coordinate::new(median(&latitudes), median(&longitudes))
+        .expect("median of valid coordinates is valid")
+}
+
+fn median(sorted: &[f64]) -> f64 {
+    debug_assert!(!sorted.is_empty());
+    let middle = sorted.len() / 2;
+    if sorted.len() % 2 == 1 {
+        sorted[middle]
+    } else {
+        (sorted[middle - 1] + sorted[middle]) / 2.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::track::{Track, TrackPoint};
 
     fn c(lat: f64, lon: f64) -> Coordinate {
         Coordinate::new(lat, lon).unwrap()
@@ -156,6 +281,21 @@ mod tests {
 
     fn north(meters: f64) -> f64 {
         meters / 111_195.0
+    }
+
+    fn moving_track(outlier: Option<usize>) -> Track {
+        let points = (0..80)
+            .map(|index| {
+                let offset = if outlier == Some(index) { 500.0 } else { 0.0 };
+                let latitude = 52.5 + north(index as f64 * 2.0 + offset);
+                TrackPoint::new(timestamp(index as f64), c(latitude, 13.4))
+            })
+            .collect();
+        Track::new(points).expect("moving track")
+    }
+
+    fn timestamp(seconds: f64) -> Timestamp {
+        Timestamp::from_unix_secs(seconds)
     }
 
     #[test]
@@ -218,5 +358,37 @@ mod tests {
         pace.reset();
         pace.push(Timestamp::from_unix_secs(100.0), c(52.5, 13.4));
         assert_eq!(pace.speed(), None);
+    }
+
+    #[test]
+    fn rolling_best_ignores_an_isolated_outlier() {
+        let track = moving_track(Some(10));
+        let config = RollingBestPaceConfig::default();
+        let samples = rolling_pace_samples_ms_per_km(track.points(), &config);
+        assert!(!samples.is_empty());
+        assert!(
+            samples.iter().all(|pace| *pace > 400_000.0),
+            "a single corrupt fix must not look like a sprint: {samples:?}"
+        );
+        let best =
+            rolling_best_pace_ms_per_km(track.points(), &config).expect("usable rolling window");
+        // The constant truth is 2 m/s, or 500_000 ms/km. Smoothed edge windows
+        // are slightly slower, so the low quantile stays near that value.
+        assert!(
+            (best as f64 - 500_000.0).abs() < 10_000.0,
+            "rolling best was {best}"
+        );
+    }
+
+    #[test]
+    fn sparse_tracks_have_no_rolling_best() {
+        let points = vec![
+            TrackPoint::new(timestamp(0.0), c(52.5, 13.4)),
+            TrackPoint::new(timestamp(45.0), c(52.5 + north(100.0), 13.4)),
+        ];
+        assert_eq!(
+            rolling_best_pace_ms_per_km(&points, &RollingBestPaceConfig::default()),
+            None
+        );
     }
 }

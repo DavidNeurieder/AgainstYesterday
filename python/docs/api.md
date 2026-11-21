@@ -174,12 +174,15 @@ and read-only properties listed here.
 `track.analytics(config=None) -> TrackAnalytics` exposes `distance_m`,
 `elapsed_time_ms`, `moving_time_ms`, `paused_time_ms`, `stopped_time_ms`,
 `average_pace_ms_per_km`, `average_speed_mps`, `moving_speed_mps`,
-`max_speed_mps`, `best_pace_ms_per_km`, `smoothed_best_pace_ms_per_km`,
-`elevation_gain_m`, `elevation_loss_m`, `robust_elevation_gain_m`,
-`robust_elevation_loss_m`, `elevation_min_m`, `elevation_max_m`, `pace_samples`,
-`smoothed_pace_samples`, `elevation_samples`, `quality`, and `to_json() -> str`.
+`max_speed_mps`, `best_pace_ms_per_km`, `rolling_best_pace_ms_per_km`,
+`smoothed_best_pace_ms_per_km`, `elevation_gain_m`, `elevation_loss_m`,
+`robust_elevation_gain_m`, `robust_elevation_loss_m`, `elevation_min_m`,
+`elevation_max_m`, `pace_samples`, `smoothed_pace_samples`, `elevation_samples`,
+`quality`, and `to_json() -> str`.
 The `robust_*` fields use a median filter and a 1 m dead band; the raw sums stay
-available for audit. `quality` is an `AnalyticsQuality` with `accepted_samples`,
+available for audit. `rolling_best_pace_ms_per_km` uses median-smoothed rolling
+windows and is `None` when no window has enough movement; the legacy single-segment
+`best_pace_ms_per_km` remains unchanged. `quality` is an `AnalyticsQuality` with `accepted_samples`,
 `rejected_samples`, `coverage_ratio`, `gps_gap_count`,
 `has_sufficient_distance`, and `has_elevation_data`.
 

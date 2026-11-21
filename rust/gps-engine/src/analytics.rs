@@ -9,11 +9,13 @@
 //!
 //! The top-level distance and pace fields keep their current meanings. The
 //! additive uncertainty contracts in [`crate::estimate`] are deliberately not
-//! serialized here yet. Robust elevation totals are additive JSON keys; the
-//! raw gain/loss fields and all prior keys keep their existing meanings.
+//! serialized here yet. Robust elevation totals and rolling-best pace are
+//! additive JSON keys; all prior keys keep their existing meanings.
 
 use crate::geo::{Coordinate, distance};
-use crate::track::{MovingConfig, Track, TrackPoint, elevation};
+use crate::track::{
+    MovingConfig, RollingBestPaceConfig, Track, TrackPoint, elevation, rolling_best_pace_ms_per_km,
+};
 use crate::units::Timestamp;
 
 /// Quality summary for a track's GPS observations.
@@ -60,8 +62,10 @@ pub struct TrackAnalytics {
     pub moving_speed_mps: Option<f64>,
     /// Maximum speed in m/s.
     pub max_speed_mps: Option<f64>,
-    /// Best pace in ms/km.
+    /// Legacy best pace in ms/km, from the fastest single segment.
     pub best_pace_ms_per_km: Option<u64>,
+    /// Best sustained pace in ms/km, from median-smoothed rolling windows.
+    pub rolling_best_pace_ms_per_km: Option<u64>,
     /// Elevation gain in meters, summing every positive altitude step.
     pub elevation_gain_m: Option<f64>,
     /// Elevation loss in meters, summing every negative altitude step.
@@ -113,8 +117,11 @@ impl TrackAnalytics {
             None
         };
 
-        // Best pace: rolling 100 m window, never a single fix.
+        // Keep the legacy definition for audit; the new field is a separate
+        // rolling-window estimate that ignores isolated outliers.
         let best_pace = best_pace_ms_per_km(track);
+        let rolling_best_pace =
+            rolling_best_pace_ms_per_km(track.points(), &RollingBestPaceConfig::default());
 
         let max_speed = track
             .points()
@@ -169,6 +176,7 @@ impl TrackAnalytics {
             moving_speed_mps: moving_speed,
             max_speed_mps: max_speed,
             best_pace_ms_per_km: best_pace,
+            rolling_best_pace_ms_per_km: rolling_best_pace,
             elevation_gain_m: elevation_gain,
             elevation_loss_m: elevation_loss,
             robust_elevation_gain_m: robust_elevation_gain,
@@ -206,7 +214,7 @@ impl TrackAnalytics {
             .collect::<Vec<_>>()
             .join(",");
         format!(
-            r#"{{"distance_m":{d},"elapsed_time_ms":{et},"moving_time_ms":{mt},"paused_time_ms":{pt},"stopped_time_ms":{st},"average_pace_ms_per_km":{ap},"average_speed_mps":{as},"moving_speed_mps":{ms},"max_speed_mps":{mx},"best_pace_ms_per_km":{bp},"smoothed_best_pace_ms_per_km":{sbp},"elevation_gain_m":{eg},"elevation_loss_m":{el},"robust_elevation_gain_m":{reg},"robust_elevation_loss_m":{rel},"elevation_min_m":{emin},"elevation_max_m":{emax},"pace_samples":[{pace}],"smoothed_pace_samples":[{smoothed_pace}],"elevation_samples":[{elev}],"quality":{{"accepted_samples":{asmp},"rejected_samples":{rs},"coverage_ratio":{cr},"gps_gap_count":{gg},"has_sufficient_distance":{hsd},"has_elevation_data":{hed}}}}}"#,
+            r#"{{"distance_m":{d},"elapsed_time_ms":{et},"moving_time_ms":{mt},"paused_time_ms":{pt},"stopped_time_ms":{st},"average_pace_ms_per_km":{ap},"average_speed_mps":{as},"moving_speed_mps":{ms},"max_speed_mps":{mx},"best_pace_ms_per_km":{bp},"rolling_best_pace_ms_per_km":{rbp},"smoothed_best_pace_ms_per_km":{sbp},"elevation_gain_m":{eg},"elevation_loss_m":{el},"robust_elevation_gain_m":{reg},"robust_elevation_loss_m":{rel},"elevation_min_m":{emin},"elevation_max_m":{emax},"pace_samples":[{pace}],"smoothed_pace_samples":[{smoothed_pace}],"elevation_samples":[{elev}],"quality":{{"accepted_samples":{asmp},"rejected_samples":{rs},"coverage_ratio":{cr},"gps_gap_count":{gg},"has_sufficient_distance":{hsd},"has_elevation_data":{hed}}}}}"#,
             d = self.distance_m,
             et = self.elapsed_time_ms,
             mt = self.moving_time_ms,
@@ -217,6 +225,7 @@ impl TrackAnalytics {
             ms = opt_f64(self.moving_speed_mps),
             mx = opt_f64(self.max_speed_mps),
             bp = opt_u64(self.best_pace_ms_per_km),
+            rbp = opt_u64(self.rolling_best_pace_ms_per_km),
             sbp = opt_u64(self.smoothed_best_pace_ms_per_km),
             eg = opt_f64(self.elevation_gain_m),
             el = opt_f64(self.elevation_loss_m),

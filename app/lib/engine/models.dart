@@ -842,6 +842,7 @@ class TrackAnalytics {
     this.movingSpeedMps,
     this.maxSpeedMps,
     this.bestPaceMsPerKm,
+    this.rollingBestPaceMsPerKm,
     this.smoothedBestPaceMsPerKm,
     this.elevationGainMeters,
     this.elevationLossMeters,
@@ -865,6 +866,7 @@ class TrackAnalytics {
   final double? movingSpeedMps;
   final double? maxSpeedMps;
   final int? bestPaceMsPerKm;
+  final int? rollingBestPaceMsPerKm;
   final double? elevationGainMeters;
   final double? elevationLossMeters;
   final double? robustElevationGainMeters;
@@ -876,6 +878,10 @@ class TrackAnalytics {
   final int? smoothedBestPaceMsPerKm;
   final List<({double distanceMeters, double elevationMeters})> elevationSamples;
   final TrackAnalyticsQuality quality;
+
+  /// Best available best pace: rolling when the engine reported it, legacy
+  /// when talking to an older engine or a minimal fake.
+  int? get displayBestPaceMsPerKm => rollingBestPaceMsPerKm ?? bestPaceMsPerKm;
 
   /// Best available elevation gain: robust when the engine reported it, raw
   /// when talking to an older engine or a minimal fake.

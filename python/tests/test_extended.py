@@ -21,6 +21,26 @@ def sample_gpx() -> str:
 """
 
 
+def outlier_gpx() -> str:
+    points = "\n".join(
+        '<trkpt lat="{lat:.8f}" lon="13.40000">'
+        "<time>2024-01-01T10:{minute:02d}:{second:02d}.000Z</time>"
+        "</trkpt>".format(
+            lat=52.5 + (index * 2.0 + (500.0 if index == 40 else 0.0)) / 111195.0,
+            minute=index // 60,
+            second=index % 60,
+        )
+        for index in range(80)
+    )
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>outlier</name><trkseg>
+{points}
+  </trkseg></trk>
+</gpx>
+"""
+
+
 def noisy_altitude_gpx() -> str:
     altitudes = [
         0, 2, 0, 2, 0, 2, 0, 2, 10, 20, 30, 40,
@@ -89,6 +109,17 @@ def test_analytics():
     assert analytics.distance_m > 0
     assert isinstance(analytics.to_json(), str)
     assert analytics.quality.accepted_samples == track.point_count
+
+
+def test_analytics_exposes_rolling_best_pace_additively():
+    analytics = ay.parse_gpx(outlier_gpx()).analytics()
+    legacy = analytics.best_pace_ms_per_km
+    rolling = analytics.rolling_best_pace_ms_per_km
+    assert legacy is not None and rolling is not None
+    assert legacy * 10 < rolling
+    assert 490_000 <= rolling <= 510_000
+    payload = json.loads(analytics.to_json())
+    assert payload["rolling_best_pace_ms_per_km"] == rolling
 
 
 def test_analytics_reports_robust_elevation():

@@ -247,6 +247,8 @@ class ActivityDetailScreen extends ConsumerWidget {
                     'movingSpeedMps': analytics.movingSpeedMps,
                     'maxSpeedMps': analytics.maxSpeedMps,
                     'bestPaceMsPerKm': analytics.bestPaceMsPerKm,
+                    'rollingBestPaceMsPerKm':
+                        analytics.rollingBestPaceMsPerKm,
                     'elevationGainMeters': analytics.elevationGainMeters,
                     'elevationLossMeters': analytics.elevationLossMeters,
                     'elevationMinMeters': analytics.elevationMinMeters,
@@ -382,9 +384,9 @@ class TrackAnalyticsSection extends ConsumerWidget {
                 _AnalyticsRow(
                   key: const ValueKey('analytics-best-pace'),
                   label: 'Best pace',
-                  value: a.bestPaceMsPerKm == null
+                  value: a.displayBestPaceMsPerKm == null
                       ? '—'
-                      : '${Elapsed.seconds(a.bestPaceMsPerKm! / 1000.0).format()} /km',
+                      : '${Elapsed.seconds(a.displayBestPaceMsPerKm! / 1000.0).format()} /km',
                 ),
                 _AnalyticsRow(
                   key: const ValueKey('analytics-smoothed-pace'),

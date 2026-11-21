@@ -82,5 +82,33 @@ void main() {
       expect(live.ghostGap!.ahead, isTrue);
       expect(live.pace.formatPace(), '11.3 km/h');
     });
+
+    test('analytics prefers rolling best pace with a legacy fallback', () {
+      const quality = TrackAnalyticsQuality(
+        acceptedSamples: 2,
+        rejectedSamples: 0,
+        coverageRatio: 1,
+        gpsGapCount: 0,
+        hasSufficientDistance: true,
+        hasElevationData: false,
+      );
+      TrackAnalytics analytics({int? best, int? rolling}) => TrackAnalytics(
+            distanceMeters: 1000,
+            elapsedTimeMs: 300000,
+            movingTimeMs: 300000,
+            pausedTimeMs: 0,
+            stoppedTimeMs: 0,
+            bestPaceMsPerKm: best,
+            rollingBestPaceMsPerKm: rolling,
+            quality: quality,
+          );
+
+      expect(analytics(best: 300000).displayBestPaceMsPerKm, 300000);
+      expect(
+        analytics(best: 300000, rolling: 320000).displayBestPaceMsPerKm,
+        320000,
+      );
+      expect(analytics().displayBestPaceMsPerKm, isNull);
+    });
   });
 }

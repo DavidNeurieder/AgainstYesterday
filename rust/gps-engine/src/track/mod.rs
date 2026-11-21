@@ -18,7 +18,10 @@ pub use filtering::{
     filter_detailed,
 };
 pub use model::Track;
-pub use pace::{RollingPace, RollingPaceConfig, RollingPaceSample};
+pub use pace::{
+    RollingBestPaceConfig, RollingPace, RollingPaceConfig, RollingPaceSample,
+    rolling_best_pace_ms_per_km, rolling_pace_samples_ms_per_km,
+};
 pub use point::TrackPoint;
 pub use resampling::resample_by_distance;
 pub use reverse::reverse;

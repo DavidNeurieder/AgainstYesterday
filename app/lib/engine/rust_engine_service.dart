@@ -197,6 +197,7 @@ final class RustEngineService implements EngineService {
       movingSpeedMps: (json['moving_speed_mps'] as num?)?.toDouble(),
       maxSpeedMps: (json['max_speed_mps'] as num?)?.toDouble(),
       bestPaceMsPerKm: json['best_pace_ms_per_km'] as int?,
+      rollingBestPaceMsPerKm: json['rolling_best_pace_ms_per_km'] as int?,
       smoothedBestPaceMsPerKm: json['smoothed_best_pace_ms_per_km'] as int?,
       elevationGainMeters: (json['elevation_gain_m'] as num?)?.toDouble(),
       elevationLossMeters: (json['elevation_loss_m'] as num?)?.toDouble(),
