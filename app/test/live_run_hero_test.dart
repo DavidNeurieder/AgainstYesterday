@@ -73,13 +73,13 @@ void main() {
     expect(gapDigits(tester).style!.color, isNot(AppColors.textSecondary));
   });
 
-  testWidgets('a degraded match mutes the gap instead of flipping the label', (tester) async {
+  testWidgets('low-confidence evidence still shows the real AHEAD/BEHIND gap', (tester) async {
     await _pump(tester, racing(gapReliable: false));
 
     expect(find.byKey(const ValueKey('live-gap')), findsOneWidget);
-    expect(find.text('+0:12'), findsNothing);
-    expect(find.text('—'), findsOneWidget);
-    expect(find.textContaining('— · at 800'), findsOneWidget);
+    expect(find.text('+0:12'), findsOneWidget);
+    expect(find.text('—'), findsNothing);
+    expect(find.textContaining('BEHIND · at 800'), findsOneWidget);
   });
 
   testWidgets('without a ghost, distance stays the hero', (tester) async {

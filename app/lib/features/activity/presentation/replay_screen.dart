@@ -327,7 +327,6 @@ class _ReplayScreenState extends ConsumerState<ReplayScreen>
               distance: distance,
               units: units,
               ghostGap: snap.ghostGap,
-              gapReliable: snap.ghost?.reliable ?? true,
               routeProgress: snap.routeProgress,
             ),
             const SizedBox(height: AppSpacing.md),

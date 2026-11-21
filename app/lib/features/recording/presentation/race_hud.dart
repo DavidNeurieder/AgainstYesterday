@@ -211,24 +211,22 @@ class RaceHeroRow extends StatelessWidget {
     required this.distance,
     required this.units,
     this.ghostGap,
-    this.gapReliable = true,
     this.routeProgress = 0,
   });
 
   final Distance distance;
   final Units units;
   final GhostState? ghostGap;
-
-  /// Whether the engine's independent confidence signals support showing an
-  /// AHEAD/BEHIND change. A degraded match keeps the gap muted instead of
-  /// flickering the hero label.
-  final bool gapReliable;
   final double routeProgress;
 
   @override
   Widget build(BuildContext context) {
     if (ghostGap case final gap?) {
-      final gapState = gapReliable ? AheadBehind.fromGap(gap) : AheadBehind.unknown;
+      // The gap is the answer to "am I winning?" — show the engine's real
+      // AHEAD/BEHIND state even when its confidence signals are degraded.
+      // Low confidence is diagnostic information, not a reason to blank the
+      // hero readout.
+      final gapState = AheadBehind.fromGap(gap);
       return Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
