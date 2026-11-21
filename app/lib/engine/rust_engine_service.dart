@@ -558,6 +558,14 @@ class _RustLiveRun implements LiveRunHandle {
     final gConf = r.f64();
     final matchStatus = r.u8();
     final matchConfidence = r.f64();
+    // Appended ghost evidence (v2+). Order must match the Rust C API writer in
+    // capi.rs::live_snapshot / write_replay_snapshot:
+    //   1. ghost match status (u8)
+    //   2. ghost match confidence (f64)
+    //   3. has-position-confidence flag (u8) + value (f64) when present
+    //   4. reliable flag (u8)
+    // An older native library (v1) omits all five bytes, so hasMore is false
+    // and the defaults below are used.
     final ghostMatchStatus = r.hasMore ? r.u8() : LiveMatchStatusCode.none;
     final ghostMatchConfidence = r.hasMore ? r.f64() : 0.0;
     final hasGhostPositionConfidence = r.hasMore && r.u8() == 1;
@@ -670,6 +678,9 @@ class _RustReplayRun implements ReplayHandle {
     final gConf = r.f64();
     final matchStatus = r.u8();
     final matchConfidence = r.f64();
+    // Appended ghost evidence (v2+). See capi.rs::write_replay_snapshot.
+    // Order: ghost match status (u8), match confidence (f64),
+    // position-confidence presence (u8) + value (f64), reliable flag (u8).
     final ghostMatchStatus = r.hasMore ? r.u8() : matchStatus;
     final ghostMatchConfidence = r.hasMore ? r.f64() : matchConfidence;
     final hasGhostPositionConfidence = r.hasMore && r.u8() == 1;

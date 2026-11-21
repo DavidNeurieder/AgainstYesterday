@@ -2060,6 +2060,58 @@ mod tests {
     }
 
     #[test]
+    fn live_snapshot_without_ghost_still_writes_appended_evidence() {
+        // A v1 reader stops after the ghost (hasGhost == 0) and never reads
+        // the appended evidence. A v2 reader that keeps going must find exactly
+        // five trailing bytes (match status, match confidence, position-
+        // confidence presence + value, reliable flag) so `hasMore` stays
+        // consistent across both native-library versions.
+        let mut input = Wr::default();
+        input.u8(0); // no route
+        input.u8(0); // no ghost
+        let handle_bytes = live_new(&input.data).expect("live_new succeeds");
+        let mut handle_rd = Rd::new(&handle_bytes);
+        let handle = handle_rd.u64().expect("handle");
+        handle_rd.done("live_new").expect("handle prefix only");
+
+        let mut request = Wr::default();
+        request.u64(handle);
+        let output = live_snapshot(&request.data).expect("live_snapshot succeeds");
+        gps_live_free(handle);
+
+        let mut rd = Rd::new(&output);
+        for _ in 0..4 {
+            rd.f64().expect("distance/moving/pace/progress");
+        }
+        assert_eq!(rd.u8().expect("has off"), 0);
+        rd.f64().expect("off");
+        assert_eq!(rd.u8().expect("has accuracy"), 0);
+        rd.f64().expect("accuracy");
+        assert_eq!(rd.u8().expect("has position"), 0);
+        rd.f64().expect("latitude");
+        rd.f64().expect("longitude");
+        assert_eq!(rd.u8().expect("has ghost"), 0);
+        rd.f64().expect("ghost distance");
+        rd.f64().expect("ghost difference");
+        rd.u8().expect("ghost ahead");
+        rd.f64().expect("ghost spatial gap");
+        rd.f64().expect("ghost spacing confidence");
+        // v1 suffix: match status + match confidence (before appended evidence).
+        assert_eq!(rd.u8().expect("match status"), 0);
+        assert_eq!(rd.f64().expect("match confidence"), 0.0);
+        // v1 prefix consumed; appended evidence must still be present.
+        assert!(rd.remaining() > 0, "appended ghost evidence missing");
+        // Appended field order: ghost match status, match confidence,
+        // position-confidence presence + value, reliable flag.
+        assert_eq!(rd.u8().expect("ghost match status"), 0);
+        assert_eq!(rd.f64().expect("ghost match confidence"), 0.0);
+        assert_eq!(rd.u8().expect("has ghost position confidence"), 0);
+        assert_eq!(rd.f64().expect("ghost position confidence"), 0.0);
+        assert_eq!(rd.u8().expect("ghost reliable"), 0);
+        rd.done("live_snapshot").expect("no trailing bytes");
+    }
+
+    #[test]
     fn process_track_keeps_the_v1_layout_and_promoted_values() {
         let id = "legacy-layout";
         let raw = [
@@ -2146,6 +2198,90 @@ mod tests {
             (processed - legacy).abs() > 1.0,
             "processed={processed} legacy={legacy}"
         );
+    }
+
+    #[test]
+    fn process_track_normalizes_unsorted_and_duplicate_input() {
+        // Sorted input with a duplicate: the engine must deduplicate before
+        // estimating, so the result reflects the normalized trace.
+        let id = "normalize";
+        let raw = [
+            (52.5, 13.4, 0_i64),
+            (52.501, 13.4, 10_000),
+            (52.501, 13.4, 10_000), // duplicate of the previous fix
+            (52.502, 13.4, 20_000),
+        ];
+
+        let mut input = Wr::default();
+        input.u32(id.len() as u32);
+        input.data.extend_from_slice(id.as_bytes());
+        input.u32(raw.len() as u32);
+        for (lat, lon, ms) in raw {
+            input.f64(lat);
+            input.f64(lon);
+            input.u8(0);
+            input.i64(ms);
+        }
+
+        let output = process_track(&input.data).expect("process_track succeeds");
+        assert_eq!(output.len(), 40, "v1 output layout changed");
+
+        let mut rd = Rd::new(&output);
+        let input_points = rd.u32().expect("input count");
+        let output_points = rd.u32().expect("output count");
+        let original = rd.f64().expect("original distance");
+        let processed = rd.f64().expect("processed distance");
+        let duration = rd.f64().expect("duration");
+        let moving = rd.f64().expect("moving time");
+        rd.done("process_track").expect("no trailing bytes");
+
+        // Input count reflects the raw (un-normalized) stream.
+        assert_eq!(input_points, raw.len() as u32);
+
+        // Build the expected normalized trace (deduped + sorted) and run the
+        // same adaptive pipeline the C ABI uses internally.
+        let mut seen = std::collections::HashSet::new();
+        let mut deduped: Vec<(f64, f64, i64)> = raw
+            .iter()
+            .filter(|r| seen.insert((r.0.to_bits(), r.1.to_bits(), r.2)))
+            .copied()
+            .collect();
+        deduped.sort_by_key(|r| r.2);
+
+        let track = Track::new(
+            deduped
+                .iter()
+                .map(|&(lat, lon, ms)| {
+                    TrackPoint::new(
+                        Timestamp::from_unix_ms(ms),
+                        Coordinate::new(lat, lon).expect("valid coordinate"),
+                    )
+                })
+                .collect(),
+        )
+        .expect("valid track");
+        let fixes: Vec<GpsFix> = track
+            .points()
+            .iter()
+            .map(|point| GpsFix {
+                timestamp: point.timestamp(),
+                coordinate: point.coordinate(),
+                accuracy: None,
+                altitude: None,
+                speed: None,
+                bearing: None,
+            })
+            .collect();
+        let (_audit, adaptive) = GpsTrace::new(fixes.clone())
+            .expect("valid trace")
+            .process_adaptive_result(&FilterConfig::default(), &EstimatorConfig::production())
+            .expect("process succeeds");
+
+        assert_eq!(original, track.distance().meters());
+        assert_eq!(processed, adaptive.distance.meters());
+        assert_eq!(duration, track.duration().as_secs());
+        assert_eq!(moving, adaptive.moving.as_secs());
+        assert!(output_points > 0);
     }
 
     fn new_live_handle() -> u64 {
